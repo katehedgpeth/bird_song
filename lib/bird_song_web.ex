@@ -23,6 +23,7 @@ defmodule BirdSongWeb do
 
       import Plug.Conn
       import BirdSongWeb.Gettext
+      import Phoenix.LiveView.Controller
       alias BirdSongWeb.Router.Helpers, as: Routes
     end
   end
