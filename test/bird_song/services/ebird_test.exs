@@ -1,6 +1,8 @@
 defmodule BirdSong.Services.EbirdTest do
-  use ExUnit.Case
+  use BirdSong.MockApiCase
   alias BirdSong.Services.Ebird
+
+  @moduletag service: :ebird
 
   @forsyth_county "US-NC-067"
 
@@ -17,35 +19,24 @@ defmodule BirdSong.Services.EbirdTest do
     "willet1"
   ]
 
-  setup do
-    bypass = Bypass.open()
-    base_url = "http://localhost:#{bypass.port}"
-    update_base_url(base_url)
-    {:ok, bypass: bypass, base_url: base_url}
-  end
-
-  test "url builds a full endpoint", %{base_url: base_url} do
+  test "url builds a full endpoint", %{bypass: bypass} do
     assert Ebird.url("/product/spplist/" <> @forsyth_county) ===
-             base_url <> "/v2/product/spplist/" <> @forsyth_county
+             mock_url(bypass) <> "/v2/product/spplist/" <> @forsyth_county
   end
 
   describe "get_region_list/1" do
-    test "calls /product/spplist", %{bypass: bypass} do
-      Bypass.expect_once(bypass, &success_response/1)
-
+    @tag expect_once: &__MODULE__.success_response/1
+    test "calls /product/spplist" do
       assert Ebird.get_region_list(@forsyth_county) == {:ok, @species_list}
     end
 
-    test "returns {:error, {:not_found, $REGION}} for 404 response", %{bypass: bypass} do
-      Bypass.expect_once(bypass, &not_found_response/1)
+    @tag expect_once: &__MODULE__.not_found_response/1
+    test "returns {:error, {:not_found, $REGION}} for 404 response" do
       assert Ebird.get_region_list(@forsyth_county) == {:error, {:not_found, @forsyth_county}}
     end
 
-    test "returns {:error, {:bad_response, %HTTPoison.Response{}}} for bad status code", %{
-      bypass: bypass
-    } do
-      Bypass.expect_once(bypass, &error_response/1)
-
+    @tag expect_once: &__MODULE__.error_response/1
+    test "returns {:error, {:bad_response, %HTTPoison.Response{}}} for bad status code" do
       assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
                Ebird.get_region_list(@forsyth_county)
     end
@@ -58,7 +49,7 @@ defmodule BirdSong.Services.EbirdTest do
     end
   end
 
-  defp success_response(conn) do
+  def success_response(conn) do
     Plug.Conn.resp(
       conn,
       200,
@@ -66,9 +57,9 @@ defmodule BirdSong.Services.EbirdTest do
     )
   end
 
-  defp not_found_response(conn), do: Plug.Conn.resp(conn, 404, "unknown region")
+  def not_found_response(conn), do: Plug.Conn.resp(conn, 404, "unknown region")
 
-  defp error_response(conn), do: Plug.Conn.resp(conn, 500, "there was an error")
+  def error_response(conn), do: Plug.Conn.resp(conn, 500, "there was an error")
 
-  defp update_base_url(value), do: Application.put_env(:bird_song, :ebird, base_url: value)
+  def update_base_url(value), do: Application.put_env(:bird_song, :ebird, base_url: value)
 end
