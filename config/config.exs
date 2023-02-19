@@ -15,7 +15,13 @@ config :bird_song, BirdSongWeb.Endpoint,
   url: [host: "localhost"],
   render_errors: [view: BirdSongWeb.ErrorView, accepts: ~w(html json), layout: false],
   pubsub_server: BirdSong.PubSub,
-  live_view: [signing_salt: "Id5A1kr8"]
+  live_view: [
+    signing_salt:
+      case System.get_env("BIRD_SONG_SIGNING_SALT") do
+        "" <> salt -> salt
+        nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
+      end
+  ]
 
 # Configure esbuild (the version is required)
 config :esbuild,
