@@ -23,6 +23,14 @@ config :bird_song, BirdSongWeb.Endpoint,
       end
   ]
 
+config :bird_song, :ebird,
+  base_url: "",
+  token:
+    (case System.get_env("EBIRD_API_TOKEN") do
+       "" <> token -> token
+       nil -> raise "missing environment variable: EBIRD_API_TOKEN"
+     end)
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.14.29",
