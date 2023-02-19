@@ -24,7 +24,7 @@ config :bird_song, BirdSongWeb.Endpoint,
   ]
 
 config :bird_song, :ebird,
-  base_url: "",
+  base_url: "https://api.ebird.org",
   token:
     (case System.get_env("EBIRD_API_TOKEN") do
        "" <> token -> token

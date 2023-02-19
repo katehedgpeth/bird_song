@@ -12,6 +12,8 @@ defmodule BirdSong.Application do
       BirdSong.Repo,
       # Start the Telemetry supervisor
       BirdSongWeb.Telemetry,
+      # Start the task supervisor for external API requests
+      {Task.Supervisor, name: BirdSong.Services},
       # Start the PubSub system
       {Phoenix.PubSub, name: BirdSong.PubSub},
       # Start the Endpoint (http/https)
