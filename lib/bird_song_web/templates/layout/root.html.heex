@@ -10,21 +10,24 @@
     <script defer phx-track-static type="text/javascript" src={Routes.static_path(@conn, "/assets/app.js")}></script>
   </head>
   <body>
-    <header>
-      <section class="container">
-        <nav>
-          <ul>
-            <li><a href="https://hexdocs.pm/phoenix/overview.html">Get Started</a></li>
+
+      <div class="drawer drawer-end">
+        <input id="drawer-nav" type="checkbox" class="drawer-toggle" />
+        <div class="drawer-content px-4 w-auto">
+          <!-- Page content here -->
+          <%= render("heading.html", conn: @conn) %>
+          <%= @inner_content %>
+        </div>
+        <div class="drawer-side">
+          <label for="drawer-nav" class="drawer-overlay"></label>
+          <ul class="menu p-4 w-80 bg-base-100 text-base-content">
+            <li><a href="/quiz">Start Quiz</a></li>
+            <li><a href="/about">About BirdSong</a></li>
             <%= if function_exported?(Routes, :live_dashboard_path, 2) do %>
               <li><%= link "LiveDashboard", to: Routes.live_dashboard_path(@conn, :home) %></li>
             <% end %>
           </ul>
-        </nav>
-        <a href="https://phoenixframework.org/" class="phx-logo">
-          <img src={Routes.static_path(@conn, "/images/phoenix.png")} alt="Phoenix Framework Logo"/>
-        </a>
-      </section>
-    </header>
-    <%= @inner_content %>
+        </div>
+      </div>
   </body>
 </html>
