@@ -49,7 +49,8 @@ defmodule BirdSong.MixProject do
       {:jason, "~> 1.2"},
       {:plug_cowboy, "~> 2.5"},
       {:httpoison, "~> 2.0"},
-      {:bypass, "~> 2.1"}
+      {:bypass, "~> 2.1"},
+      {:tailwind, "~> 0.1"}
     ]
   end
 
@@ -65,7 +66,7 @@ defmodule BirdSong.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
-      "assets.deploy": ["esbuild default --minify", "phx.digest"]
+      "assets.deploy": ["tailwind default --minify", "esbuild default --minify", "phx.digest"]
     ]
   end
 end
