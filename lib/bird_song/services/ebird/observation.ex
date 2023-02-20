@@ -1,44 +1,46 @@
 defmodule BirdSong.Services.Ebird.Observation do
-  @raw_keys [
+  @derive Jason.Encoder
+
+  @used_keys [
     "comName",
+    "locationPrivate",
+    "locName",
+    "obsDt",
+    "speciesCode"
+  ]
+
+  @unused_keys [
     "exoticCategory",
     "howMany",
     "lat",
     "lng",
-    "locationPrivate",
     "locId",
-    "locName",
-    "obsDt",
     "obsValid",
     "obsReviewed",
     "sciName",
-    "speciesCode",
     "subId"
   ]
+
   defstruct [
     :com_name,
-    :exotic_category,
-    :how_many,
-    :lat,
-    :lng,
     :location_private,
     :loc_name,
-    :loc_id,
     :obs_dt,
-    :obs_valid,
-    :obs_reviewed,
-    :sci_name,
-    :species_code,
-    :sub_id
+    :species_code
   ]
 
   def parse(data) do
     data
-    |> Enum.map(&to_snakecase/1)
+    |> Enum.reduce(%{}, &parse_key/2)
     |> __struct__()
   end
 
-  defp to_snakecase({key, val}) when key in @raw_keys do
-    {key |> Macro.underscore() |> String.to_atom(), val}
+  defp parse_key({key, _val}, acc) when key in @unused_keys do
+    acc
+  end
+
+  defp parse_key({key, val}, acc) when key in @used_keys do
+    atom_key = key |> Macro.underscore() |> String.to_atom()
+    Map.put(acc, atom_key, val)
   end
 end

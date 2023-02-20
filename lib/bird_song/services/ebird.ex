@@ -17,14 +17,6 @@ defmodule BirdSong.Services.Ebird do
     |> Path.join()
   end
 
-  @spec get_region_list(String.t()) :: response(List.t(String.t()))
-  def get_region_list("" <> region) do
-    "product/spplist"
-    |> Path.join([region])
-    |> url()
-    |> send_request()
-  end
-
   @spec get_recent_observations(String.t()) :: response(List.t(Observation.t()))
   def get_recent_observations("" <> region) do
     "data/obs"
@@ -38,11 +30,8 @@ defmodule BirdSong.Services.Ebird do
     end
   end
 
-  def get_taxonomy(birds) when is_list(birds) do
-  end
-
-  @spec send_request(String.t()) :: response(List.t())
-  defp send_request(url, params \\ []) do
+  @spec send_request(String.t(), List.t({String.t(), any})) :: response(List.t())
+  defp send_request(url, params) do
     url
     |> HTTPoison.get([{"x-ebirdapitoken", @token}], params: params)
     |> case do
