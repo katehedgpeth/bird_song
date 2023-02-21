@@ -14,6 +14,8 @@ defmodule BirdSong.Application do
       BirdSongWeb.Telemetry,
       # Start the task supervisor for external API requests
       {Task.Supervisor, name: BirdSong.Services},
+      # Start the XenoCanto cache
+      BirdSong.Services.XenoCanto.Cache,
       # Start the PubSub system
       {Phoenix.PubSub, name: BirdSong.PubSub},
       # Start the Endpoint (http/https)
