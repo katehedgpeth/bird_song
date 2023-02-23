@@ -10,6 +10,7 @@ defmodule BirdSongWeb.QuizLiveTest do
         |> Path.relative_to_cwd()
         |> File.read!()
 
+  @tag use_mock: false
   test "connected mount", %{conn: conn} do
     assert {:ok, view, html} = live(conn, @path)
     assert html =~ "How well do you know your bird songs?"
@@ -18,6 +19,7 @@ defmodule BirdSongWeb.QuizLiveTest do
 
   @tag :skip
   describe "user can enter a location" do
+    @tag use_mock: false
     test "by typing", %{conn: conn} do
       assert {:ok, view, html} = live(conn, @path)
       assert html =~ "Winston Salem, NC"
@@ -27,14 +29,17 @@ defmodule BirdSongWeb.QuizLiveTest do
              |> render_submit() =~ "Greensboro, NC"
     end
 
+    @tag use_mock: false
     test "by using their browser location" do
     end
 
+    @tag use_mock: false
     test "and be shown an error when the location is not recognized" do
     end
   end
 
   describe("user can specify the max number of questions to be asked") do
+    @tag use_mock: false
     test "by typing", %{conn: conn} do
       assert {:ok, view, html} = live(conn, @path)
       assert html =~ "Number of Questions"

@@ -31,7 +31,10 @@ config :bird_song, :ebird,
        nil -> raise "missing environment variable: EBIRD_API_TOKEN"
      end)
 
-config :bird_song, :xeno_canto, base_url: "https://xeno-canto.org"
+config :bird_song, :xeno_canto,
+  base_url: "https://xeno-canto.org",
+  throttle_ms: 1_000,
+  write_to_disk?: false
 
 # Configure esbuild (the version is required)
 config :esbuild,

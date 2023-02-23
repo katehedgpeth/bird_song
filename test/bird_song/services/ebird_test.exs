@@ -10,6 +10,7 @@ defmodule BirdSong.Services.EbirdTest do
                        |> Path.relative_to_cwd()
                        |> File.read!()
 
+  @tag use_mock: false
   test "url builds a full endpoint", %{bypass: bypass} do
     assert Ebird.url("/product/spplist/" <> @forsyth_county) ===
              mock_url(bypass) <> "/v2/product/spplist/" <> @forsyth_county
@@ -41,6 +42,7 @@ defmodule BirdSong.Services.EbirdTest do
                Ebird.get_recent_observations(@forsyth_county)
     end
 
+    @tag use_mock: false
     test "returns {:error, %HTTPoison.Error{}} for all other errors", %{bypass: bypass} do
       Bypass.down(bypass)
 

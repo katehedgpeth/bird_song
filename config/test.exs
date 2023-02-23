@@ -20,6 +20,8 @@ config :bird_song, BirdSongWeb.Endpoint,
   secret_key_base: "hrIR1FkwdDB5LojQi0KtqNAcO+AysoHdghdJX1o+zWn5i75h2r70T8X2tlo9RqeP",
   server: false
 
+config :bird_song, :xeno_canto, throttle_ms: 500
+
 # Print only warnings and errors during test
 config :logger, level: :warn
 

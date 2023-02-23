@@ -22,9 +22,13 @@ defmodule BirdSong.MockApiCase do
         setup_mocks(tags, bypass)
         {:ok, bypass: bypass}
 
-      _ ->
+      :no_bypass ->
         :ok
     end
+  end
+
+  def setup_bypass(%{use_bypass: false}) do
+    :no_bypass
   end
 
   def setup_bypass(%{service: service}) when is_atom(service) do
@@ -45,13 +49,28 @@ defmodule BirdSong.MockApiCase do
   def setup_mocks(%{expect_once: func}, %Bypass{} = bypass) when is_function(func),
     do: Bypass.expect_once(bypass, func)
 
-  def setup_mocks(%{}, %Bypass{}), do: :ok
+  def setup_mocks(%{expect: func}, %Bypass{} = bypass) when is_function(func),
+    do: Bypass.expect(bypass, func)
+
+  def setup_mocks(%{stub: {"" <> method, "" <> path, func}}, %Bypass{} = bypass)
+      when is_function(func),
+      do: Bypass.stub(bypass, method, path, func)
+
+  def setup_mocks(%{use_mock: false}, %Bypass{}), do: :ok
 
   def update_base_url(service_name, %Bypass{} = bypass) do
+    do_update_base_url(service_name, mock_url(bypass))
+  end
+
+  def update_base_url(service_name, "" <> url) do
+    do_update_base_url(service_name, url)
+  end
+
+  defp do_update_base_url(service_name, url) do
     env =
       :bird_song
       |> Application.get_env(service_name)
-      |> Keyword.update!(:base_url, fn _ -> mock_url(bypass) end)
+      |> Keyword.replace!(:base_url, url)
 
     Application.put_env(:bird_song, service_name, env)
   end

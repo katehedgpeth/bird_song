@@ -1,10 +1,10 @@
 defmodule BirdSong.Services.XenoCanto do
   alias __MODULE__.Cache
+  alias BirdSong.Services.Helpers
 
   def url(query) do
-    :bird_song
-    |> Application.get_env(:xeno_canto)
-    |> Keyword.fetch!(:base_url)
+    :xeno_canto
+    |> Helpers.get_env(:base_url)
     |> List.wrap()
     |> Enum.concat(["api", "2", "recordings?query=" <> format_query(query)])
     |> Path.join()

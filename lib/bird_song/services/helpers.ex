@@ -18,4 +18,13 @@ defmodule BirdSong.Services.Helpers do
     do: {:error, {:bad_response, response}}
 
   def parse_api_response(error), do: error
+
+  def get_env(app, key, default \\ :fetch!) do
+    :bird_song
+    |> Application.get_env(app)
+    |> do_get_env(key, default)
+  end
+
+  defp do_get_env(env, key, :fetch!), do: Keyword.fetch!(env, key)
+  defp do_get_env(env, key, default), do: Keyword.get(env, key, default)
 end

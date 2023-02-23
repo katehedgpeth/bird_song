@@ -7,9 +7,8 @@ defmodule BirdSong.Services.Ebird do
          |> Keyword.fetch!(:token)
 
   def url(endpoint) do
-    :bird_song
-    |> Application.get_env(:ebird)
-    |> Keyword.fetch!(:base_url)
+    :ebird
+    |> Helpers.get_env(:base_url)
     |> List.wrap()
     |> Enum.concat(["v2", endpoint])
     |> Path.join()
