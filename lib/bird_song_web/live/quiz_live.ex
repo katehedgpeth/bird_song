@@ -36,8 +36,7 @@ defmodule BirdSongWeb.QuizLive do
     {:ok,
      socket
      |> assign(:text_input_class, @text_input_class)
-     |> assign(:current_bird, nil)
-     |> assign(:show_answer?, false)
+     |> reset_state()
      |> assign(:birds, %{})
      |> assign_new(:render_listeners, fn -> [] end)
      |> assign_new(:quiz, fn -> Quiz.changeset(%Quiz{region: @region}, %{}) end)
@@ -87,10 +86,17 @@ defmodule BirdSongWeb.QuizLive do
   def question(assigns) do
     ~H"""
     <%= page_title("What bird do you hear?") %>
-    <%= content_tag :audio, [], autoplay: true, src: get_recording_source(@current_bird) %>
-    <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
-    <button phx-click="change_recording" class="btn">Hear a different recording</button>
-    <%= show_answer(assigns) %>
+    <div class="flex gap-10 flex-col">
+      <%= content_tag :audio, [], autoplay: true, src: get_recording_source(@current_bird) %>
+      <div class="flex justify-center gap-5">
+        <button phx-click="change_recording" class="btn btn-outline">Hear a different recording of this bird</button>
+        <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
+      </div>
+      <div class="bg-slate-100 p-10 w-full">
+        <%= show_answer(assigns) %>
+      </div>
+      <%= show_sono(assigns) %>
+    </div>
     """
   end
 
@@ -136,8 +142,7 @@ defmodule BirdSongWeb.QuizLive do
   def handle_event("next", _, %Socket{} = socket) do
     {:noreply,
      socket
-     |> assign(:current_bird, nil)
-     |> assign(:show_answer?, false)
+     |> reset_state()
      |> assign_next_bird()}
   end
 
@@ -151,6 +156,10 @@ defmodule BirdSongWeb.QuizLive do
 
   def handle_event("show_answer", _, %Socket{} = socket) do
     {:noreply, assign(socket, :show_answer?, true)}
+  end
+
+  def handle_event("show_sono", _, %Socket{} = socket) do
+    {:noreply, assign(socket, :show_sono?, true)}
   end
 
   ####################################
@@ -257,6 +266,14 @@ defmodule BirdSongWeb.QuizLive do
      |> assign_next_bird()}
   end
 
+  defp handle_task_response({:ok, name}, socket, response) do
+    Logger.error(
+      "error=unexpected_task_response name=#{inspect(name)} response=#{inspect(response)}"
+    )
+
+    {:noreply, socket}
+  end
+
   defp remember_task(%Socket{assigns: %{tasks: tasks}} = socket, %Task{ref: ref}, name) do
     assign(socket, :tasks, Map.put(tasks, ref, name))
   end
@@ -268,6 +285,13 @@ defmodule BirdSongWeb.QuizLive do
   end
 
   defp get_region(%Socket{assigns: %{quiz: %Quiz{region: region}}}), do: region
+
+  defp reset_state(%Socket{} = socket) do
+    socket
+    |> assign(:current_bird, nil)
+    |> assign(:show_answer?, false)
+    |> assign(:show_sono?, false)
+  end
 
   defp reduce_recent_observations(%Ebird.Observation{} = obs, acc) do
     Map.update(
@@ -359,18 +383,35 @@ defmodule BirdSongWeb.QuizLive do
        })
        when length(also) > 0,
        do:
-         content_tag(:div, [
-           name,
-           content_tag(:div, ["Also audible: ", Enum.map(also, &content_tag(:div, [&1]))],
-             class: "text-black/40 italic"
-           )
-         ])
+         content_tag(
+           :div,
+           [
+             name,
+             content_tag(:div, ["Also audible: ", Enum.map(also, &content_tag(:div, [&1]))],
+               class: "text-black/40 italic"
+             )
+           ],
+           class: "text-center"
+         )
 
   defp show_answer(%{show_answer?: true, current_bird: {%Bird{common_name: name}, %Recording{}}}),
-    do: content_tag(:div, name)
+    do: content_tag(:div, name, class: "mx-auto text-center")
 
   defp show_answer(assigns),
     do: ~H"""
-    <button phx-click="show_answer" class="btn">Show Answer</button>
+    <button phx-click="show_answer" class="btn btn-outline mx-auto block">Show Answer</button>
     """
+
+  defp show_sono(%{
+         show_sono?: true,
+         current_bird: {%Bird{}, %Recording{sono: %{"large" => large_sono}}}
+       }) do
+    img_tag(large_sono)
+  end
+
+  defp show_sono(assigns) do
+    ~H"""
+    <button phx-click="show_sono" class="btn btn-outline">Show Sonogram</button>
+    """
+  end
 end

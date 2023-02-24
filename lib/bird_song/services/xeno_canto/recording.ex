@@ -19,7 +19,13 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     :file,
 
     # an array with the identified background species in the recording
-    :also
+    :also,
+
+    # an object with the urls to the four versions of sonograms
+    :sono,
+
+    # an object with the urls to the three versions of oscillograms
+    :osci
   ]
 
   @unused_keys [
@@ -115,14 +121,6 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     # :file_name,
     "file-name",
 
-    # an object with the urls to the four versions of sonograms
-    # :sono,
-    "sono",
-
-    # an object with the urls to the three versions of oscillograms
-    # :osci
-    "osci",
-
     # the URL describing the license of this recording
     # :lic,
     "lic",
@@ -174,7 +172,9 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     "auto",
     "dvc",
     "mic",
-    "smp"
+    "smp",
+    "sono",
+    "osci"
   ]
 
   def parse(data) do
