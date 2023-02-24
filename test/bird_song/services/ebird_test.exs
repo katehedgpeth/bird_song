@@ -1,8 +1,9 @@
 defmodule BirdSong.Services.EbirdTest do
   use BirdSong.MockApiCase
+  alias ExUnit.CaptureLog
   alias BirdSong.Services.Ebird
 
-  @moduletag service: :ebird
+  @moduletag services: [:ebird]
 
   @forsyth_county "US-NC-067"
 
@@ -30,24 +31,39 @@ defmodule BirdSong.Services.EbirdTest do
 
     @tag expect_once: &__MODULE__.not_found_response/1
     test "returns {:error, {:not_found, $URL}} for 404 response", %{bypass: bypass} do
-      assert Ebird.get_recent_observations(@forsyth_county) ==
-               {:error,
-                {:not_found,
-                 mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent?back=30"}}
+      log =
+        CaptureLog.capture_log(fn ->
+          assert Ebird.get_recent_observations(@forsyth_county) ==
+                   {:error,
+                    {:not_found,
+                     mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent?back=30"}}
+        end)
+
+      assert log =~ "status_code=404 url=" <> mock_url(bypass)
     end
 
     @tag expect_once: &__MODULE__.error_response/1
     test "returns {:error, {:bad_response, %HTTPoison.Response{}}} for bad status code" do
-      assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
-               Ebird.get_recent_observations(@forsyth_county)
+      log =
+        CaptureLog.capture_log(fn ->
+          assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
+                   Ebird.get_recent_observations(@forsyth_county)
+        end)
+
+      assert log =~ "status_code=500"
     end
 
     @tag use_mock: false
     test "returns {:error, %HTTPoison.Error{}} for all other errors", %{bypass: bypass} do
       Bypass.down(bypass)
 
-      assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
-               Ebird.get_recent_observations(@forsyth_county)
+      log =
+        CaptureLog.capture_log(fn ->
+          assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
+                   Ebird.get_recent_observations(@forsyth_county)
+        end)
+
+      assert log =~ "status_code=unknown url=unknown error=econnrefused"
     end
   end
 

@@ -13,6 +13,28 @@ defmodule BirdSong.MockApiCase do
   using do
     quote do
       import BirdSong.MockApiCase
+      alias Plug.Conn
+
+      @red_shouldered_hawk "Buteo lineatus"
+      @carolina_wren "Thryothorus ludovicianus"
+      @eastern_bluebird "Sialia sialis"
+
+      @recordings Enum.reduce(
+                    [
+                      @red_shouldered_hawk,
+                      @carolina_wren,
+                      @eastern_bluebird
+                    ],
+                    %{},
+                    fn sci_name, acc ->
+                      data =
+                        "test/mock_data/#{String.replace(sci_name, " ", "_")}.json"
+                        |> Path.relative_to_cwd()
+                        |> File.read!()
+
+                      Map.put(acc, sci_name, data)
+                    end
+                  )
     end
   end
 
@@ -31,17 +53,20 @@ defmodule BirdSong.MockApiCase do
     :no_bypass
   end
 
-  def setup_bypass(%{service: service}) when is_atom(service) do
+  def setup_bypass(%{services: services}) when is_list(services) do
     bypass = Bypass.open()
-    update_base_url(service, bypass)
+    Enum.each(services, &update_base_url(&1, bypass))
     {:ok, bypass: bypass}
   end
 
-  @type bypass_cb :: (Plug.Conn.t() -> Plug.Conn.t())
+  @type bypass_generic_cb :: (Plug.Conn.t() -> Plug.Conn.t())
+  @type bypass_path_cb :: {String.t(), String.t(), bypass_generic_cb()}
 
   @spec setup_mocks(
           %{
-            optional(:expect_once) => bypass_cb(),
+            optional(:expect_once) => bypass_generic_cb() | List.t(bypass_generic_cb()),
+            optional(:expect) => bypass_generic_cb() | List.t(bypass_generic_cb()),
+            optional(:stub) => bypass_path_cb() | List.t(bypass_path_cb()),
             optional(any) => any
           },
           Bypass.t()
@@ -49,12 +74,37 @@ defmodule BirdSong.MockApiCase do
   def setup_mocks(%{expect_once: func}, %Bypass{} = bypass) when is_function(func),
     do: Bypass.expect_once(bypass, func)
 
+  def setup_mocks(
+        %{expect_once: [{"" <> _, "" <> _, func} | _] = funcs},
+        %Bypass{} = bypass
+      )
+      when is_function(func),
+      do:
+        Enum.each(funcs, fn {method, path, func} ->
+          Bypass.expect_once(bypass, method, path, func)
+        end)
+
   def setup_mocks(%{expect: func}, %Bypass{} = bypass) when is_function(func),
     do: Bypass.expect(bypass, func)
+
+  def setup_mocks(
+        %{expect: [{"" <> _, "" <> _, func} | _] = funcs},
+        %Bypass{} = bypass
+      )
+      when is_function(func),
+      do:
+        Enum.each(funcs, fn {method, path, func} -> Bypass.expect(bypass, method, path, func) end)
 
   def setup_mocks(%{stub: {"" <> method, "" <> path, func}}, %Bypass{} = bypass)
       when is_function(func),
       do: Bypass.stub(bypass, method, path, func)
+
+  def setup_mocks(%{stub: [{"" <> _, "" <> _, func} | _] = funcs}, %Bypass{} = bypass)
+      when is_function(func),
+      do:
+        Enum.each(funcs, fn {method, path, func} ->
+          Bypass.stub(bypass, method, path, func)
+        end)
 
   def setup_mocks(%{use_mock: false}, %Bypass{}), do: :ok
 

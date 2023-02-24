@@ -1,8 +1,5 @@
 defmodule BirdSong.Services.XenoCanto.Recording do
   defstruct [
-    # the catalogue number of the recording on xeno-canto
-    :id,
-
     # the generic name of the species
     :gen,
 
@@ -18,77 +15,66 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     # the English name of the species
     :en,
 
-    # the name of the recordist
-    :rec,
-
-    # the country where the recording was made
-    :cnt,
-
-    # the name of the locality
-    :loc,
-
-    # the latitude of the recording in decimal coordinates
-    :lat,
-
-    # the longitude of the recording in decimal coordinates
-    :lng,
-
-    # the sound type of the recording (combining both predefined terms such as 'call' or 'song' and additional free text options)
-    :type,
-
-    # the sex of the animal
-    :sex,
-
-    # the life stage of the animal (adult, juvenile, etc.)
-    :stage,
-
-    # the recording method (field recording, in the hand, etc.)
-    :method,
-
-    # the URL specifying the details of this recording
-    :url,
-
     # the URL to the audio file
     :file,
 
-    # the original file name of the audio file
-    :file_name,
-
-    # an object with the urls to the four versions of sonograms
-    :sono,
-
-    # an object with the urls to the three versions of oscillograms
-    :osci,
-
-    # the URL describing the license of this recording
-    :lic,
-
-    # the current quality rating for the recording
-    :q,
-
-    # the length of the recording in minutes
-    :length,
-
-    # the time of day that the recording was made
-    :time,
-
-    # the date that the recording was made
-    :date,
-
-    # the date that the recording was uploaded to xeno-canto
-    :uploaded,
-
     # an array with the identified background species in the recording
-    :also,
-
-    # additional remarks by the recordist
-    :rmk,
-
-    # sample rate
-    :smp
+    :also
   ]
 
   @unused_keys [
+    # additional remarks by the recordist
+    # :rmk,
+    "rmk",
+
+    # sample rate
+    # :smp
+    "smp",
+
+    # the catalogue number of the recording on xeno-canto
+    # :id,
+    "id",
+
+    # the name of the recordist
+    # :rec,
+    "rec",
+
+    # the country where the recording was made
+    # :cnt,
+    "cnt",
+
+    # the name of the locality
+    # :loc,
+    "loc",
+
+    # the latitude of the recording in decimal coordinates
+    # :lat,
+    "lat",
+
+    # the longitude of the recording in decimal coordinates
+    # :lng,
+    "lng",
+
+    # the sound type of the recording (combining both predefined terms such as 'call' or 'song' and additional free text options)
+    # :type,
+    "type",
+
+    # the sex of the animal
+    # :sex,
+    "sex",
+
+    # the life stage of the animal (adult, juvenile, etc.)
+    # :stage,
+    "stage",
+
+    # the recording method (field recording, in the hand, etc.)
+    # :method,
+    "method",
+
+    # the URL specifying the details of this recording
+    # :url,
+    "url",
+
     # the time of day that the recording was made
     "time",
 
@@ -123,7 +109,43 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     "temp",
 
     # ??? - not in documentation
-    "alt"
+    "alt",
+
+    # the original file name of the audio file
+    # :file_name,
+    "file-name",
+
+    # an object with the urls to the four versions of sonograms
+    # :sono,
+    "sono",
+
+    # an object with the urls to the three versions of oscillograms
+    # :osci
+    "osci",
+
+    # the URL describing the license of this recording
+    # :lic,
+    "lic",
+
+    # the current quality rating for the recording
+    # :q,
+    "q",
+
+    # the length of the recording in minutes
+    # :length,
+    "length",
+
+    # the time of day that the recording was made
+    # :time,
+    "time",
+
+    # the date that the recording was made
+    # :date,
+    "date",
+
+    # the date that the recording was uploaded to xeno-canto
+    # :uploaded,
+    "uploaded"
   ]
 
   @used_keys [
@@ -144,13 +166,6 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     "method",
     "url",
     "file",
-    "file-name",
-    "sono",
-    "osci",
-    "lic",
-    "q",
-    "length",
-    "uploaded",
     "also",
     "rmk",
     "playback-used",

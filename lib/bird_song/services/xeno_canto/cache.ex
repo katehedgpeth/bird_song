@@ -8,8 +8,9 @@ defmodule BirdSong.Services.XenoCanto.Cache do
 
   @table :xeno_canto
 
-  # the XenoCanto API can be VERY slow.
-  @api_timeout 10_000
+  @api_timeout :bird_song
+               |> Application.compile_env!(:xeno_canto)
+               |> Keyword.fetch!(:backlog_timeout_ms)
 
   def get(bird) do
     case get_from_cache(bird) do
@@ -40,12 +41,10 @@ defmodule BirdSong.Services.XenoCanto.Cache do
     |> case do
       {:ok, raw} ->
         recording = Response.parse(raw)
-        Logger.debug("response_status=SUCCESS bird=" <> bird)
         GenServer.cast(__MODULE__, {:save, {bird, recording}})
         {:ok, recording}
 
       error ->
-        Logger.error("response_status=ERROR bird=" <> bird)
         error
     end
   end

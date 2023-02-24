@@ -7,6 +7,8 @@
 # General application configuration
 import Config
 
+one_second = 1_000
+
 config :bird_song,
   ecto_repos: [BirdSong.Repo]
 
@@ -33,7 +35,9 @@ config :bird_song, :ebird,
 
 config :bird_song, :xeno_canto,
   base_url: "https://xeno-canto.org",
-  throttle_ms: 1_000,
+  throttle_ms: 3 * one_second,
+  api_response_timeout_ms: 10 * one_second,
+  backlog_timeout_ms: :infinity,
   write_to_disk?: false
 
 # Configure esbuild (the version is required)

@@ -5,28 +5,7 @@ defmodule BirdSong.Services.XenoCantoTest do
   alias Services.{XenoCanto, Helpers}
   alias XenoCanto.{Cache, Response, Recording}
 
-  @moduletag service: :xeno_canto
-
-  @red_shouldered_hawk "Buteo lineatus"
-  @carolina_wren "Thryothorus ludovicianus"
-  @eastern_bluebird "Sialia sialis"
-
-  @recordings Enum.reduce(
-                [
-                  @red_shouldered_hawk,
-                  @carolina_wren,
-                  @eastern_bluebird
-                ],
-                %{},
-                fn sci_name, acc ->
-                  data =
-                    "test/mock_data/#{String.replace(sci_name, " ", "_")}.json"
-                    |> Path.relative_to_cwd()
-                    |> File.read!()
-
-                  Map.put(acc, sci_name, data)
-                end
-              )
+  @moduletag services: [:xeno_canto]
 
   @tag use_mock: false
   test "&url/1 builds a full URL", %{bypass: bypass} do
