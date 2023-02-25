@@ -10,8 +10,8 @@ defmodule BirdSong.Services.XenoCanto do
     |> Path.join()
   end
 
-  def get_recording(bird) do
-    Cache.get(bird)
+  def get_recording(bird, server) do
+    Cache.get(bird, server)
   end
 
   #########################################################

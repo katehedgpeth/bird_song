@@ -9,10 +9,13 @@ defmodule BirdSong.MockApiCase do
   use @tag expect: &arity_fn/X to specify a Bypass.expect handler.
   """
   use ExUnit.CaseTemplate
+  alias BirdSong.TestHelpers
+  alias BirdSong.Services.XenoCanto
 
   using do
     quote do
       import BirdSong.MockApiCase
+      alias BirdSong.TestHelpers
       alias Plug.Conn
 
       @red_shouldered_hawk "Buteo lineatus"
@@ -39,13 +42,15 @@ defmodule BirdSong.MockApiCase do
   end
 
   setup tags do
+    {:ok, cache} = TestHelpers.start_cache(XenoCanto.Cache)
+
     case setup_bypass(tags) do
       {:ok, bypass: bypass} ->
         setup_mocks(tags, bypass)
-        {:ok, bypass: bypass}
+        {:ok, bypass: bypass, xeno_canto_cache: cache}
 
       :no_bypass ->
-        :ok
+        {:ok, cache: cache}
     end
   end
 

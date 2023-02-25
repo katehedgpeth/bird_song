@@ -12,46 +12,49 @@ defmodule BirdSong.Services.XenoCantoTest do
     assert XenoCanto.url("test") === mock_url(bypass) <> "/api/2/recordings?query=test"
   end
 
-  @tag use_bypass: false
-  test "&clear_cache/0" do
-    assert {:ok, _} = XenoCanto.get_recording(@red_shouldered_hawk)
-    assert {:ok, %Response{}} = Cache.get_from_cache(@red_shouldered_hawk)
-    Cache.clear_cache()
-    assert Cache.get_from_cache(@red_shouldered_hawk) === :not_found
+  @tag expect_once: &__MODULE__.success_response/1
+  test "&clear_cache/1", %{xeno_canto_cache: cache} do
+    assert GenServer.cast(cache, :clear_cache) === :ok
+    assert {:ok, %Response{}} = XenoCanto.get_recording(@red_shouldered_hawk, cache)
+    assert {:ok, %Response{}} = Cache.get_from_cache(@red_shouldered_hawk, cache)
+    # assert {:ok, %Response{}} = GenServer.call(cache, {:get_from_cache, @red_shouldered_hawk})
+    # assert {:ok, %Response{}} = Cache.get_from_cache(@red_shouldered_hawk, cache)
+    Cache.clear_cache(cache)
+    assert Cache.get_from_cache(@red_shouldered_hawk, cache) === :not_found
   end
 
   describe "&get_recording/1" do
     @tag stub: {"GET", "/api/2/recordings", &__MODULE__.success_response/1}
-    test "returns a recording path when request is successful" do
-      assert {:ok, response} = XenoCanto.get_recording(@red_shouldered_hawk)
+    test "returns a recording path when request is successful", %{xeno_canto_cache: cache} do
+      assert Cache.get_from_cache(@red_shouldered_hawk, cache) === :not_found
+      assert {:ok, response} = XenoCanto.get_recording(@red_shouldered_hawk, cache)
       assert %Response{recordings: recordings} = response
       assert length(recordings) == 124
       assert [%Recording{} | _] = recordings
     end
 
-    @tag :skip
     @tag expect_once: &__MODULE__.success_response/1
-    test "uses cache", %{bypass: bypass} do
-      Cache.clear_cache()
-      assert [] = Cache.get_from_cache(@red_shouldered_hawk)
+    test "uses cache", %{bypass: bypass, xeno_canto_cache: cache} do
+      assert :not_found = Cache.get_from_cache(@red_shouldered_hawk, cache)
 
-      assert {:ok, response} = XenoCanto.get_recording(@red_shouldered_hawk)
-      assert [{@red_shouldered_hawk, %Response{}}] = Cache.get_from_cache(@red_shouldered_hawk)
+      assert {:ok, response} = XenoCanto.get_recording(@red_shouldered_hawk, cache)
+
+      assert {:ok, %Response{}} = Cache.get_from_cache(@red_shouldered_hawk, cache)
 
       Bypass.down(bypass)
-      assert {:ok, ^response} = XenoCanto.get_recording(@red_shouldered_hawk)
+      assert {:ok, ^response} = XenoCanto.get_recording(@red_shouldered_hawk, cache)
     end
 
     @tag expect: &__MODULE__.success_response/1
-    test "throttles requests" do
-      Cache.clear_cache()
+    test "throttles requests", %{xeno_canto_cache: cache} do
+      Cache.clear_cache(cache)
       Logger.configure(level: :debug)
 
       logs =
         ExUnit.CaptureLog.capture_log([level: :debug], fn ->
           Enum.map(
             [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird],
-            &XenoCanto.get_recording/1
+            &XenoCanto.get_recording(&1, cache)
           )
         end)
 

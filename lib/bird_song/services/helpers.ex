@@ -56,6 +56,8 @@ defmodule BirdSong.Services.Helpers do
   end
 
   defp log_error(%Error{reason: reason}) do
-    Logger.error("request_status=error status_code=unknown url=unknown error=#{reason}")
+    Logger.error(
+      "request_status=error status_code=unknown url=unknown error=#{reason} pid=#{self() |> inspect()}"
+    )
   end
 end

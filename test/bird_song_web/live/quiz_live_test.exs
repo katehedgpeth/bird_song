@@ -22,14 +22,16 @@ defmodule BirdSongWeb.QuizLiveTest do
     {"GET", @xeno_canto_path, &__MODULE__.xeno_canto_success_response/1}
   ]
 
-  @tag stub: [
-         {"GET", @ebird_path, &__MODULE__.ebird_success_response/1},
-         {"GET", @xeno_canto_path, &__MODULE__.xeno_canto_success_response/1}
-       ]
-  test("connected mount", %{conn: conn}) do
+  setup %{conn: conn, xeno_canto_cache: cache} do
+    {:ok, view, html} = live(conn, @path)
+    send(view.pid, {:register_render_listener, self()})
+    send(view.pid, {:xeno_canto_cache_pid, cache})
+    {:ok, view: view, html: html}
+  end
+
+  @tag expect: @full_mock_expects
+  test("connected mount", %{view: view, html: html}) do
     CaptureLog.capture_log(fn ->
-      assert {:ok, view, html} = live(conn, @path)
-      send(view.pid, {:register_render_listener, self()})
       assert html =~ "How well do you know your bird songs?"
       assert view |> form("#settings") |> render_submit() =~ "Loading..."
       # assert Enum.at(birds, 0) |> Tuple.to_list() |> List.first() == "FAIL"
@@ -44,13 +46,9 @@ defmodule BirdSongWeb.QuizLiveTest do
   describe "start event" do
     @tag expect: &__MODULE__.ebird_success_response/1
     test "fetches recent observations and saves them to state when response is successful", %{
-      conn: conn
+      view: view
     } do
       CaptureLog.capture_log(fn ->
-        assert {:ok, view, _html} = live(conn, @path)
-
-        send(view.pid, {:register_render_listener, self()})
-
         assert view
                |> form("#settings", quiz: %{})
                |> render_submit()
@@ -60,11 +58,8 @@ defmodule BirdSongWeb.QuizLiveTest do
     end
 
     @tag expect: @full_mock_expects
-    test "fetches recordings for all birds", %{conn: conn, bypass: _bypass} do
+    test "fetches recordings for all birds", %{view: view} do
       CaptureLog.capture_log(fn ->
-        assert {:ok, view, _html} = live(conn, @path)
-        send(view.pid, {:register_render_listener, self()})
-
         assert view
                |> form("#settings", quiz: %{})
                |> render_submit()

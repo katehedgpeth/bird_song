@@ -12,26 +12,44 @@ defmodule BirdSong.Services.XenoCanto.Cache do
                |> Application.compile_env!(:xeno_canto)
                |> Keyword.fetch!(:backlog_timeout_ms)
 
-  def get(bird) do
-    case get_from_cache(bird) do
+  @spec get(String.t(), pid() | atom) :: {:ok, Recording.t()} | :not_found
+  def get(bird, server) do
+    case get_from_cache(bird, server) do
       {:ok, recording} ->
         {:ok, recording}
 
       :not_found ->
-        GenServer.call(__MODULE__, {:get_recording_from_api, bird}, @api_timeout)
+        GenServer.call(server, {:get_recording_from_api, bird}, @api_timeout)
     end
   end
 
-  @spec get_from_cache(any) :: {:ok, Response.t()} | :not_found
-  def get_from_cache(bird) do
-    GenServer.call(__MODULE__, {:get_from_cache, bird})
+  @spec get_from_cache(String.t(), pid | atom) :: {:ok, Response.t()} | :not_found
+  def get_from_cache(bird, server) do
+    GenServer.call(server, {:get_from_cache, bird})
   end
 
-  def clear_cache() do
-    GenServer.cast(__MODULE__, :clear_cache)
+  @spec clear_cache(atom | pid) :: :ok
+  def clear_cache(server) do
+    GenServer.cast(server, :clear_cache)
   end
 
-  def get_recording_from_api("" <> bird) do
+  # unfortunately it seems that this has to be public in order
+  # for it to be called as a task in the :send_request call.
+  @spec get_recording_from_api(binary, any) ::
+          {:error,
+           %{
+             :__struct__ => HTTPoison.Error | HTTPoison.Response,
+             optional(:__exception__) => true,
+             optional(:body) => any,
+             optional(:headers) => list,
+             optional(:id) => nil | reference,
+             optional(:reason) => any,
+             optional(:request) => HTTPoison.Request.t(),
+             optional(:request_url) => any,
+             optional(:status_code) => integer
+           }}
+          | {:ok, any}
+  def get_recording_from_api("" <> bird, server) do
     Logger.debug("message=sending_request service=xeno_canto bird=" <> bird)
 
     bird
@@ -41,7 +59,7 @@ defmodule BirdSong.Services.XenoCanto.Cache do
     |> case do
       {:ok, raw} ->
         recording = Response.parse(raw)
-        GenServer.cast(__MODULE__, {:save, {bird, recording}})
+        GenServer.cast(server, {:save, {bird, recording}})
         {:ok, recording}
 
       error ->
@@ -56,8 +74,8 @@ defmodule BirdSong.Services.XenoCanto.Cache do
   ##
   #########################################################
 
-  def start_link(_) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, :ok, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   def init(:ok) do
@@ -121,7 +139,7 @@ defmodule BirdSong.Services.XenoCanto.Cache do
         } = state
       ) do
     %Task{ref: ref} =
-      Task.Supervisor.async_nolink(Services, __MODULE__, :get_recording_from_api, [bird])
+      Task.Supervisor.async(Services, __MODULE__, :get_recording_from_api, [bird, self()])
 
     updated_state = %{
       state

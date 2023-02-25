@@ -9,4 +9,11 @@ defmodule BirdSong.TestHelpers do
       apply(Keyword, func, [old_env, key, new_value])
     )
   end
+
+  def start_cache(module) when is_atom(module) do
+    ExUnit.Callbacks.start_supervised({
+      module,
+      name: Ecto.UUID.generate() |> String.to_atom()
+    })
+  end
 end

@@ -38,6 +38,7 @@ defmodule BirdSongWeb.QuizLive do
      |> assign(:text_input_class, @text_input_class)
      |> reset_state()
      |> assign(:birds, %{})
+     |> assign_new(:xeno_canto_cache, fn -> XenoCanto.Cache end)
      |> assign_new(:render_listeners, fn -> [] end)
      |> assign_new(:quiz, fn -> Quiz.changeset(%Quiz{region: @region}, %{}) end)
      |> assign_new(:tasks, fn -> %{} end)}
@@ -169,7 +170,7 @@ defmodule BirdSongWeb.QuizLive do
 
   def handle_info(:get_recent_observations, socket) do
     task =
-      Task.Supervisor.async_nolink(
+      Task.Supervisor.async(
         Services,
         Ebird,
         :get_recent_observations,
@@ -219,6 +220,10 @@ defmodule BirdSongWeb.QuizLive do
        :render_listeners,
        [pid | socket.assigns[:render_listeners]]
      )}
+  end
+
+  def handle_info({:xeno_canto_cache_pid, cache}, socket) do
+    {:noreply, assign(socket, :xeno_canto_cache, cache)}
   end
 
   #
@@ -309,7 +314,7 @@ defmodule BirdSongWeb.QuizLive do
         Services,
         XenoCanto,
         :get_recording,
-        [bird_id],
+        [bird_id, socket.assigns[:xeno_canto_cache]],
         timeout: @xeno_canto_timeout
       ),
       {:recording, bird_id}
