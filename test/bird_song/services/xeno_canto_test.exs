@@ -25,12 +25,20 @@ defmodule BirdSong.Services.XenoCantoTest do
 
   describe "&get_recording/1" do
     @tag stub: {"GET", "/api/2/recordings", &__MODULE__.success_response/1}
-    test "returns a recording path when request is successful", %{xeno_canto_cache: cache} do
+    test "returns a response object when request is successful", %{xeno_canto_cache: cache} do
       assert Cache.get_from_cache(@red_shouldered_hawk, cache) === :not_found
       assert {:ok, response} = XenoCanto.get_recording(@red_shouldered_hawk, cache)
       assert %Response{recordings: recordings} = response
       assert length(recordings) == 124
       assert [%Recording{} | _] = recordings
+
+      assert %Recording{
+               also: [
+                 "Tufted Titmouse",
+                 "Northern Parula",
+                 "Northern Cardinal"
+               ]
+             } = Enum.find(recordings, &(length(&1.also) > 0))
     end
 
     @tag expect_once: &__MODULE__.success_response/1

@@ -16,6 +16,8 @@ defmodule BirdSong.Application do
       {Task.Supervisor, name: BirdSong.Services},
       # Start the XenoCanto cache
       BirdSong.Services.XenoCanto.Cache,
+      # Start the Taxonomy cache
+      BirdSong.Services.Ebird.Taxonomy,
       # Start the PubSub system
       {Phoenix.PubSub, name: BirdSong.PubSub},
       # Start the Endpoint (http/https)

@@ -1,4 +1,6 @@
 defmodule BirdSong.Services.XenoCanto.Recording do
+  alias BirdSong.Services.Ebird.{Taxonomy, Species}
+
   defstruct [
     # the generic name of the species
     :gen,
@@ -183,6 +185,10 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     |> __struct__()
   end
 
+  defp parse_key({"also", val}, acc) do
+    Map.put(acc, :also, Enum.map(val, &use_common_name/1))
+  end
+
   defp parse_key({key, _val}, acc) when key in @unused_keys do
     acc
   end
@@ -190,5 +196,15 @@ defmodule BirdSong.Services.XenoCanto.Recording do
   defp parse_key({key, val}, acc) when key in @used_keys do
     atom_key = key |> String.replace("-", "_") |> String.to_atom()
     Map.put(acc, atom_key, val)
+  end
+
+  defp use_common_name("" <> sci_name) do
+    case Taxonomy.lookup(sci_name) do
+      {:ok, %Species{common_name: common_name}} ->
+        common_name
+
+      :not_found ->
+        sci_name
+    end
   end
 end
