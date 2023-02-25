@@ -31,7 +31,8 @@ config :bird_song, :ebird,
     (case System.get_env("EBIRD_API_TOKEN") do
        "" <> token -> token
        nil -> raise "missing environment variable: EBIRD_API_TOKEN"
-     end)
+     end),
+  taxonomy_file: Path.relative_to_cwd("data/taxonomy.json")
 
 config :bird_song, :xeno_canto,
   base_url: "https://xeno-canto.org",
