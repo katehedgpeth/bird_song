@@ -16,4 +16,11 @@ defmodule BirdSong.TestHelpers do
       name: Ecto.UUID.generate() |> String.to_atom()
     })
   end
+
+  def parse_logs("" <> logs) do
+    logs
+    |> String.split("\e[33m")
+    |> Enum.reject(&(&1 === ""))
+    |> Enum.map(&String.replace(&1, "\n\e[0m", ""))
+  end
 end

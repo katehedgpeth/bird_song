@@ -1,37 +1,19 @@
 defmodule BirdSong.Services.XenoCanto.Cache do
-  use BirdSong.Services.ThrottledCache, ets_name: :xeno_canto
+  use BirdSong.Services.ThrottledCache, ets_opts: [:bag], ets_name: :xeno_canto
 
-  alias BirdSong.Services
+  alias BirdSong.{Bird, Services}
   alias Services.{Helpers, XenoCanto, XenoCanto.Response}
 
   # unfortunately it seems that this has to be public in order
   # for it to be called as a task in the :send_request call.
-  @spec get_recording_from_api(binary, any) ::
-          {:error,
-           %{
-             :__struct__ => HTTPoison.Error | HTTPoison.Response,
-             optional(:__exception__) => true,
-             optional(:body) => any,
-             optional(:headers) => list,
-             optional(:id) => nil | reference,
-             optional(:reason) => any,
-             optional(:request) => HTTPoison.Request.t(),
-             optional(:request_url) => any,
-             optional(:status_code) => integer
-           }}
-          | {:ok, any}
-  def get_recording_from_api("" <> bird, server) do
-    Logger.debug("message=sending_request service=xeno_canto bird=" <> bird)
-
-    bird
+  def get_from_api(%Bird{sci_name: sci_name}) do
+    sci_name
     |> XenoCanto.url()
     |> HTTPoison.get()
     |> Helpers.parse_api_response()
     |> case do
       {:ok, raw} ->
-        recording = Response.parse(raw)
-        GenServer.cast(server, {:save, {bird, recording}})
-        {:ok, recording}
+        {:ok, Response.parse(raw)}
 
       error ->
         error
@@ -39,9 +21,9 @@ defmodule BirdSong.Services.XenoCanto.Cache do
   end
 
   # used for saving data for tests
-  def write_to_disk({:ok, response}, bird, true) do
+  def write_to_disk({:ok, response}, "" <> sci_name, true) do
     file_name =
-      bird
+      sci_name
       |> String.replace(" ", "_")
       |> Kernel.<>(".json")
 

@@ -185,6 +185,13 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     |> __struct__()
   end
 
+  ####################################
+  ####################################
+  ##
+  ##  PRIVATE METHODS
+  ##
+  ####################################
+
   defp parse_key({"also", val}, acc) do
     Map.put(acc, :also, Enum.map(val, &use_common_name/1))
   end

@@ -2,9 +2,10 @@ defmodule BirdSongWeb.QuizLiveTest do
   require Logger
   use BirdSongWeb.LiveCase
   use BirdSong.MockApiCase
+  alias BirdSong.TestHelpers
   alias ExUnit.CaptureLog
   alias BirdSong.Bird
-  alias BirdSong.Services.XenoCanto.Recording
+  alias BirdSong.Services.XenoCanto
 
   @moduletag services: [:ebird, :xeno_canto]
 
@@ -34,13 +35,14 @@ defmodule BirdSongWeb.QuizLiveTest do
     CaptureLog.capture_log(fn ->
       assert html =~ "How well do you know your bird songs?"
       assert view |> form("#settings") |> render_submit() =~ "Loading..."
-      # assert Enum.at(birds, 0) |> Tuple.to_list() |> List.first() == "FAIL"
-      # IO.inspect(birds)
-      assert_receive %{birds: birds} when Kernel.map_size(birds) > 0
-      assert_receive %{current_bird: {%Bird{}, %Recording{}}}
+      assert_receive %{bird_count: count} when count > 0
+
+      assert_receive %{current_bird: %{bird: %Bird{}, recording: %XenoCanto.Recording{}}}
 
       assert render(view) =~ "What bird do you hear?"
     end)
+    |> TestHelpers.parse_logs()
+    |> Enum.each(&assert &1 =~ "api_calls_remaining")
   end
 
   describe "start event" do
@@ -53,7 +55,7 @@ defmodule BirdSongWeb.QuizLiveTest do
                |> form("#settings", quiz: %{})
                |> render_submit()
 
-        assert_receive %{birds: birds} when Kernel.map_size(birds) > 0
+        assert_receive %{bird_count: count} when count > 0
       end)
     end
 
@@ -95,16 +97,16 @@ defmodule BirdSongWeb.QuizLiveTest do
   end
 
   def xeno_canto_success_response(%Conn{params: %{"query" => _query}} = conn) do
-    Conn.resp(conn, 200, Map.fetch!(@recordings, @red_shouldered_hawk))
+    Conn.resp(conn, 200, Map.fetch!(@recordings, @red_shouldered_hawk.sci_name))
   end
 
   def await_all_recordings() do
     receive do
-      %{birds: birds} when Kernel.map_size(birds) === 0 ->
+      %{bird_count: count} when count === 0 ->
         await_all_recordings()
 
-      %{birds: birds} ->
-        if Enum.all?(birds, &has_recordings?/1),
+      %{bird_count: count, birds: birds_ets, xeno_canto_cache: xc_cache} when count > 0 ->
+        if birds_ets |> :ets.tab2list() |> Enum.all?(&has_recordings?(&1, xc_cache)),
           do: :ok,
           else: await_all_recordings()
 
@@ -123,6 +125,10 @@ defmodule BirdSongWeb.QuizLiveTest do
     end
   end
 
-  defp has_recordings?({"" <> _, %Bird{recordings: []}}), do: false
-  defp has_recordings?({"" <> _, %Bird{recordings: [_ | _]}}), do: true
+  defp has_recordings?({"" <> _, %Bird{} = bird}, xc_cache) do
+    case XenoCanto.Cache.get_from_cache(bird, xc_cache) do
+      {:ok, %XenoCanto.Response{}} -> true
+      :not_found -> false
+    end
+  end
 end

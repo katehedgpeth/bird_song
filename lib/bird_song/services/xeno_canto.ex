@@ -1,5 +1,6 @@
 defmodule BirdSong.Services.XenoCanto do
   alias __MODULE__.Cache
+  alias BirdSong.Bird
   alias BirdSong.Services.Helpers
 
   def url(query) do
@@ -10,7 +11,7 @@ defmodule BirdSong.Services.XenoCanto do
     |> Path.join()
   end
 
-  def get_recording(bird, server) do
+  def get_recordings(%Bird{} = bird, server) when is_pid(server) do
     Cache.get(bird, server)
   end
 

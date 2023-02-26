@@ -30,16 +30,27 @@ defmodule BirdSongWeb.QuizLive do
 
   @api_timeout Application.compile_env(:bird_song, :throttled_backlog_timeout_ms)
 
+  @type current_bird :: %{
+          bird: Bird.t(),
+          recording: Recording.t(),
+          image: Photo.t()
+        }
+
+  defguard is_ets(maybe_ets) when is_reference(maybe_ets) or is_atom(maybe_ets)
+
   def mount(_params, _session, socket) do
     {:ok,
      socket
      |> assign(:text_input_class, @text_input_class)
      |> reset_state()
-     |> assign(:birds, %{})
      |> assign_new(:xeno_canto_cache, fn -> XenoCanto.Cache end)
      |> assign_new(:render_listeners, fn -> [] end)
      |> assign_new(:quiz, fn -> Quiz.changeset(%Quiz{region: @region}, %{}) end)
-     |> assign_new(:tasks, fn -> %{} end)}
+     |> assign_new(:tasks, fn -> :ets.new(__MODULE__.Tasks, []) end)
+     |> assign_new(:birds, fn ->
+       :ets.new(__MODULE__.Birds, [])
+     end)
+     |> update_bird_count()}
   end
 
   def render(assigns) do
@@ -54,7 +65,9 @@ defmodule BirdSongWeb.QuizLive do
 
   def inner_content(%{quiz: %Changeset{}} = assigns), do: new(assigns)
   def inner_content(%{current_bird: nil} = assigns), do: loading(assigns)
-  def inner_content(%{current_bird: {%Bird{}, %Recording{}}} = assigns), do: question(assigns)
+
+  def inner_content(%{current_bird: %{bird: %Bird{}, recording: %Recording{}}} = assigns),
+    do: question(assigns)
 
   def new(assigns) do
     ~H"""
@@ -148,9 +161,9 @@ defmodule BirdSongWeb.QuizLive do
   def handle_event(
         "change_recording",
         _,
-        %Socket{assigns: %{current_bird: {bird, %Recording{}}}} = socket
+        %Socket{assigns: %{current_bird: current_bird, xeno_canto_cache: xc_cache}} = socket
       ) do
-    {:noreply, assign(socket, :current_bird, get_bird_and_recording(bird))}
+    {:noreply, assign(socket, :current_bird, update_current_recording(current_bird, xc_cache))}
   end
 
   def handle_event("show_answer", _, %Socket{} = socket) do
@@ -184,14 +197,14 @@ defmodule BirdSongWeb.QuizLive do
       ) do
     {:noreply,
      birds
-     |> Map.keys()
-     |> Enum.reduce(socket, &get_recording_for_bird(&2, &1))}
+     |> :ets.tab2list()
+     |> Enum.map(&elem(&1, 1))
+     |> Enum.reduce(socket, &get_recordings_for_bird(&2, &1))}
   end
 
   def handle_info({ref, response}, %Socket{} = socket) when is_reference(ref) do
-    socket.assigns
-    |> Map.fetch!(:tasks)
-    |> Map.fetch(ref)
+    socket
+    |> lookup_task(ref)
     |> handle_task_response(socket, response)
   end
 
@@ -201,14 +214,13 @@ defmodule BirdSongWeb.QuizLive do
 
   def handle_info(
         {:DOWN, ref, :process, _pid,
-         {:timeout,
-          {GenServer, :call, [XenoCanto.Cache, {:get_recording_from_api, bird_id}, _timeout]}}},
+         {:timeout, {GenServer, :call, [XenoCanto.Cache, {:get_from_api, bird}, _timeout]}}},
         socket
       ) do
     {:noreply,
      socket
      |> forget_task(ref)
-     |> get_recording_for_bird(bird_id)}
+     |> get_recordings_for_bird(bird)}
   end
 
   def handle_info({:register_render_listener, pid}, socket) do
@@ -231,41 +243,44 @@ defmodule BirdSongWeb.QuizLive do
   ##  PRIVATE METHODS
   ##
 
-  defp handle_task_response(:error, socket, _response) do
+  defp handle_task_response({:not_found, ref}, socket, _response) when is_reference(ref) do
     # ignore messages from unknown tasks
     {:noreply, socket}
   end
 
   defp handle_task_response({:ok, :recent_observations}, socket, {:ok, recent_observations}) do
-    reduced = Enum.reduce(recent_observations, %{}, &reduce_recent_observations/2)
+    Enum.each(recent_observations, &save_observation(&1, socket.assigns[:birds]))
     Process.send(self(), :get_recordings, [])
 
-    {:noreply, assign(socket, :birds, reduced)}
+    {:noreply, update_bird_count(socket)}
   end
 
   defp handle_task_response(
-         {:ok, {:recording, bird_id}},
+         {:ok, {:recording, "" <> sci_name}},
          socket,
          {:ok, %Response{num_recordings: "0"}}
        ) do
-    %Bird{common_name: common_name} = Map.fetch!(socket.assigns[:birds], bird_id)
+    {:ok, %Bird{sci_name: sci_name, common_name: common_name}} = lookup_bird(socket, sci_name)
 
     [
       "message=no_recordings",
-      "bird_id=" <> bird_id,
+      "bird_id=" <> sci_name,
       "common_name=" <> common_name
     ]
     |> Enum.join(" ")
     |> Logger.warn()
 
-    {:noreply, remove_bird_with_no_recordings(socket, bird_id)}
+    {:noreply, remove_bird_with_no_recordings(socket, sci_name)}
   end
 
-  defp handle_task_response({:ok, {:recording, bird_id}}, socket, {:ok, %Response{} = response}) do
+  defp handle_task_response(
+         {:ok, {:recording, %Bird{} = bird}},
+         socket,
+         {:ok, %Response{}}
+       ) do
     {:noreply,
      socket
-     |> add_recordings_to_bird(bird_id, response)
-     |> add_bird_to_quiz(bird_id)
+     |> add_bird_to_quiz(bird)
      |> assign_next_bird()}
   end
 
@@ -278,13 +293,14 @@ defmodule BirdSongWeb.QuizLive do
   end
 
   defp remember_task(%Socket{assigns: %{tasks: tasks}} = socket, %Task{ref: ref}, name) do
-    assign(socket, :tasks, Map.put(tasks, ref, name))
+    true = :ets.insert(tasks, {ref, name})
+    socket
   end
 
   defp forget_task(%Socket{assigns: %{tasks: tasks}} = socket, ref) when is_reference(ref) do
-    Logger.warn("api_calls_remaining=#{Kernel.map_size(tasks)}")
-    {_, without} = Map.pop!(tasks, ref)
-    assign(socket, :tasks, without)
+    Logger.warn("api_calls_remaining=#{tasks |> :ets.tab2list() |> length()}")
+    :ets.delete(tasks, ref)
+    socket
   end
 
   defp get_region(%Socket{assigns: %{quiz: %Quiz{region: region}}}), do: region
@@ -294,52 +310,77 @@ defmodule BirdSongWeb.QuizLive do
     |> assign(:current_bird, nil)
     |> assign(:show_answer?, false)
     |> assign(:show_sono?, false)
+    |> assign(:show_image?, false)
   end
 
-  defp reduce_recent_observations(%Ebird.Observation{} = obs, acc) do
-    Map.update(
-      acc,
-      obs.sci_name,
-      Bird.new(obs),
-      &Bird.add_observation(&1, obs)
-    )
+  @spec save_observation(Ebird.Observation.t(), :ets.table()) :: :ok
+  defp save_observation(%Ebird.Observation{sci_name: sci_name} = obs, birds_ets)
+       when is_ets(birds_ets) do
+    case lookup_bird(birds_ets, sci_name) do
+      {:ok, %Bird{} = bird} ->
+        update_bird(birds_ets, Bird.add_observation(bird, obs))
+
+      :not_found ->
+        true = :ets.insert(birds_ets, {sci_name, Bird.new(obs)})
+        :ok
+    end
   end
 
-  defp get_recording_for_bird(%Socket{} = socket, bird_id) do
+  @spec get_recordings_for_bird(Socket.t(), Bird.t()) :: Socket.t()
+  defp get_recordings_for_bird(%Socket{} = socket, %Bird{} = bird) do
     remember_task(
       socket,
       Task.Supervisor.async_nolink(
         Services,
         XenoCanto,
-        :get_recording,
-        [bird_id, socket.assigns[:xeno_canto_cache]],
+        :get_recordings,
+        [bird, socket.assigns[:xeno_canto_cache]],
         timeout: @api_timeout
       ),
-      {:recording, bird_id}
+      {:recording, bird}
     )
   end
 
-  defp add_recordings_to_bird(
-         %Socket{assigns: %{birds: birds}} = socket,
-         "" <> bird_id,
-         %Response{} = response
-       ) do
-    assign(
-      socket,
-      :birds,
-      Map.update!(
-        birds,
-        bird_id,
-        &Bird.add_recordings(&1, response)
-      )
-    )
+  # @spec add_recordings_to_bird(Socket.t(), Bird.t(), Response.t()) :: Socket.t()
+  # defp add_recordings_to_bird(
+  #        %Socket{} = socket,
+  #        %Bird{} = bird,
+  #        %Response{} = response
+  #      ) do
+  #   update_bird(socket, Bird.add_recordings(bird, response))
+  #   socket
+  # end
+
+  def lookup_task(%Socket{assigns: %{tasks: tasks_ets}}, ref) when is_reference(ref) do
+    case :ets.lookup(tasks_ets, ref) do
+      [{^ref, task}] -> {:ok, task}
+      [] -> {:not_found, ref}
+    end
   end
 
-  defp add_bird_to_quiz(%Socket{assigns: %{quiz: quiz}} = socket, bird_id) do
+  @spec lookup_bird(:ets.table() | Socket.t(), String.t()) :: {:ok, Bird.t()} | :not_found
+  defp lookup_bird(%Socket{assigns: %{birds: birds_ets}}, "" <> sci_name) do
+    lookup_bird(birds_ets, sci_name)
+  end
+
+  defp lookup_bird(birds_ets, "" <> sci_name) when is_ets(birds_ets) do
+    case :ets.lookup(birds_ets, sci_name) do
+      [{^sci_name, %Bird{} = bird}] -> {:ok, bird}
+      [] -> :not_found
+    end
+  end
+
+  @spec update_bird(:ets.table(), Bird.t()) :: Socket.t() | :ok
+  defp update_bird(birds_ets, %Bird{sci_name: sci_name} = bird) when is_ets(birds_ets) do
+    true = :ets.insert(birds_ets, {sci_name, bird})
+    :ok
+  end
+
+  defp add_bird_to_quiz(%Socket{assigns: %{quiz: quiz}} = socket, %Bird{sci_name: sci_name}) do
     assign(
       socket,
       :quiz,
-      Quiz.add_bird(quiz, bird_id)
+      Quiz.add_bird(quiz, sci_name)
     )
   end
 
@@ -347,13 +388,12 @@ defmodule BirdSongWeb.QuizLive do
          %Socket{
            assigns: %{
              current_bird: nil,
-             quiz: %Quiz{birds: [next | rest]} = quiz,
-             birds: birds
+             quiz: %Quiz{birds: [next | rest]} = quiz
            }
          } = socket
        ) do
     socket
-    |> assign(:current_bird, get_next_bird_and_recording(birds, next))
+    |> get_current_bird(next)
     |> assign(:quiz, %{quiz | birds: rest})
   end
 
@@ -361,28 +401,72 @@ defmodule BirdSongWeb.QuizLive do
     socket
   end
 
-  defp remove_bird_with_no_recordings(socket, bird_id) do
-    {_, birds} = Map.pop!(socket.assigns[:birds], bird_id)
-    assign(socket, :birds, birds)
+  @spec remove_bird_with_no_recordings(Socket.t(), String.t()) :: Socket.t()
+  defp remove_bird_with_no_recordings(%{assigns: %{birds: birds}} = socket, bird_id) do
+    :ets.delete(birds, bird_id)
+    update_bird_count(socket)
   end
 
-  @spec get_next_bird_and_recording(%{required(String.t()) => Bird.t()}, String.t()) ::
-          {Bird.t(), Recording.t()}
-  defp get_next_bird_and_recording(%{} = birds, "" <> next_id) do
+  @spec get_current_bird(Socket.t(), String.t()) :: current_bird()
+  defp get_current_bird(%Socket{assigns: %{birds: birds}} = socket, "" <> next_id)
+       when is_ets(birds) do
     birds
-    |> Map.fetch!(next_id)
-    |> get_bird_and_recording()
+    |> lookup_bird(next_id)
+    |> do_get_current_bird(socket)
   end
 
-  defp get_bird_and_recording(%Bird{recordings: recordings} = bird) do
-    {bird, Enum.random(recordings)}
+  @spec do_get_current_bird({:ok, Bird.t()} | :error, Socket.t()) :: %{
+          bird: Bird.t(),
+          recording: Recording.t(),
+          image: Photo.t()
+        }
+  defp do_get_current_bird(
+         {:ok, %Bird{} = bird},
+         %Socket{assigns: %{xeno_canto_cache: xc_cache}} = socket
+       ) do
+    assign(
+      socket,
+      :current_bird,
+      %{
+        bird: bird,
+        recording: nil,
+        image: nil
+      }
+      |> update_current_recording(xc_cache)
+      |> update_current_image()
+    )
   end
 
-  defp get_recording_source({%Bird{}, %Recording{file: file}}), do: file
+  @spec update_current_recording(current_bird(), pid()) :: current_bird()
+  defp update_current_recording(%{bird: %Bird{} = bird} = current_bird, cache) do
+    {:ok, %Response{recordings: recordings}} = XenoCanto.get_recordings(bird, cache)
+
+    Map.replace!(current_bird, :recording, Enum.random(recordings))
+  end
+
+  defp update_current_image(%{bird: %Bird{}} = current_bird) do
+    current_bird
+  end
+
+  defp update_bird_count(%Socket{assigns: %{birds: birds_ets}} = socket) do
+    assign(
+      socket,
+      :bird_count,
+      birds_ets
+      |> :ets.tab2list()
+      |> Kernel.length()
+    )
+  end
+
+  defp get_recording_source(%{recording: %Recording{file: file}}), do: file
 
   defp show_answer(%{
          show_answer?: true,
-         current_bird: {%Bird{common_name: name}, %Recording{also: also}}
+         current_bird: %{
+           bird: %Bird{common_name: name},
+           recording: %Recording{also: also},
+           image: _
+         }
        })
        when length(also) > 0,
        do:
@@ -397,8 +481,11 @@ defmodule BirdSongWeb.QuizLive do
            class: "text-center"
          )
 
-  defp show_answer(%{show_answer?: true, current_bird: {%Bird{common_name: name}, %Recording{}}}),
-    do: content_tag(:div, name, class: "mx-auto text-center")
+  defp show_answer(%{
+         show_answer?: true,
+         current_bird: %{bird: %Bird{common_name: name}}
+       }),
+       do: content_tag(:div, name, class: "mx-auto text-center")
 
   defp show_answer(assigns),
     do: ~H"""
@@ -407,7 +494,7 @@ defmodule BirdSongWeb.QuizLive do
 
   defp show_sono(%{
          show_sono?: true,
-         current_bird: {%Bird{}, %Recording{sono: %{"large" => large_sono}}}
+         current_bird: %{recording: %Recording{sono: %{"large" => large_sono}}}
        }) do
     img_tag(large_sono)
   end

@@ -15,12 +15,12 @@ defmodule BirdSong.MockApiCase do
   using do
     quote do
       import BirdSong.MockApiCase
-      alias BirdSong.TestHelpers
+      alias BirdSong.{Bird, TestHelpers}
       alias Plug.Conn
 
-      @red_shouldered_hawk "Buteo lineatus"
-      @carolina_wren "Thryothorus ludovicianus"
-      @eastern_bluebird "Sialia sialis"
+      @red_shouldered_hawk %Bird{sci_name: "Buteo lineatus", common_name: "Red-shouldered Hawk"}
+      @carolina_wren %Bird{sci_name: "Thryothorus ludovicianus", common_name: "Carolina Wren"}
+      @eastern_bluebird %Bird{sci_name: "Sialia sialis", common_name: "Eastern Bluebird"}
 
       @recordings Enum.reduce(
                     [
@@ -29,7 +29,7 @@ defmodule BirdSong.MockApiCase do
                       @eastern_bluebird
                     ],
                     %{},
-                    fn sci_name, acc ->
+                    fn %Bird{sci_name: sci_name}, acc ->
                       data =
                         "test/mock_data/#{String.replace(sci_name, " ", "_")}.json"
                         |> Path.relative_to_cwd()
