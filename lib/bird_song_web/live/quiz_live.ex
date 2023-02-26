@@ -28,9 +28,7 @@ defmodule BirdSongWeb.QuizLive do
     disabled:italic
   )
 
-  @xeno_canto_timeout :bird_song
-                      |> Application.compile_env(:xeno_canto)
-                      |> Keyword.fetch!(:backlog_timeout_ms)
+  @api_timeout Application.compile_env(:bird_song, :throttled_backlog_timeout_ms)
 
   def mount(_params, _session, socket) do
     {:ok,
@@ -315,7 +313,7 @@ defmodule BirdSongWeb.QuizLive do
         XenoCanto,
         :get_recording,
         [bird_id, socket.assigns[:xeno_canto_cache]],
-        timeout: @xeno_canto_timeout
+        timeout: @api_timeout
       ),
       {:recording, bird_id}
     )

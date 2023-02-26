@@ -24,8 +24,9 @@ config :bird_song, BirdSongWeb.Endpoint,
 
 config :bird_song, :xeno_canto,
   throttle_ms: 1,
-  backlog_timeout_ms: 5 * one_second,
   api_response_timeout_ms: one_second
+
+config :bird_song, :throttled_backlog_timeout_ms, 5 * one_second
 
 # Print only warnings and errors during test
 config :logger, level: :warn
