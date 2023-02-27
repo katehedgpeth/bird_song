@@ -31,14 +31,11 @@ defmodule BirdSong.MockApiCase do
                     ],
                     %{},
                     fn %Bird{sci_name: sci_name}, acc ->
-                      data =
-                        "test/mock_data/#{String.replace(sci_name, " ", "_")}.json"
-                        |> Path.relative_to_cwd()
-                        |> File.read!()
-
-                      Map.put(acc, sci_name, data)
+                      Map.put(acc, sci_name, TestHelpers.read_mock_file(sci_name))
                     end
                   )
+
+      @images TestHelpers.read_mock_file("flickr_" <> @red_shouldered_hawk.common_name)
     end
   end
 

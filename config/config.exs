@@ -42,6 +42,15 @@ config :bird_song, :xeno_canto,
   base_url: "https://xeno-canto.org",
   write_to_disk?: false
 
+config :bird_song, :flickr,
+  base_url: "https://www.flickr.com",
+  write_to_disk?: false,
+  api_key:
+    (case System.get_env("FLICKR_API_KEY") do
+       "" <> key -> key
+       nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
+     end)
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.14.29",

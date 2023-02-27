@@ -21,19 +21,4 @@ defmodule BirdSong.Services.XenoCanto.Cache do
   end
 
   # used for saving data for tests
-  def write_to_disk({:ok, response}, "" <> sci_name, true) do
-    file_name =
-      sci_name
-      |> String.replace(" ", "_")
-      |> Kernel.<>(".json")
-
-    "test/mock_data/"
-    |> Kernel.<>(file_name)
-    |> Path.relative_to_cwd()
-    |> File.write!(Jason.encode!(response))
-
-    {:ok, response}
-  end
-
-  def write_to_disk(response, _, false), do: response
 end
