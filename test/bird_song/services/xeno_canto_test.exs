@@ -14,7 +14,7 @@ defmodule BirdSong.Services.XenoCantoTest do
 
   describe "&get_recordings/1" do
     @tag stub: {"GET", "/api/2/recordings", &__MODULE__.success_response/1}
-    test "returns a response object when request is successful", %{xeno_canto_cache: cache} do
+    test "returns a response object when request is successful", %{caches: %{xeno_canto: cache}} do
       assert Cache.get_from_cache(@red_shouldered_hawk, cache) === :not_found
       assert {:ok, response} = XenoCanto.get_recordings(@red_shouldered_hawk, cache)
       assert %Response{recordings: recordings} = response

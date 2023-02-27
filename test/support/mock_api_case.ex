@@ -11,6 +11,7 @@ defmodule BirdSong.MockApiCase do
   use ExUnit.CaseTemplate
   alias BirdSong.TestHelpers
   alias BirdSong.Services.XenoCanto
+  alias BirdSongWeb.QuizLive.Caches
 
   using do
     quote do
@@ -42,15 +43,16 @@ defmodule BirdSong.MockApiCase do
   end
 
   setup tags do
-    {:ok, cache} = TestHelpers.start_cache(XenoCanto.Cache)
+    {:ok, xeno_canto} = TestHelpers.start_cache(XenoCanto.Cache)
+    caches = %Caches{xeno_canto: xeno_canto}
 
     case setup_bypass(tags) do
       {:ok, bypass: bypass} ->
         setup_mocks(tags, bypass)
-        {:ok, bypass: bypass, xeno_canto_cache: cache}
+        {:ok, bypass: bypass, caches: caches}
 
       :no_bypass ->
-        {:ok, cache: cache}
+        {:ok, caches: caches}
     end
   end
 

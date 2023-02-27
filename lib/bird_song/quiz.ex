@@ -2,6 +2,9 @@ defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
 
+  # region is temporarily hard-coded; future version will take user input
+  @default_region "US-NC-067"
+
   schema "quizzes" do
     field :birds, {:array, :string}, default: []
     field :correct_answers, :integer, default: 0
@@ -17,6 +20,10 @@ defmodule BirdSong.Quiz do
     quiz
     |> cast(attrs, [:correct_answers, :incorrect_answers, :region, :quiz_length, :birds])
     |> validate_required([:region, :quiz_length])
+  end
+
+  def default_changeset() do
+    changeset(%__MODULE__{region: @default_region}, %{})
   end
 
   def add_bird(%__MODULE__{} = quiz, "" <> bird_id) do

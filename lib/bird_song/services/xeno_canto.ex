@@ -11,8 +11,12 @@ defmodule BirdSong.Services.XenoCanto do
     |> Path.join()
   end
 
-  def get_recordings(%Bird{} = bird, server) when is_pid(server) do
+  def get_recordings(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
     Cache.get(bird, server)
+  end
+
+  def has_data?(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
+    Cache.has_data?(bird, server)
   end
 
   #########################################################

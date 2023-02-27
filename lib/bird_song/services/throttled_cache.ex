@@ -38,6 +38,10 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, :clear_cache)
       end
 
+      def has_data?(%Bird{} = bird, server) do
+        GenServer.call(server, {:has_data?, bird})
+      end
+
       #########################################################
       #########################################################
       ##
@@ -79,6 +83,10 @@ defmodule BirdSong.Services.ThrottledCache do
           end
 
         {:reply, result, state}
+      end
+
+      def handle_call({:has_data?, %Bird{sci_name: sci_name}}, _from, %__MODULE__{} = state) do
+        {:reply, :ets.member(state.ets_table, sci_name), state}
       end
 
       def handle_cast(:clear_cache, %__MODULE__{} = state) do
