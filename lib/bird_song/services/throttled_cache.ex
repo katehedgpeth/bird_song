@@ -11,7 +11,7 @@ defmodule BirdSong.Services.ThrottledCache do
       alias BirdSong.{Bird, Services}
       alias Services.Helpers
 
-      defstruct [:ets_table, throttled?: false, backlog: [], tasks: %{}]
+      defstruct [:ets_table, throttled?: false, backlog: [], tasks: %{}, request_listeners: []]
 
       @backlog_timeout_ms unquote(@env) |> Keyword.fetch!(:backlog_timeout_ms)
 
@@ -29,6 +29,10 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       @spec get_from_cache(Bird.t(), pid | atom) :: {:ok, Response.t()} | :not_found
+      def get_from_cache(%Bird{} = bird, nil) do
+        raise "SERVER CANNOT BE NIL!!!"
+      end
+
       def get_from_cache(%Bird{} = bird, server) do
         GenServer.call(server, {:get_from_cache, bird})
       end
@@ -40,6 +44,10 @@ defmodule BirdSong.Services.ThrottledCache do
 
       def has_data?(%Bird{} = bird, server) do
         GenServer.call(server, {:has_data?, bird})
+      end
+
+      def register_request_listener(server) do
+        GenServer.cast(server, {:register_request_listener, self()})
       end
 
       #########################################################
@@ -94,6 +102,10 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, %{state | ets_table: start_table()}}
       end
 
+      def handle_cast({:register_request_listener, pid}, %__MODULE__{} = state) do
+        {:noreply, %{state | request_listeners: [pid | state.request_listeners]}}
+      end
+
       def handle_info(:send_request, %__MODULE__{backlog: []} = state) do
         # ignore message, because there are no requests to send
         {:noreply, state}
@@ -116,10 +128,10 @@ defmodule BirdSong.Services.ThrottledCache do
           "message=sending_request module=#{inspect(__MODULE__)} bird=" <> bird.common_name
         )
 
-        if Mix.env() === :test do
-          from
-          |> elem(0)
-          |> send(
+        Enum.each(
+          state.request_listeners,
+          &send(
+            &1,
             {:start_request,
              %{
                module: __MODULE__,
@@ -127,7 +139,7 @@ defmodule BirdSong.Services.ThrottledCache do
                time: DateTime.now!("Etc/UTC")
              }}
           )
-        end
+        )
 
         %Task{ref: ref} = Task.Supervisor.async(Services, __MODULE__, :get_from_api, [bird])
 
@@ -156,7 +168,7 @@ defmodule BirdSong.Services.ThrottledCache do
         state
         |> Map.fetch!(:tasks)
         |> Map.fetch!(ref)
-        |> handle_response(response)
+        |> handle_response(response, state)
 
         {:noreply, state}
       end
@@ -182,13 +194,15 @@ defmodule BirdSong.Services.ThrottledCache do
         :ets.new(unquote(ets_name), unquote(ets_opts))
       end
 
-      defp handle_response({from, %Bird{} = bird}, response) do
+      defp handle_response({from, %Bird{} = bird}, response, %__MODULE__{
+             request_listeners: listeners
+           }) do
         send(self(), {:save, {bird, response}})
 
-        if Mix.env() === :test do
-          from
-          |> elem(0)
-          |> send(
+        Enum.each(
+          listeners,
+          &send(
+            &1,
             {:end_request,
              %{
                module: __MODULE__,
@@ -197,7 +211,7 @@ defmodule BirdSong.Services.ThrottledCache do
                response: response
              }}
           )
-        end
+        )
 
         Process.send_after(self(), :unthrottle, @throttle_ms)
 

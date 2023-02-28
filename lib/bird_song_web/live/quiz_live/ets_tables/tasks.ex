@@ -15,6 +15,7 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Tasks do
   def start_bird_tasks(%Socket{} = socket, %Bird{} = bird) do
     socket
     |> start_task(bird, :recordings)
+    |> start_task(bird, :images)
   end
 
   def start_task(%Socket{} = socket, %Bird{} = bird, resource) when is_atom(resource) do
@@ -30,6 +31,7 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Tasks do
     )
   end
 
+  @spec lookup_task(Socket.t(), reference) :: {:not_found, reference} | {:ok, any}
   def lookup_task(
         %Socket{assigns: %{ets_tables: %EtsTables{tasks: tasks_ets}}},
         ref

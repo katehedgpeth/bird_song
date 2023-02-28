@@ -1,12 +1,13 @@
 defmodule BirdSongWeb.QuizLive.Caches do
   alias Phoenix.LiveView.Socket
-  alias BirdSong.Services.XenoCanto
+  alias BirdSong.Services.{Flickr, XenoCanto}
   alias BirdSong.Bird
 
-  defstruct [:xeno_canto]
+  defstruct [:flickr, :xeno_canto]
 
   @type t() :: %__MODULE__{
-          xeno_canto: XenoCanto | pid()
+          flickr: Flickr | pid(),
+          xeno_canto: XenoCanto.Cache | pid()
         }
 
   @spec assign_new(Socket.t()) :: Socket.t()
@@ -27,13 +28,20 @@ defmodule BirdSongWeb.QuizLive.Caches do
     XenoCanto.get_recordings(bird, get_cache(socket, :xeno_canto))
   end
 
+  def get_images(%Socket{} = socket, %Bird{} = bird) do
+    Flickr.get_images(bird, get_cache(socket, :flickr))
+  end
+
   @spec new() :: t()
   defp new() do
     %__MODULE__{
-      xeno_canto: XenoCanto
+      flickr: Flickr,
+      xeno_canto: XenoCanto.Cache
     }
   end
 
   defp get_cache(%Socket{assigns: %{caches: %__MODULE__{xeno_canto: xeno_canto}}}, :xeno_canto),
     do: xeno_canto
+
+  defp get_cache(%Socket{assigns: %{caches: %__MODULE__{flickr: flickr}}}, :flickr), do: flickr
 end

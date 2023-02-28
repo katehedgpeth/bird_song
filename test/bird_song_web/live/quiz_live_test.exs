@@ -37,7 +37,7 @@ defmodule BirdSongWeb.QuizLiveTest do
       assert view |> form("#settings") |> render_submit() =~ "Loading..."
       assert_receive %{bird_count: count} when count > 0
 
-      assert_receive %{current_bird: %{bird: %Bird{}, recording: %XenoCanto.Recording{}}}
+      assert_receive %{current_bird: %{bird: %Bird{}, recording: %XenoCanto.Recording{}}}, 1_000
 
       assert render(view) =~ "What bird do you hear?"
     end)

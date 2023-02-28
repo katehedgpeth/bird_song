@@ -7,7 +7,8 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     Quiz,
     Services,
     Services.XenoCanto,
-    Services.Ebird
+    Services.Ebird,
+    Services.Flickr
   }
 
   alias BirdSongWeb.{QuizLive, QuizLive.Caches, QuizLive.EtsTables}
@@ -78,7 +79,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   defp handle_task_response({:ok, :recent_observations}, socket, {:ok, recent_observations}) do
     Enum.each(
       recent_observations,
-      &EtsTables.Birds.save_observation(socket, &1)
+      &EtsTables.Birds.save_bird(socket, &1)
     )
 
     Process.send(self(), :start_throttled_data_collection, [])
@@ -114,6 +115,14 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
      socket
      |> add_bird_to_quiz(bird)
      |> QuizLive.assign_next_bird()}
+  end
+
+  defp handle_task_response(
+         {:ok, {:images, %Bird{}}},
+         socket,
+         {:ok, %Flickr.Response{}}
+       ) do
+    {:noreply, QuizLive.assign_next_bird(socket)}
   end
 
   defp handle_task_response({:ok, name}, socket, response) do

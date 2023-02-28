@@ -53,6 +53,7 @@ defmodule BirdSong.Services.ThrottledCacheTest do
 
     @tag expect: &__MODULE__.success_response/1
     test "throttles requests", %{cache: cache} do
+      ThrottledCacheUnderTest.register_request_listener(cache)
       throttle_ms = Helpers.get_env(BirdSong.Services.ThrottledCache, :throttle_ms)
       ThrottledCacheUnderTest.clear_cache(cache)
 

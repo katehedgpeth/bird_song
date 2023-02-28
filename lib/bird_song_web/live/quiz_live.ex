@@ -18,6 +18,7 @@ defmodule BirdSongWeb.QuizLive do
 
   alias BirdSong.{
     Bird,
+    Services.Flickr,
     Services.XenoCanto,
     Quiz
   }
@@ -104,6 +105,7 @@ defmodule BirdSongWeb.QuizLive do
       <div class="bg-slate-100 p-10 w-full">
         <%= show_answer(assigns) %>
       </div>
+      <%= show_image(assigns) %>
       <%= show_sono(assigns) %>
     </div>
     """
@@ -153,6 +155,13 @@ defmodule BirdSongWeb.QuizLive do
     <button phx-click="show_answer" class="btn btn-outline mx-auto block">Show Answer</button>
     """
 
+  defp show_image(assigns) do
+    ~H"""
+    <%= image(assigns) %>
+    <%= image_button(assigns) %>
+    """
+  end
+
   defp show_sono(%{
          show_sono?: true,
          current_bird: %{recording: %Recording{sono: %{"large" => large_sono}}}
@@ -167,6 +176,23 @@ defmodule BirdSongWeb.QuizLive do
   end
 
   defp get_recording_source(%{recording: %Recording{file: file}}), do: file
+
+  defp image(%{show_image?: true, current_bird: %{image: %Flickr.Photo{url: url}}}) do
+    HTML.Tag.img_tag(url, class: "block")
+  end
+
+  defp image(%{show_image?: false}) do
+    ""
+  end
+
+  defp image_button(%{show_image?: show?}) do
+    action = if show?, do: "change", else: "show"
+
+    HTML.Tag.content_tag(:button, String.capitalize(action) <> " Image",
+      phx: [click: action <> "_image"],
+      class: "btn btn-outline block"
+    )
+  end
 
   def assign_next_bird(
         %Socket{

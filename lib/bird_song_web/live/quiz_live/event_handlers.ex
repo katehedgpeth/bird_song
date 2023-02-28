@@ -4,7 +4,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   alias LiveView.Socket
   alias Ecto.Changeset
   alias BirdSong.Quiz
-  alias BirdSongWeb.QuizLive
+  alias BirdSongWeb.{QuizLive, QuizLive.CurrentBird}
 
   def handle_event(
         "start",
@@ -52,14 +52,25 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
         _,
         %Socket{} = socket
       ) do
-    {:noreply, QuizLive.CurrentBird.update_recording(socket)}
+    {:noreply, CurrentBird.update_recording(socket)}
   end
 
   def handle_event("show_answer", _, %Socket{} = socket) do
-    {:noreply, LiveView.assign(socket, :show_answer?, true)}
+    {:noreply,
+     socket
+     |> LiveView.assign(:show_image?, true)
+     |> LiveView.assign(:show_answer?, true)}
   end
 
   def handle_event("show_sono", _, %Socket{} = socket) do
     {:noreply, LiveView.assign(socket, :show_sono?, true)}
+  end
+
+  def handle_event("show_image", _, %Socket{} = socket) do
+    {:noreply, LiveView.assign(socket, :show_image?, true)}
+  end
+
+  def handle_event("change_image", _, %Socket{} = socket) do
+    {:noreply, CurrentBird.update_image(socket)}
   end
 end

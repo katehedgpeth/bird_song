@@ -12,9 +12,9 @@ defmodule BirdSong.Services.FlickrTest do
 
   describe "&get_image/1" do
     @tag expect_once: &__MODULE__.success_response/1
-    test "returns {:ok, %Flickr.Response{}} when request is successful" do
-      {:ok, cache} = TestHelpers.start_cache(Flickr)
-
+    test "returns {:ok, %Flickr.Response{}} when request is successful", %{
+      caches: %{flickr: cache}
+    } do
       assert {:ok, response} = Flickr.get_images(@red_shouldered_hawk, cache)
 
       assert %Flickr.Response{
@@ -25,13 +25,11 @@ defmodule BirdSong.Services.FlickrTest do
     end
 
     @tag expect_once: &__MODULE__.not_found_response/1
-    test "returns {:error, {:not_found, url}} when API returns 404" do
+    test "returns {:error, {:not_found, url}} when API returns 404", %{caches: %{flickr: cache}} do
       url = Flickr.url(@red_shouldered_hawk)
 
       assert [log] =
                CaptureLog.capture_log(fn ->
-                 {:ok, cache} = TestHelpers.start_cache(Flickr)
-
                  assert Flickr.get_images(@red_shouldered_hawk, cache) ===
                           {:error, {:not_found, url}}
                end)

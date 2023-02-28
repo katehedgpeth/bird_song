@@ -1,6 +1,11 @@
 defmodule BirdSong.Services.Flickr do
   use BirdSong.Services.ThrottledCache, ets_opts: [], ets_name: :flickr_cache
-  alias BirdSong.{Bird, Services.Helpers, Services.Flickr.Response, TestHelpers}
+
+  alias BirdSong.{
+    Bird,
+    Services.Helpers,
+    Services.Flickr.Response
+  }
 
   @api_key :bird_song
            |> Application.compile_env(:flickr)
@@ -21,7 +26,6 @@ defmodule BirdSong.Services.Flickr do
     bird
     |> url()
     |> HTTPoison.get()
-    |> TestHelpers.write_to_disk(mock_file_name(bird), :flickr)
     |> Helpers.parse_api_response()
     |> case do
       {:ok, response} -> {:ok, Response.parse(response)}
@@ -39,9 +43,9 @@ defmodule BirdSong.Services.Flickr do
     |> Path.join()
   end
 
-  def format_query(%Bird{common_name: common_name}) do
+  def format_query(%Bird{sci_name: sci_name}) do
     @query
-    |> Map.put(:text, common_name)
+    |> Map.put(:text, sci_name)
     |> URI.encode_query()
   end
 end

@@ -30,8 +30,7 @@ defmodule BirdSong.BirdTest do
                %Bird{
                  common_name: "Red-shouldered Hawk",
                  sci_name: "Buteo lineatus",
-                 ebird_code: "",
-                 recordings: @response.recordings
+                 ebird_code: ""
                }
     end
 
@@ -40,8 +39,7 @@ defmodule BirdSong.BirdTest do
                %Bird{
                  common_name: "Carolina Wren",
                  sci_name: "Thryothorus ludovicianus",
-                 ebird_code: "carwre",
-                 observations: [%{@observation | com_name: nil, sci_name: nil, species_code: nil}]
+                 ebird_code: "carwre"
                }
     end
   end

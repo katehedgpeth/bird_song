@@ -35,21 +35,21 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Birds do
     |> Enum.map(&elem(&1, 1))
   end
 
-  @spec save_observation(Socket.t(), Ebird.Observation.t()) :: :ok
-  def save_observation(
+  @spec save_bird(Socket.t(), Ebird.Observation.t()) ::
+          {:ok, Bird.t()} | {:error, {:already_exists, Bird.t()}}
+  def save_bird(
         %Socket{} = socket,
         %Ebird.Observation{sci_name: sci_name} = obs
       ) do
-    update_bird(
-      socket,
-      case lookup_bird(socket, sci_name) do
-        {:ok, %Bird{} = bird} ->
-          Bird.add_observation(bird, obs)
+    bird = Bird.new(obs)
 
-        :not_found ->
-          Bird.new(obs)
-      end
-    )
+    socket
+    |> get_table()
+    |> :ets.insert_new({sci_name, bird})
+    |> case do
+      true -> {:ok, bird}
+      false -> {:error, {:already_exists, bird}}
+    end
   end
 
   @spec lookup_bird(:ets.table() | Socket.t(), String.t()) :: {:ok, Bird.t()} | :not_found
