@@ -106,7 +106,7 @@ defmodule BirdSongWeb.QuizLive do
         <%= show_answer(assigns) %>
       </div>
       <%= show_image(assigns) %>
-      <%= show_sono(assigns) %>
+      <%= show_recording_details(assigns) %>
     </div>
     """
   end
@@ -162,16 +162,19 @@ defmodule BirdSongWeb.QuizLive do
     """
   end
 
-  defp show_sono(%{
-         show_sono?: true,
-         current_bird: %{recording: %Recording{sono: %{"large" => large_sono}}}
+  defp show_recording_details(%{
+         show_recording_details?: true,
+         current_bird: %{recording: %Recording{} = recording}
        }) do
-    HTML.Tag.img_tag(large_sono)
+    HTML.Tag.content_tag(:div, [
+      recording_type(recording),
+      recording_sono(recording)
+    ])
   end
 
-  defp show_sono(assigns) do
+  defp show_recording_details(assigns) do
     ~H"""
-    <button phx-click="show_sono" class="btn btn-outline">Show Sonogram</button>
+    <button phx-click="show_recording_details" class="btn btn-outline">Show Recording Details</button>
     """
   end
 
@@ -194,6 +197,12 @@ defmodule BirdSongWeb.QuizLive do
     )
   end
 
+  defp recording_sono(%Recording{sono: %{"large" => large_sono}}),
+    do: HTML.Tag.img_tag(large_sono)
+
+  defp recording_type(%Recording{type: type}),
+    do: HTML.Tag.content_tag(:div, ["Sound type: ", type], class: "badge badge-neutral mb-2")
+
   def assign_next_bird(
         %Socket{
           assigns: %{
@@ -215,7 +224,7 @@ defmodule BirdSongWeb.QuizLive do
     socket
     |> assign(:current_bird, nil)
     |> assign(:show_answer?, false)
-    |> assign(:show_sono?, false)
+    |> assign(:show_recording_details?, false)
     |> assign(:show_image?, false)
   end
 end

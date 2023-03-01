@@ -27,7 +27,10 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     :sono,
 
     # an object with the urls to the three versions of oscillograms
-    :osci
+    :osci,
+
+    # the sound type of the recording (combining both predefined terms such as 'call' or 'song' and additional free text options)
+    :type
   ]
 
   @unused_keys [
@@ -62,10 +65,6 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     # the longitude of the recording in decimal coordinates
     # :lng,
     "lng",
-
-    # the sound type of the recording (combining both predefined terms such as 'call' or 'song' and additional free text options)
-    # :type,
-    "type",
 
     # the sex of the animal
     # :sex,
@@ -157,26 +156,17 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     "en",
     "rec",
     "cnt",
-    "loc",
-    "lat",
-    "lng",
     "type",
-    "sex",
-    "stage",
-    "method",
-    "url",
     "file",
     "also",
     "rmk",
-    "playback-used",
     "temp",
     "regnr",
     "auto",
     "dvc",
-    "mic",
-    "smp",
     "sono",
-    "osci"
+    "osci",
+    "type"
   ]
 
   def parse(data) do

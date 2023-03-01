@@ -62,8 +62,8 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
      |> LiveView.assign(:show_answer?, true)}
   end
 
-  def handle_event("show_sono", _, %Socket{} = socket) do
-    {:noreply, LiveView.assign(socket, :show_sono?, true)}
+  def handle_event("show_recording_details", _, %Socket{} = socket) do
+    {:noreply, LiveView.assign(socket, :show_recording_details?, true)}
   end
 
   def handle_event("show_image", _, %Socket{} = socket) do
