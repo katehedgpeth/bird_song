@@ -1,79 +1,119 @@
 defmodule BirdSong.Services.Ebird.Taxonomy do
-  use GenServer
-  alias BirdSong.Services.Ebird.Species
+  require Logger
+  alias Ecto.Changeset
+  alias BirdSong.{Bird, Family, Order, Services}
 
-  defstruct [:ets_table]
-
-  @file_path :bird_song
-             |> Application.compile_env!(:ebird)
-             |> Keyword.fetch!(:taxonomy_file)
-
-  #########################################################
-  #########################################################
-  ##
-  ##  PUBLIC API
-  ##
-  #########################################################
-
-  def lookup("" <> sci_name, server_name \\ __MODULE__) do
-    GenServer.call(server_name, {:lookup, sci_name})
-  end
-
-  def state(server_name \\ __MODULE__) do
-    GenServer.call(server_name, :state)
-  end
-
-  #########################################################
-  #########################################################
-  ##
-  ##  GENSERVER
-  ##
-  #########################################################
-
-  def start_link(options) do
-    GenServer.start_link(
-      __MODULE__,
-      @file_path,
-      name: Keyword.get(options, :name, __MODULE__)
-    )
-  end
-
-  def init(file) do
-    state = %__MODULE__{
-      ets_table: :ets.new(__MODULE__, [])
-    }
-
-    file
+  def read_data_file(path \\ "data/taxonomy.json") do
+    path
+    |> Path.relative_to_cwd()
     |> File.read!()
     |> Jason.decode!()
-    |> Enum.each(&parse_and_save(&1, state.ets_table))
-
-    {:ok, state}
   end
 
-  def handle_call({:lookup, sci_name}, _from, %__MODULE__{} = state) do
-    reply =
-      case :ets.lookup(state.ets_table, sci_name) do
-        [{^sci_name, %Species{} = species}] -> {:ok, species}
-        [] -> :not_found
-      end
+  @type seed_return() :: {:ok, [Services.t()]} | {:error, Changeset.t()}
+  @type grouped_records_as_list() :: [{String.t(), [Map.t()]}]
+  @type maybe_services() :: Services.t() | nil
 
-    {:reply, reply, state}
+  @spec seed([Map.t()]) :: seed_return()
+  @spec seed([Map.t()], maybe_services()) :: seed_return()
+
+  def seed(taxonomy, services \\ nil) when is_list(taxonomy) do
+    {no_family, with_family} = Enum.split_with(taxonomy, &(&1["familyCode"] === nil))
+
+    Enum.map(
+      no_family,
+      &Logger.warning(
+        taxonomy_parse_error: :no_family,
+        common_name: &1["comName"],
+        sci_name: &1["sciName"]
+      )
+    )
+
+    with_family
+    |> group_by_order()
+    |> Map.to_list()
+    |> parse_and_insert_order(services, [])
   end
 
-  def handle_call(:state, _from, %__MODULE__{} = state) do
-    {:reply, state, state}
+  @spec parse_and_insert_order(grouped_records_as_list(), maybe_services(), [
+          Services.TasksForBird.t()
+        ]) ::
+          seed_return()
+  def parse_and_insert_order([], _services, tasks), do: {:ok, tasks}
+
+  def parse_and_insert_order([{name, birds} | rest], services, tasks) do
+    with {:ok, order} <- Order.insert(name),
+         {:ok, tasks} <- parse_and_insert_families(birds, order, services, tasks) do
+      parse_and_insert_order(rest, services, tasks)
+    end
   end
 
-  #########################################################
-  #########################################################
-  ##
-  ##  PRIVATE METHODS
-  ##
-  #########################################################
-
-  defp parse_and_save(raw, ets_table) do
-    species = Species.parse(raw)
-    :ets.insert(ets_table, {species.sci_name, species})
+  @spec parse_and_insert_families([Map.t()], Order.t(), maybe_services(), [
+          Services.TasksForBird.t()
+        ]) ::
+          seed_return()
+  def parse_and_insert_families(records, order, services, tasks) do
+    records
+    |> group_by_family()
+    |> Map.to_list()
+    |> parse_and_insert_family(order, services, tasks)
   end
+
+  @spec parse_and_insert_family(grouped_records_as_list(), Order.t(), maybe_services(), [
+          Services.TasksForBird.t()
+        ]) ::
+          seed_return()
+  def parse_and_insert_family([], %Order{}, _services, tasks), do: {:ok, tasks}
+
+  def parse_and_insert_family(
+        [{_family_name, [_ | _] = birds} | rest],
+        %Order{} = order,
+        services,
+        tasks
+      ) do
+    with {:ok, family} <- birds |> List.first() |> Family.from_raw(order),
+         {:ok, tasks} <-
+           parse_and_insert_bird(birds, family, order, services, tasks) do
+      parse_and_insert_family(rest, order, services, tasks)
+    end
+  end
+
+  @spec parse_and_insert_bird([Map.t()], Family.t(), Order.t(), maybe_services(), [
+          Services.t()
+        ]) ::
+          seed_return()
+  defp parse_and_insert_bird([], %Family{}, %Order{}, _services, tasks) do
+    {:ok, tasks}
+  end
+
+  defp parse_and_insert_bird(
+         [%{} = bird | rest],
+         %Family{} = family,
+         %Order{} = order,
+         services,
+         tasks
+       ) do
+    with {{:ok, %Bird{} = bird}, :bird} <-
+           {Bird.from_raw(bird, family, order), :bird} do
+      new_tasks =
+        case services do
+          nil -> %Services{bird: bird}
+          %Services{} -> Services.fetch_data_for_bird(%{services | bird: bird})
+        end
+
+      parse_and_insert_bird(rest, family, order, services, [new_tasks | tasks])
+    end
+  end
+
+  def group_by_family(list) do
+    Enum.group_by(list, &family_name/1)
+  end
+
+  def group_by_order(list) do
+    Enum.group_by(list, &order_name/1)
+  end
+
+  def family_name(%{"familyCode" => family_name}), do: family_name
+  def order_name(%{"order" => order_name}), do: order_name
+  def common_name(%{"comName" => common_name}), do: common_name
 end

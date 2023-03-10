@@ -25,7 +25,7 @@ defmodule BirdSongWeb.QuizLive.Caches do
   end
 
   def get_recordings(%Socket{} = socket, %Bird{} = bird) do
-    XenoCanto.get_recordings(bird, get_cache(socket, :xeno_canto))
+    XenoCanto.get(bird, get_cache(socket, :xeno_canto))
   end
 
   def get_images(%Socket{} = socket, %Bird{} = bird) do

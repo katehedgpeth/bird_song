@@ -12,11 +12,11 @@ defmodule BirdSong.Application do
       BirdSong.Repo,
       # Start the Telemetry supervisor
       BirdSongWeb.Telemetry,
-      # Start the task supervisor for external API requests
-      {Task.Supervisor, name: BirdSong.Services},
+      # Start the supervisors for external API requests
+      {Task.Supervisor, name: BirdSong.Services.Tasks},
+      {DynamicSupervisor, name: BirdSong.Services.GenServers},
       # Start service caches
-      BirdSong.Services.XenoCanto.Cache,
-      BirdSong.Services.Ebird.Taxonomy,
+      BirdSong.Services.XenoCanto,
       BirdSong.Services.Flickr,
       # Start the PubSub system
       {Phoenix.PubSub, name: BirdSong.PubSub},

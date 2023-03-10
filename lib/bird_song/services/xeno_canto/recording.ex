@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.XenoCanto.Recording do
-  alias BirdSong.Services.Ebird.{Taxonomy, Species}
+  alias BirdSong.Bird
 
   defstruct [
     # the generic name of the species
@@ -196,11 +196,11 @@ defmodule BirdSong.Services.XenoCanto.Recording do
   end
 
   defp use_common_name("" <> sci_name) do
-    case Taxonomy.lookup(sci_name) do
-      {:ok, %Species{common_name: common_name}} ->
+    case Bird.get_by_sci_name(sci_name) do
+      {:ok, %Bird{common_name: common_name}} ->
         common_name
 
-      :not_found ->
+      {:error, {:not_found, ^sci_name}} ->
         sci_name
     end
   end

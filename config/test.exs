@@ -22,14 +22,15 @@ config :bird_song, BirdSongWeb.Endpoint,
   secret_key_base: "hrIR1FkwdDB5LojQi0KtqNAcO+AysoHdghdJX1o+zWn5i75h2r70T8X2tlo9RqeP",
   server: false
 
-config :bird_song, :xeno_canto, api_response_timeout_ms: one_second
+config :bird_song, BirdSong.Services.XenoCanto, api_response_timeout_ms: one_second
 
 config :bird_song, BirdSong.Services.ThrottledCache,
   backlog_timeout_ms: 5 * one_second,
   throttle_ms: 2
 
-# Print only warnings and errors during test
-config :logger, level: :warn
+config :bird_song, BirdSong.Services, stream_timeout_ms: one_second
+
+config :logger, level: :info
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

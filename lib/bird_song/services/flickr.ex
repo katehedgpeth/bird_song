@@ -4,11 +4,12 @@ defmodule BirdSong.Services.Flickr do
   alias BirdSong.{
     Bird,
     Services.Helpers,
-    Services.Flickr.Response
+    Services.Flickr.Response,
+    Services.DataFile.Data
   }
 
   @api_key :bird_song
-           |> Application.compile_env(:flickr)
+           |> Application.compile_env(__MODULE__)
            |> Keyword.fetch!(:api_key)
 
   @query %{
@@ -22,21 +23,11 @@ defmodule BirdSong.Services.Flickr do
     get(bird, server)
   end
 
-  def get_from_api(%Bird{} = bird) do
-    bird
-    |> url()
-    |> HTTPoison.get()
-    |> Helpers.parse_api_response()
-    |> case do
-      {:ok, response} -> {:ok, Response.parse(response)}
-      error -> error
-    end
-  end
-
-  def mock_file_name(%Bird{common_name: name}), do: "flickr_" <> name
+  def data_file_name(%Bird{common_name: name}), do: "flickr_" <> name
+  def data_folder_path(%Data{}), do: "data/images"
 
   def url(%Bird{} = bird) do
-    :flickr
+    __MODULE__
     |> Helpers.get_env(:base_url)
     |> List.wrap()
     |> Enum.concat(["services", "rest", "?" <> format_query(bird)])

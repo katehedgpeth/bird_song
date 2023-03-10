@@ -29,7 +29,7 @@ config :bird_song, BirdSong.Services.ThrottledCache,
   backlog_timeout_ms: :infinity,
   throttle_ms: 2 * one_second
 
-config :bird_song, :ebird,
+config :bird_song, BirdSong.Services.Ebird,
   base_url: "https://api.ebird.org",
   token:
     (case System.get_env("EBIRD_API_TOKEN") do
@@ -38,11 +38,11 @@ config :bird_song, :ebird,
      end),
   taxonomy_file: Path.relative_to_cwd("data/taxonomy.json")
 
-config :bird_song, :xeno_canto,
+config :bird_song, BirdSong.Services.XenoCanto,
   base_url: "https://xeno-canto.org",
   write_to_disk?: false
 
-config :bird_song, :flickr,
+config :bird_song, BirdSong.Services.Flickr,
   base_url: "https://www.flickr.com",
   write_to_disk?: false,
   api_key:
@@ -50,6 +50,11 @@ config :bird_song, :flickr,
        "" <> key -> key
        nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
      end)
+
+config :bird_song, BirdSong.Services,
+  images: BirdSong.Services.Flickr,
+  recordings: BirdSong.Services.XenoCanto,
+  stream_timeout_ms: :infinity
 
 # Configure esbuild (the version is required)
 config :esbuild,

@@ -4,11 +4,11 @@ defmodule BirdSong.Services.Ebird do
   alias __MODULE__.Observation
 
   @token :bird_song
-         |> Application.compile_env(:ebird)
+         |> Application.compile_env(__MODULE__)
          |> Keyword.fetch!(:token)
 
   def url(endpoint) do
-    :ebird
+    __MODULE__
     |> Helpers.get_env(:base_url)
     |> List.wrap()
     |> Enum.concat(["v2", endpoint])

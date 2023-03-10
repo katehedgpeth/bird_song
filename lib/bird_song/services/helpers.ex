@@ -7,8 +7,7 @@ defmodule BirdSong.Services.Helpers do
           | {:error, Response.t()}
           | {:error, Error.t()}
 
-  @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}) ::
-          api_response(any)
+  @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}) :: api_response(any)
   def parse_api_response(
         {:ok,
          %Response{

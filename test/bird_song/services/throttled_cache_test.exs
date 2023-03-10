@@ -1,13 +1,18 @@
 defmodule ThrottledCacheUnderTest do
   use BirdSong.Services.ThrottledCache, ets_opts: [], ets_name: :throttled_cache_test
 
-  def get_from_api(_id) do
+  defmodule Response do
+    defstruct [:id]
+
+    def parse(%{"id" => id}) do
+      %__MODULE__{id: id}
+    end
+  end
+
+  def url(_) do
     :bird_song
     |> Application.get_env(:throttled_cache_bypass_url)
     |> Path.join("throttled_cache_test")
-    |> HTTPoison.get!()
-    |> Map.fetch!(:body)
-    |> Jason.decode()
   end
 end
 
@@ -16,6 +21,8 @@ defmodule BirdSong.Services.ThrottledCacheTest do
 
   alias BirdSong.{Bird, Services}
   alias Services.Helpers
+
+  @moduletag :capture_log
 
   @red_shouldered_hawk %Bird{sci_name: "Buteo lineatus", common_name: "Red-shouldered Hawk"}
   @carolina_wren %Bird{sci_name: "Thryothorus ludovicianus", common_name: "Carolina Wren"}

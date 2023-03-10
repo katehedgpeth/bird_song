@@ -1,21 +1,32 @@
 defmodule BirdSong.Services.FlickrTest do
   use BirdSong.MockApiCase
-  alias Plug.Conn
   alias ExUnit.CaptureLog
-  alias BirdSong.{Services.Flickr, TestHelpers}
 
-  @moduletag services: [:flickr]
+  alias BirdSong.{
+    Services,
+    Services.DataFile,
+    Services.Flickr,
+    Services.Service
+  }
 
-  @query @red_shouldered_hawk
-         |> Flickr.format_query()
-         |> URI.decode_query()
+  @bird @carolina_wren
+
+  @moduletag services: [Flickr]
+
+  setup_all do
+    {:ok, images} = DataFile.read(%DataFile.Data{bird: @bird, service: Flickr})
+    {:ok, images: images}
+  end
 
   describe "&get_image/1" do
-    @tag expect_once: &__MODULE__.success_response/1
+    @tag use_mock: false
     test "returns {:ok, %Flickr.Response{}} when request is successful", %{
-      caches: %{flickr: cache}
+      bypass: bypass,
+      images: images,
+      services: %Services{images: %Service{whereis: whereis}}
     } do
-      assert {:ok, response} = Flickr.get_images(@red_shouldered_hawk, cache)
+      Bypass.expect(bypass, &Plug.Conn.resp(&1, 200, images))
+      assert {:ok, response} = Flickr.get_images(@bird, whereis)
 
       assert %Flickr.Response{
                photos: [%Flickr.Photo{url: "https://live.staticflickr.com" <> path} | _]
@@ -24,26 +35,21 @@ defmodule BirdSong.Services.FlickrTest do
       assert String.ends_with?(path, ".jpg")
     end
 
-    @tag expect_once: &__MODULE__.not_found_response/1
-    test "returns {:error, {:not_found, url}} when API returns 404", %{caches: %{flickr: cache}} do
+    @tag expect_once: &MockServer.not_found_response/1
+    test "returns {:error, {:not_found, url}} when API returns 404", %{
+      services: %Services{images: %Service{whereis: whereis}}
+    } do
       url = Flickr.url(@red_shouldered_hawk)
+      assert GenServer.call(whereis, {:get_from_cache, @bird}) === :not_found
 
       assert [log] =
                CaptureLog.capture_log(fn ->
-                 assert Flickr.get_images(@red_shouldered_hawk, cache) ===
+                 assert Flickr.get_images(@red_shouldered_hawk, whereis) ===
                           {:error, {:not_found, url}}
                end)
                |> TestHelpers.parse_logs()
 
       assert log =~ "request_status=error status_code=404 url=" <> url
     end
-  end
-
-  def success_response(%Conn{params: @query} = conn) do
-    Conn.resp(conn, 200, @images)
-  end
-
-  def not_found_response(conn) do
-    Conn.resp(conn, 404, "not found")
   end
 end

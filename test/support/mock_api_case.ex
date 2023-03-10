@@ -4,64 +4,101 @@ defmodule BirdSong.MockApiCase do
 
   Expects all services to have a :base_url config under the :bird_song config.
 
-  use @tag service: :service_name to specify which service to mock.
-  use @tag expect_once: &arity_fn/X to specify a Bypass.expect_once handler.
-  use @tag expect: &arity_fn/X to specify a Bypass.expect handler.
+  Use one of these tags to skip bypass setup:
+    * `@tag use_bypass: false` will skip all bypass setup
+    * `@tag use_mocks: false` will initialize bypass but skip setting up expects
+
+  To use the mock setup process, the `:service` tag is always required. This specifies which services
+  should have their `:base_url` config updated.
+    * `@tag service: [ServiceName, OtherServiceName]`
+
+  Also, one or more of the following tags is required to use the mock setup process:
+    * `@tag expect_once: &Module.function/1`
+    * `@tag expect_once: [{"" <> method, "" <> path, &Module.function/1}]`
+    * `@tag expect: &Module.function/1`
+    * `@tag expect: [{"" <> method, "" <> path, &Module.function/1}]`
+    * `@tag stub: {"" <> method, "" <> path, &Module.function/1}`
+    * `@tag stub: [{"" <> method, "" <> path, &Module.function/1}]`
+
+  Other optional tags:
+    * `@tag bird: %Bird{}` - use this to specify which bird the services should return data for.
+    * `@tag recordings_service: ModuleName`
+    * `@tag images_service: ModuleName`
   """
   use ExUnit.CaseTemplate
-  alias BirdSong.TestHelpers
-  alias BirdSong.Services.{Flickr, XenoCanto}
-  alias BirdSongWeb.QuizLive.Caches
+  use BirdSong.MockDataAttributes
 
-  using do
-    quote do
+  alias BirdSong.{
+    TestHelpers,
+    Services,
+    Services.Service,
+    Services.Ebird,
+    Services.Flickr,
+    Services.XenoCanto
+  }
+
+  using opts do
+    quote location: :keep do
+      if unquote(Keyword.get(opts, :use_data_case, true)) do
+        use BirdSong.DataCase
+      end
+
+      require Logger
       import BirdSong.MockApiCase
-      alias BirdSong.{Bird, TestHelpers}
-      alias Plug.Conn
-
-      @red_shouldered_hawk %Bird{sci_name: "Buteo lineatus", common_name: "Red-shouldered Hawk"}
-      @carolina_wren %Bird{sci_name: "Thryothorus ludovicianus", common_name: "Carolina Wren"}
-      @eastern_bluebird %Bird{sci_name: "Sialia sialis", common_name: "Eastern Bluebird"}
-
-      @recordings Enum.reduce(
-                    [
-                      @red_shouldered_hawk,
-                      @carolina_wren,
-                      @eastern_bluebird
-                    ],
-                    %{},
-                    fn %Bird{sci_name: sci_name}, acc ->
-                      Map.put(acc, sci_name, TestHelpers.read_mock_file(sci_name))
-                    end
-                  )
-
-      @images TestHelpers.read_mock_file("flickr_" <> @red_shouldered_hawk.common_name)
+      use BirdSong.MockDataAttributes
+      alias BirdSong.{MockServer, TestHelpers}
     end
   end
 
   setup tags do
-    {:ok, xeno_canto} = TestHelpers.start_cache(XenoCanto.Cache)
-    {:ok, flickr} = TestHelpers.start_cache(Flickr)
-    caches = %Caches{flickr: flickr, xeno_canto: xeno_canto}
+    if Map.get(tags, :use_bypass) === false do
+      :ok
+    else
+      test = Map.fetch!(tags, :test)
 
-    case setup_bypass(tags) do
-      {:ok, bypass: bypass} ->
-        setup_mocks(tags, bypass)
-        {:ok, bypass: bypass, caches: caches}
+      bird =
+        case Map.get(tags, :bird) do
+          bird when bird in @mocked_birds -> bird
+          nil -> nil
+        end
 
-      :no_bypass ->
-        {:ok, caches: caches}
+      images_module = Map.get(tags, :images_service, Flickr)
+      recordings_module = Map.get(tags, :recordings_module, XenoCanto)
+
+      [{:ok, recordings_server}, {:ok, images_server}] =
+        Enum.map([recordings_module, images_module], fn module ->
+          module_alias =
+            module
+            |> Module.split()
+            |> List.last()
+
+          test
+          |> Module.concat(module_alias)
+          |> TestHelpers.start_cache(module)
+        end)
+
+      services = %Services{
+        bird: bird,
+        images: %Service{name: images_module, whereis: images_server},
+        recordings: %Service{name: recordings_module, whereis: recordings_server},
+        timeout: Map.get(tags, :timeout, 1_000)
+      }
+
+      {:ok, bypass} = setup_bypass(services)
+
+      setup_mocks(tags, bypass)
+
+      {:ok, bypass: bypass, services: services}
     end
   end
 
-  def setup_bypass(%{use_bypass: false}) do
-    :no_bypass
-  end
+  defguard is_configured_service(service_name) when service_name in [XenoCanto, Flickr, Ebird]
+  defguard is_module_name(name) when is_atom(name) and name not in [:xeno_canto, :flickr, :ebird]
 
-  def setup_bypass(%{services: services}) when is_list(services) do
+  def setup_bypass(%Services{images: images, recordings: recordings}) do
     bypass = Bypass.open()
-    Enum.each(services, &update_base_url(&1, bypass))
-    {:ok, bypass: bypass}
+    Enum.each([images, recordings], &update_base_url(&1, bypass))
+    {:ok, bypass}
   end
 
   @type bypass_generic_cb :: (Plug.Conn.t() -> Plug.Conn.t())
@@ -113,21 +150,34 @@ defmodule BirdSong.MockApiCase do
 
   def setup_mocks(%{use_mock: false}, %Bypass{}), do: :ok
 
-  def update_base_url(service_name, %Bypass{} = bypass) do
+  def update_base_url(%Service{name: name}, %Bypass{} = bypass) do
+    update_base_url(name, bypass)
+  end
+
+  def update_base_url(%Service{name: name}, "" <> url) do
+    update_base_url(name, url)
+  end
+
+  def update_base_url(service_name, %Bypass{} = bypass)
+      when is_configured_service(service_name) do
     do_update_base_url(service_name, mock_url(bypass))
   end
 
-  def update_base_url(service_name, "" <> url) do
+  def update_base_url(service_name, "" <> url) when is_configured_service(service_name) do
     do_update_base_url(service_name, url)
   end
 
-  defp do_update_base_url(service_name, url) do
-    env =
-      :bird_song
-      |> Application.get_env(service_name)
-      |> Keyword.replace!(:base_url, url)
+  def update_base_url(service_name, %Bypass{}) when is_module_name(service_name) do
+    :not_updated
+  end
 
-    Application.put_env(:bird_song, service_name, env)
+  def update_base_url(service_name, "" <> _) when is_module_name(service_name) do
+    :not_updated
+  end
+
+  defp do_update_base_url(service_name, url) do
+    TestHelpers.update_env(service_name, :base_url, url)
+    {:ok, {service_name, url}}
   end
 
   def mock_url(%Bypass{port: port}), do: "http://localhost:#{port}"

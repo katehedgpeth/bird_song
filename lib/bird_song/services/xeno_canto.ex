@@ -1,22 +1,19 @@
 defmodule BirdSong.Services.XenoCanto do
-  alias __MODULE__.Cache
+  use BirdSong.Services.ThrottledCache, ets_opts: [:bag], ets_name: :xeno_canto
+  alias __MODULE__.Response
   alias BirdSong.Bird
-  alias BirdSong.Services.Helpers
+  alias BirdSong.Services.{Helpers, DataFile.Data}
 
-  def url(query) do
-    :xeno_canto
+  def url(%Bird{sci_name: sci_name}) do
+    __MODULE__
     |> Helpers.get_env(:base_url)
     |> List.wrap()
-    |> Enum.concat(["api", "2", "recordings?query=" <> format_query(query)])
+    |> Enum.concat(["api", "2", "recordings?query=" <> format_query(sci_name)])
     |> Path.join()
   end
 
-  def get_recordings(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
-    Cache.get(bird, server)
-  end
-
-  def has_data?(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
-    Cache.has_data?(bird, server)
+  def data_folder_path(%Data{}) do
+    "data/recordings"
   end
 
   #########################################################
