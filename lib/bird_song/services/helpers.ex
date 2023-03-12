@@ -2,12 +2,14 @@ defmodule BirdSong.Services.Helpers do
   require Logger
   alias HTTPoison.{Request, Response, Error}
 
-  @type api_response(t) ::
-          {:ok, t}
-          | {:error, Response.t()}
+  @type api_error() ::
+          {:error, {:not_found, String.t()}}
+          | {:error, {:bad_response, Response.t()}}
           | {:error, Error.t()}
+  @type api_response(t) ::
+          {:ok, t} | api_error()
 
-  @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}) :: api_response(any)
+  @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}) :: api_response(any())
   def parse_api_response(
         {:ok,
          %Response{

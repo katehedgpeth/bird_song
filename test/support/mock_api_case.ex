@@ -47,6 +47,14 @@ defmodule BirdSong.MockApiCase do
       import BirdSong.MockApiCase
       use BirdSong.MockDataAttributes
       alias BirdSong.{MockServer, TestHelpers}
+
+      defp listen_to_services(%{services: %Services{images: images, recordings: recordings}}) do
+        for %Service{whereis: whereis, name: name} <- [images, recordings] do
+          apply(name, :register_request_listener, [whereis])
+        end
+
+        :ok
+      end
     end
   end
 
@@ -54,8 +62,6 @@ defmodule BirdSong.MockApiCase do
     if Map.get(tags, :use_bypass) === false do
       :ok
     else
-      test = Map.fetch!(tags, :test)
-
       bird =
         case Map.get(tags, :bird) do
           bird when bird in @mocked_birds -> bird
@@ -66,16 +72,7 @@ defmodule BirdSong.MockApiCase do
       recordings_module = Map.get(tags, :recordings_module, XenoCanto)
 
       [{:ok, recordings_server}, {:ok, images_server}] =
-        Enum.map([recordings_module, images_module], fn module ->
-          module_alias =
-            module
-            |> Module.split()
-            |> List.last()
-
-          test
-          |> Module.concat(module_alias)
-          |> TestHelpers.start_cache(module)
-        end)
+        Enum.map([recordings_module, images_module], &start_service_supervised(&1, tags))
 
       services = %Services{
         bird: bird,
@@ -90,6 +87,17 @@ defmodule BirdSong.MockApiCase do
 
       {:ok, bypass: bypass, services: services}
     end
+  end
+
+  def start_service_supervised(module, %{test: test}) do
+    module_alias =
+      module
+      |> Module.split()
+      |> List.last()
+
+    test
+    |> Module.concat(module_alias)
+    |> TestHelpers.start_cache(module)
   end
 
   defguard is_configured_service(service_name) when service_name in [XenoCanto, Flickr, Ebird]

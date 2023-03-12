@@ -54,7 +54,6 @@ defmodule BirdSong.Services do
 
   @spec init(BirdSong.Services.t()) :: {:ok, BirdSong.Services.t()}
   def init(%__MODULE__{} = state) do
-    # Process.flag(:trap_exit, true)
     {:ok, state}
   end
 

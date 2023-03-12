@@ -1,68 +1,55 @@
 defmodule BirdSong.Services.ThrottledCache do
   alias BirdSong.Services.Helpers
 
-  @callback get_from_api(Bird.t()) :: Helpers.api_response(any())
+  @type request_data() :: Bird.t() | {:recent_observations, String.t()}
+
+  @callback url(request_data()) :: String.t()
+  @callback ets_key(request_data()) :: String.t()
+  @callback headers(request_data()) :: HTTPoison.headers()
+  @callback params(request_data()) :: HTTPoison.params()
+  @callback message_details(request_data()) :: Map.t()
+
   @env Application.compile_env!(:bird_song, __MODULE__)
 
-  @spec __using__([{:ets_name, any} | {:ets_opts, any}, ...]) ::
-          {:__block__, [{:keep, {any, any}}, ...],
-           [{:@ | :alias | :def | :defp | :defstruct | :require | :use, [...], [...]}, ...]}
-  defmacro __using__(ets_opts: ets_opts, ets_name: ets_name) do
-    quote location: :keep do
+  defmacro __using__(module_opts) do
+    quote location: :keep,
+          bind_quoted: [
+            module_opts: module_opts,
+            env: @env
+          ] do
+      @behaviour BirdSong.Services.ThrottledCache
       require Logger
       use GenServer
       alias BirdSong.{Bird, Services}
-      alias Services.Helpers
+      alias Services.{Helpers, ThrottledCache.State}
       alias __MODULE__.Response
 
-      @backlog_timeout_ms unquote(@env) |> Keyword.fetch!(:backlog_timeout_ms)
-      @throttle_ms unquote(@env) |> Keyword.fetch!(:throttle_ms)
+      @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
+      @throttle_ms Keyword.fetch!(env, :throttle_ms)
+      @module_opts module_opts
 
-      defstruct [
-        :ets_table,
-        backlog: [],
-        data_file_instance: Services.DataFile,
-        request_listeners: [],
-        tasks: %{},
-        throttled?: false,
-        throttle_ms: @throttle_ms
-      ]
+      @type request_data() :: Services.ThrottledCache.request_data()
 
-      @spec get(Bird.t(), pid() | atom) :: {:ok, any} | :not_found
-      def get(%Bird{} = bird, server) do
-        case get_from_cache(bird, server) do
+      @spec get(request_data(), GenServer.server()) ::
+              {:ok, any} | :not_found
+      def get(data, server) do
+        case get_from_cache(data, server) do
           {:ok, data} ->
             {:ok, data}
 
           :not_found ->
-            GenServer.call(server, {:get_from_api, bird}, :infinity)
+            GenServer.call(server, {:get_from_api, data}, :infinity)
         end
       end
 
-      @spec get_from_cache(Bird.t(), pid | atom) :: {:ok, Response.t()} | :not_found
-      def get_from_cache(%Bird{} = bird, nil) do
+      @spec get_from_cache(request_data(), GenServer.server()) ::
+              {:ok, Response.t()} | :not_found
+      def get_from_cache(_data, nil) do
         raise "SERVER CANNOT BE NIL!!!"
       end
 
-      def get_from_cache(%Bird{} = bird, server) do
-        GenServer.call(server, {:get_from_cache, bird})
-      end
-
-      # unfortunately it seems that this has to be public in order
-      # for it to be called as a task in the :send_request call.
-      def get_from_api(%Bird{} = bird, %__MODULE__{} = state) do
-        bird
-        |> url()
-        |> HTTPoison.get()
-        |> maybe_write_to_disk(state)
-        |> Helpers.parse_api_response()
-        |> case do
-          {:ok, raw} ->
-            {:ok, Response.parse(raw)}
-
-          error ->
-            error
-        end
+      def get_from_cache(data, server) do
+        GenServer.call(server, {:get_from_cache, data})
       end
 
       @spec clear_cache(atom | pid) :: :ok
@@ -70,13 +57,61 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, :clear_cache)
       end
 
-      def has_data?(%Bird{} = bird, server) do
-        GenServer.call(server, {:has_data?, bird})
+      @spec has_data?(request_data(), GenServer.server()) :: boolean()
+      def has_data?(request_data, server) do
+        GenServer.call(server, {:has_data?, request_data})
       end
 
+      @spec register_request_listener(GenServer.server()) :: :ok
       def register_request_listener(server) do
         GenServer.cast(server, {:register_request_listener, self()})
       end
+
+      # unfortunately it seems that this has to be public in order
+      # for it to be called as a task in the :send_request call.
+      @spec get_from_api(request_data(), State.t()) :: Helpers.api_response(Response.t())
+      def get_from_api(request, %State{} = state) do
+        request
+        |> url()
+        |> HTTPoison.get(headers(request), params: params(request))
+        |> maybe_write_to_disk(state)
+        |> Helpers.parse_api_response()
+        |> case do
+          {:ok, raw} ->
+            {:ok, Response.parse(raw)}
+
+          {:error, error} ->
+            {:error, error}
+        end
+      end
+
+      #########################################################
+      #########################################################
+      ##
+      ##  OVERRIDABLE METHODS
+      ##
+      #########################################################
+
+      @spec url(request_data) :: String.t()
+      def url(_), do: raise("ThrottledCache module must define a &url/1 method")
+
+      @spec headers(request_data()) :: HTTPoison.headers()
+      def headers(%Bird{}), do: []
+
+      @spec params(request_data()) :: HTTPoison.params()
+      def params(%Bird{}), do: []
+
+      @spec ets_key(any()) :: String.t()
+      def ets_key(%Bird{sci_name: sci_name}), do: sci_name
+
+      @spec message_details(request_data()) :: Map.t()
+      def message_details(%Bird{} = bird), do: %{bird: bird}
+
+      defoverridable(headers: 1)
+      defoverridable(params: 1)
+      defoverridable(ets_key: 1)
+      defoverridable(message_details: 1)
+      defoverridable(url: 1)
 
       #########################################################
       #########################################################
@@ -86,22 +121,24 @@ defmodule BirdSong.Services.ThrottledCache do
       #########################################################
 
       def start_link(opts) do
-        {name, opts} = Keyword.pop(opts, :name, __MODULE__)
+        {name, opts} =
+          opts
+          |> Keyword.merge(@module_opts)
+          |> Keyword.put(:service, __MODULE__)
+          |> Keyword.put_new(:throttle_ms, @throttle_ms)
+          |> Keyword.pop(:name, __MODULE__)
+
         GenServer.start_link(__MODULE__, opts, name: name)
       end
 
       def init(opts) do
-        {:ok,
-         %__MODULE__{
-           ets_table: start_table(),
-           throttle_ms: Keyword.get(opts, :throttle_ms, @throttle_ms)
-         }}
+        {:ok, State.new(opts)}
       end
 
       def handle_call(
-            {:get_from_api, %Bird{} = bird},
+            {:get_from_api, request_data},
             from,
-            %__MODULE__{} = state
+            %State{} = state
           ) do
         send(self(), :send_request)
 
@@ -111,100 +148,40 @@ defmodule BirdSong.Services.ThrottledCache do
            | backlog:
                state
                |> Map.fetch!(:backlog)
-               |> Enum.reverse([{from, bird}])
+               |> Enum.reverse([{from, request_data}])
                |> Enum.reverse()
          }}
       end
 
-      def handle_call({:get_from_cache, %Bird{sci_name: bird}}, _from, %__MODULE__{} = state) do
-        result =
-          case :ets.lookup(state.ets_table, bird) do
-            [{^bird, response}] -> {:ok, response}
-            [] -> :not_found
-          end
-
-        {:reply, result, state}
+      def handle_call({:get_from_cache, data}, _from, state) do
+        {:reply, State.lookup(state, data), state}
       end
 
-      def handle_call({:has_data?, %Bird{sci_name: sci_name}}, _from, %__MODULE__{} = state) do
-        {:reply, :ets.member(state.ets_table, sci_name), state}
+      def handle_call({:has_data?, request_data}, _from, %State{ets_table: ets_table} = state) do
+        {:reply, :ets.member(ets_table, ets_key(request_data)), state}
       end
 
-      def handle_cast(:clear_cache, %__MODULE__{} = state) do
-        :ets.delete(state.ets_table)
-        {:noreply, %{state | ets_table: start_table()}}
+      def handle_cast(:clear_cache, state) do
+        {:noreply, State.clear_cache(state)}
       end
 
-      def handle_cast({:register_request_listener, pid}, %__MODULE__{} = state) do
-        {:noreply, %{state | request_listeners: [pid | state.request_listeners]}}
-      end
-
-      def handle_info(:send_request, %__MODULE__{backlog: []} = state) do
-        # ignore message, because there are no requests to send
-        {:noreply, state}
-      end
-
-      def handle_info(:send_request, %__MODULE__{throttled?: true} = state) do
-        # do nothing, because requests are currently throttled.
-        # :send_request will be called again when requests are unthrottled.
-        {:noreply, state}
+      def handle_cast({:register_request_listener, pid}, state) do
+        {:noreply, State.register_request_listener(state, pid)}
       end
 
       def handle_info(
             :send_request,
-            %__MODULE__{
-              throttled?: false,
-              backlog: [{from, %Bird{} = bird} | backlog]
-            } = state
+            %State{} = state
           ) do
-        Logger.debug(
-          "[#{__MODULE__}] message=sending_request bird=" <>
-            bird.common_name
-        )
-
-        Enum.each(
-          state.request_listeners,
-          &send(
-            &1,
-            {:start_request,
-             %{
-               module: __MODULE__,
-               bird: bird,
-               time: DateTime.now!("Etc/UTC")
-             }}
-          )
-        )
-
-        %Task{ref: ref} =
-          Task.Supervisor.async(
-            Services.Tasks,
-            __MODULE__,
-            :get_from_api,
-            [bird, state],
-            timeout: :infinity
-          )
-
-        updated_state = %{
-          state
-          | throttled?: true,
-            backlog: backlog,
-            tasks: Map.put(state.tasks, ref, {from, bird})
-        }
-
-        {:noreply, updated_state}
+        {:noreply, State.send_request(state)}
       end
 
-      def handle_info({:save, {%Bird{sci_name: id}, {:ok, response}}}, %__MODULE__{} = state) do
-        :ets.insert(state.ets_table, {id, response})
+      def handle_info({:save, data}, %State{} = state) do
+        State.save_response(state, data)
         {:noreply, state}
       end
 
-      def handle_info({:save, {%Bird{}, {:error, _}}}, %__MODULE__{} = state) do
-        # don't save error responses
-        {:noreply, state}
-      end
-
-      def handle_info({ref, response}, %__MODULE__{} = state)
+      def handle_info({ref, response}, %State{} = state)
           when is_reference(ref) do
         state
         |> Map.fetch!(:tasks)
@@ -214,12 +191,12 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, state}
       end
 
-      def handle_info(:unthrottle, %__MODULE__{} = state) do
+      def handle_info(:unthrottle, %State{} = state) do
         send(self(), :send_request)
-        {:noreply, %{state | throttled?: false}}
+        {:noreply, State.unthrottle(state)}
       end
 
-      def handle_info({:DOWN, ref, :process, _pid, _reason}, %__MODULE__{} = state) do
+      def handle_info({:DOWN, ref, :process, _pid, _reason}, %State{} = state) do
         {_, tasks} = Map.pop!(state.tasks, ref)
         {:noreply, %{state | tasks: tasks}}
       end
@@ -231,36 +208,21 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      defp start_table() do
-        :ets.new(unquote(ets_name), unquote(ets_opts))
-      end
+      defp handle_response(
+             {from, request_data},
+             response,
+             %State{throttle_ms: throttle_ms} = state
+           ) do
+        send(self(), {:save, {request_data, response}})
 
-      defp handle_response({from, %Bird{} = bird}, response, %__MODULE__{
-             request_listeners: listeners,
-             throttle_ms: throttle_ms
-           }) do
-        send(self(), {:save, {bird, response}})
-
-        Enum.each(
-          listeners,
-          &send(
-            &1,
-            {:end_request,
-             %{
-               module: __MODULE__,
-               bird: bird,
-               time: DateTime.now!("Etc/UTC"),
-               response: response
-             }}
-          )
-        )
+        State.notify_listeners(state, {:end, response}, request_data)
 
         Process.send_after(self(), :unthrottle, throttle_ms)
 
         GenServer.reply(from, response)
       end
 
-      defp maybe_write_to_disk(response, %__MODULE__{}) do
+      defp maybe_write_to_disk(response, %State{}) do
         # Ignore for now. Plan to refactor later to save responses as JSON files to use as test mocks.
         response
       end

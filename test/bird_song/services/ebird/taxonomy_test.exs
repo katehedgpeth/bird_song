@@ -208,14 +208,6 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
     end
   end
 
-  defp listen_to_services(%{services: %Services{images: images, recordings: recordings}}) do
-    for %Service{whereis: whereis, name: name} <- [images, recordings] do
-      apply(name, :register_request_listener, [whereis])
-    end
-
-    :ok
-  end
-
   defp insert_order(%{short_list: [raw | _]}) do
     {:ok, order} =
       raw
