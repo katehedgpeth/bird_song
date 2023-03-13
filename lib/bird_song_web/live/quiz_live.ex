@@ -9,8 +9,7 @@ defmodule BirdSongWeb.QuizLive do
   alias Ecto.Changeset
 
   alias __MODULE__.{
-    CurrentBird,
-    Caches,
+    Current,
     EtsTables,
     MessageHandlers,
     EventHandlers
@@ -18,6 +17,7 @@ defmodule BirdSongWeb.QuizLive do
 
   alias BirdSong.{
     Bird,
+    Services,
     Services.Flickr,
     Services.XenoCanto,
     Quiz
@@ -34,25 +34,33 @@ defmodule BirdSongWeb.QuizLive do
   )
 
   def mount(_params, _session, socket) do
-    {:ok,
-     socket
-     |> assign(:text_input_class, @text_input_class)
-     |> reset_state()
-     |> assign_new(:render_listeners, fn -> [] end)
-     |> assign_new(:quiz, &Quiz.default_changeset/0)
-     |> EtsTables.assign_new()
-     |> Caches.assign_new()
-     |> EtsTables.Birds.update_bird_count()}
+    {:ok, assign_defaults(socket)}
+  end
+
+  def assign_defaults(%Socket{} = socket) do
+    socket
+    |> assign(:text_input_class, @text_input_class)
+    |> assign(:task_timeout, 5_000)
+    |> assign(:max_api_tries, 3)
+    |> reset_state()
+    |> assign_new(:birds, fn -> [] end)
+    |> assign_new(:render_listeners, fn -> [] end)
+    |> assign_new(:quiz, &Quiz.default_changeset/0)
+    |> assign_new(:services, fn -> %Services{} end)
+    |> EtsTables.assign_new_tables()
   end
 
   def handle_info(message, socket),
     do: MessageHandlers.handle_info(message, socket)
 
+  def handle_call(message, from, socket),
+    do: MessageHandlers.handle_call(message, from, socket)
+
   def handle_event(message, payload, socket),
     do: EventHandlers.handle_event(message, payload, socket)
 
   def render(assigns) do
-    Enum.each(assigns[:render_listeners], &send(&1, assigns))
+    Enum.each(assigns[:render_listeners], &send(&1, {:render, assigns}))
 
     ~H"""
     <div class="flex items-center flex-col">
@@ -62,9 +70,9 @@ defmodule BirdSongWeb.QuizLive do
   end
 
   def inner_content(%{quiz: %Changeset{}} = assigns), do: new(assigns)
-  def inner_content(%{current_bird: nil} = assigns), do: loading(assigns)
+  def inner_content(%{current: %{bird: nil}} = assigns), do: loading(assigns)
 
-  def inner_content(%{current_bird: %{bird: %Bird{}, recording: %Recording{}}} = assigns),
+  def inner_content(%{current: %{bird: %Bird{}}} = assigns),
     do: question(assigns)
 
   def new(assigns) do
@@ -97,7 +105,7 @@ defmodule BirdSongWeb.QuizLive do
     ~H"""
     <%= page_title("What bird do you hear?") %>
     <div class="flex gap-10 flex-col">
-      <%= HTML.Tag.content_tag :audio, [], autoplay: true, src: get_recording_source(@current_bird) %>
+      <%= HTML.Tag.content_tag :audio, [], autoplay: true, src: get_recording_source(@current) %>
       <div class="flex justify-center gap-5">
         <button phx-click="change_recording" class="btn btn-outline">Hear a different recording of this bird</button>
         <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
@@ -123,7 +131,7 @@ defmodule BirdSongWeb.QuizLive do
 
   defp show_answer(%{
          show_answer?: true,
-         current_bird: %{
+         current: %{
            bird: %Bird{common_name: name},
            recording: %Recording{also: also},
            image: _
@@ -146,7 +154,7 @@ defmodule BirdSongWeb.QuizLive do
 
   defp show_answer(%{
          show_answer?: true,
-         current_bird: %{bird: %Bird{common_name: name}}
+         current: %{bird: %Bird{common_name: name}}
        }),
        do: HTML.Tag.content_tag(:div, name, class: "mx-auto text-center")
 
@@ -164,7 +172,7 @@ defmodule BirdSongWeb.QuizLive do
 
   defp show_recording_details(%{
          show_recording_details?: true,
-         current_bird: %{recording: %Recording{} = recording}
+         current: %{recording: %Recording{} = recording}
        }) do
     HTML.Tag.content_tag(:div, [
       recording_type(recording),
@@ -180,7 +188,7 @@ defmodule BirdSongWeb.QuizLive do
 
   defp get_recording_source(%{recording: %Recording{file: file}}), do: file
 
-  defp image(%{show_image?: true, current_bird: %{image: %Flickr.Photo{url: url}}}) do
+  defp image(%{show_image?: true, current: %{image: %Flickr.Photo{url: url}}}) do
     HTML.Tag.img_tag(url, class: "block")
   end
 
@@ -206,14 +214,12 @@ defmodule BirdSongWeb.QuizLive do
   def assign_next_bird(
         %Socket{
           assigns: %{
-            current_bird: nil,
-            quiz: %Quiz{birds: [next | rest]} = quiz
+            current: %Current{bird: nil},
+            birds: [%Bird{} | _]
           }
         } = socket
       ) do
-    socket
-    |> CurrentBird.assign_current_bird(next)
-    |> assign(:quiz, %{quiz | birds: rest})
+    Current.assign_current(socket)
   end
 
   def assign_next_bird(%Socket{} = socket) do
@@ -222,7 +228,7 @@ defmodule BirdSongWeb.QuizLive do
 
   def reset_state(%Socket{} = socket) do
     socket
-    |> assign(:current_bird, nil)
+    |> Current.reset()
     |> assign(:show_answer?, false)
     |> assign(:show_recording_details?, false)
     |> assign(:show_image?, false)

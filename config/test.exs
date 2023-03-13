@@ -30,7 +30,7 @@ config :bird_song, BirdSong.Services.ThrottledCache,
 
 config :bird_song, BirdSong.Services, stream_timeout_ms: one_second
 
-config :logger, level: :info
+config :logger, level: :warn
 
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime

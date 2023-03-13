@@ -1,9 +1,20 @@
 defmodule BirdSong.MockDataAttributes do
+  def url_path(service, request_data \\ %BirdSong.Bird{sci_name: ""}) do
+    request_data
+    |> service.url()
+    |> URI.parse()
+    |> Map.fetch!(:path)
+  end
+
   defmacro __using__([]) do
-    quote location: :keep do
-      alias BirdSong.Bird
-      alias BirdSong.Services.XenoCanto
-      alias BirdSong.Services.Flickr
+    quote location: :keep,
+          bind_quoted: [] do
+      alias BirdSong.{
+        Bird,
+        Services.Ebird,
+        Services.Flickr,
+        Services.XenoCanto
+      }
 
       @red_shouldered_hawk %Bird{
         sci_name: "Buteo lineatus",
@@ -28,11 +39,9 @@ defmodule BirdSong.MockDataAttributes do
                            fn bird, acc -> Map.put(acc, bird.sci_name, bird) end
                          )
 
-      @xeno_canto_path @red_shouldered_hawk
-                       |> XenoCanto.url()
-                       |> URI.parse()
-                       |> Map.get(:path)
-      @flickr_path %Bird{} |> Flickr.url() |> URI.parse() |> Map.get(:path)
+      @xeno_canto_path BirdSong.MockDataAttributes.url_path(XenoCanto)
+      @flickr_path BirdSong.MockDataAttributes.url_path(Flickr)
+      @ebird_path BirdSong.MockDataAttributes.url_path(Ebird, {:recent_observations, ":region"})
     end
   end
 end

@@ -29,7 +29,7 @@ defmodule BirdSong.Services.FlickrTest do
       assert {:ok, response} = Flickr.get_images(@bird, whereis)
 
       assert %Flickr.Response{
-               photos: [%Flickr.Photo{url: "https://live.staticflickr.com" <> path} | _]
+               images: [%Flickr.Photo{url: "https://live.staticflickr.com" <> path} | _]
              } = response
 
       assert String.ends_with?(path, ".jpg")

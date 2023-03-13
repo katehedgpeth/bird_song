@@ -1,6 +1,8 @@
 defmodule BirdSong.TestHelpers do
   require Logger
   alias BirdSong.Bird
+  alias Phoenix.LiveView.Socket
+  import ExUnit.Assertions, only: [assert: 1, assert: 2]
 
   def update_env(service, key, new_value) do
     updated =
@@ -54,5 +56,53 @@ defmodule BirdSong.TestHelpers do
     name
     |> mock_file_path()
     |> File.read!()
+  end
+
+  def assert_assigned({:noreply, %Socket{} = socket}, key, func) do
+    {:noreply, assert_assigned(socket, key, func)}
+  end
+
+  def assert_assigned(%Socket{} = socket, key, func) when is_function(func) do
+    socket
+    |> get_assigned(key)
+    |> func.()
+
+    socket
+  end
+
+  def assert_assigned(%Socket{} = socket, key, match) do
+    socket
+    |> get_assigned(key)
+    |> do_assert_assigned(match)
+
+    socket
+  end
+
+  defp do_assert_assigned(value, match) when value === match, do: :ok
+
+  defp do_assert_assigned(value, match) do
+    assert(^match = value, "expected #{inspect(value)} to match #{inspect(match)}")
+  end
+
+  def get_assigned({:noreply, %Socket{} = socket}, key) do
+    get_assigned(socket, key)
+  end
+
+  def get_assigned(%Socket{assigns: assigns}, key) do
+    Map.fetch!(assigns, key)
+  end
+
+  def assert_expected_keys({:noreply, %Socket{} = socket}, expected_keys) do
+    {:noreply, assert_expected_keys(socket, expected_keys)}
+  end
+
+  def assert_expected_keys(%Socket{} = socket, expected_keys) do
+    assert(
+      socket
+      |> Map.fetch!(:assigns)
+      |> Map.keys() === expected_keys
+    )
+
+    socket
   end
 end

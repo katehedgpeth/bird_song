@@ -1,10 +1,8 @@
 defmodule BirdSongWeb.QuizLive.EventHandlers do
-  MessageHandlers
-  alias Phoenix.LiveView
-  alias LiveView.Socket
+  use BirdSongWeb.QuizLive.Assign
   alias Ecto.Changeset
   alias BirdSong.Quiz
-  alias BirdSongWeb.{QuizLive, QuizLive.CurrentBird}
+  alias BirdSongWeb.{QuizLive, QuizLive.Current}
 
   def handle_event(
         "start",
@@ -14,10 +12,10 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     case Quiz.changeset(quiz, changes) do
       %Changeset{errors: [], data: data} ->
         Process.send(self(), :get_recent_observations, [])
-        {:noreply, LiveView.assign(socket, :quiz, data)}
+        {:noreply, assign(socket, :quiz, data)}
 
       %Changeset{} = changeset ->
-        {:noreply, LiveView.assign(socket, :quiz, changeset)}
+        {:noreply, assign(socket, :quiz, changeset)}
     end
   end
 
@@ -25,7 +23,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     Process.send(self(), :get_recent_observations, [])
 
     {:noreply,
-     LiveView.assign(
+     assign(
        socket,
        :quiz,
        Quiz.default_changeset() |> Map.fetch!(:data)
@@ -33,7 +31,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   end
 
   def handle_event("validate", %{"quiz" => changes}, %Socket{assigns: %{quiz: quiz}} = socket) do
-    {:noreply, LiveView.assign(socket, :quiz, Quiz.changeset(quiz, changes))}
+    {:noreply, assign(socket, :quiz, Quiz.changeset(quiz, changes))}
   end
 
   def handle_event("validate", %{}, %Socket{} = socket) do
@@ -52,25 +50,25 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
         _,
         %Socket{} = socket
       ) do
-    {:noreply, CurrentBird.update_recording(socket)}
+    {:noreply, Current.update_recording(socket)}
   end
 
   def handle_event("show_answer", _, %Socket{} = socket) do
     {:noreply,
      socket
-     |> LiveView.assign(:show_image?, true)
-     |> LiveView.assign(:show_answer?, true)}
+     |> assign(:show_image?, true)
+     |> assign(:show_answer?, true)}
   end
 
   def handle_event("show_recording_details", _, %Socket{} = socket) do
-    {:noreply, LiveView.assign(socket, :show_recording_details?, true)}
+    {:noreply, assign(socket, :show_recording_details?, true)}
   end
 
   def handle_event("show_image", _, %Socket{} = socket) do
-    {:noreply, LiveView.assign(socket, :show_image?, true)}
+    {:noreply, assign(socket, :show_image?, true)}
   end
 
   def handle_event("change_image", _, %Socket{} = socket) do
-    {:noreply, CurrentBird.update_image(socket)}
+    {:noreply, Current.update_image(socket)}
   end
 end

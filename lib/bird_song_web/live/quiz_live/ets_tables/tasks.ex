@@ -2,34 +2,8 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Tasks do
   require Logger
   alias Phoenix.LiveView.Socket
   alias BirdSong.{Bird, Services}
-  alias BirdSongWeb.QuizLive.{Caches, EtsTables}
+  alias BirdSongWeb.QuizLive.EtsTables
   import EtsTables, only: [is_ets: 1]
-
-  def start_tasks_for_all_birds(%Socket{} = socket) do
-    socket
-    |> EtsTables.Birds.all()
-    |> Enum.reject(&Caches.has_all_data?(socket, &1))
-    |> Enum.reduce(socket, &EtsTables.Tasks.start_bird_tasks(&2, &1))
-  end
-
-  def start_bird_tasks(%Socket{} = socket, %Bird{} = bird) do
-    socket
-    |> start_task(bird, :recordings)
-    |> start_task(bird, :images)
-  end
-
-  def start_task(%Socket{} = socket, %Bird{} = bird, resource) when is_atom(resource) do
-    remember_task(
-      socket,
-      Task.Supervisor.async(
-        Services,
-        Caches,
-        :"get_#{resource}",
-        [socket, bird]
-      ),
-      {resource, bird}
-    )
-  end
 
   @spec lookup_task(Socket.t(), reference) :: {:not_found, reference} | {:ok, any}
   def lookup_task(
@@ -38,28 +12,43 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Tasks do
       )
       when is_reference(ref) do
     case :ets.lookup(tasks_ets, ref) do
-      [{^ref, task}] -> {:ok, task}
+      [{^ref, name: name, pid: pid}] when is_pid(pid) -> {:ok, name}
       [] -> {:not_found, ref}
     end
   end
 
   def remember_task(
         %Socket{assigns: %{ets_tables: %EtsTables{tasks: tasks}}} = socket,
-        %Task{ref: ref},
+        %Task{ref: ref, pid: pid},
         name
       )
       when is_reference(ref) and is_ets(tasks) do
-    true = :ets.insert(tasks, {ref, name})
+    true = :ets.insert(tasks, {ref, name: name, pid: pid})
     socket
   end
+
+  def forget_task(%Socket{} = socket, %Task{ref: ref}), do: forget_task(socket, ref)
 
   def forget_task(
         %Socket{assigns: %{ets_tables: %EtsTables{tasks: tasks}}} = socket,
         ref
       )
       when is_reference(ref) and is_ets(tasks) do
-    Logger.warn("api_calls_remaining=#{tasks |> :ets.tab2list() |> length()}")
     :ets.delete(tasks, ref)
     socket
   end
+
+  def kill_all_tasks(%Socket{} = socket) do
+    socket
+    |> get_table()
+    |> :ets.tab2list()
+    |> Enum.map(fn {_ref, name: name, pid: pid} when is_pid(pid) ->
+      [name: name, terminated?: Task.Supervisor.terminate_child(Services.Tasks, pid)]
+    end)
+  end
+
+  def get_birds(%Socket{assigns: %{birds: [%Bird{} | _] = birds}}), do: birds
+
+  defp get_table(%Socket{assigns: %{ets_tables: %EtsTables{tasks: tasks}}}),
+    do: tasks
 end

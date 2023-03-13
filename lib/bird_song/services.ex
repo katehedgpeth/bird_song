@@ -5,6 +5,7 @@ defmodule BirdSong.Services do
   @env Application.compile_env(:bird_song, BirdSong.Services)
   @images Keyword.fetch!(@env, :images)
   @recordings Keyword.fetch!(@env, :recordings)
+  @observations Keyword.fetch!(@env, :observations)
   @timeout Keyword.fetch!(@env, :stream_timeout_ms)
 
   defstruct [
@@ -17,6 +18,10 @@ defmodule BirdSong.Services do
     recordings: %Service{
       name: @recordings,
       whereis: @recordings
+    },
+    observations: %Service{
+      name: @observations,
+      whereis: @observations
     },
     timeout: @timeout,
     __tasks: []

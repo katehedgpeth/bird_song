@@ -1,7 +1,7 @@
 defmodule BirdSong.Services.Flickr.Response do
   alias BirdSong.Services.Flickr.Photo
 
-  defstruct [:num_pages, :page, :per_page, :total, photos: []]
+  defstruct [:num_pages, :page, :per_page, :total, images: []]
 
   def parse(%{
         "photos" => %{
@@ -17,7 +17,7 @@ defmodule BirdSong.Services.Flickr.Response do
       num_pages: num_pages,
       per_page: per_page,
       total: total,
-      photos: Enum.map(photos, &Photo.parse/1)
+      images: Enum.map(photos, &Photo.parse/1)
     }
   end
 end

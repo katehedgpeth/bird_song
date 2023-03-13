@@ -1,52 +1,88 @@
 defmodule BirdSongWeb.QuizLiveTest do
   require Logger
+  use BirdSong.MockApiCase, use_data_case: false
   use BirdSongWeb.LiveCase
-  use BirdSong.MockApiCase
   alias ExUnit.CaptureLog
   alias Phoenix.LiveView.Socket
-  alias BirdSongWeb.QuizLive.EtsTables.Birds
-  alias BirdSong.{Bird, Services.XenoCanto}
+  alias BirdSongWeb.{QuizLive, QuizLive.EtsTables, QuizLive.Current}
+  alias BirdSong.{Bird, Services, Services.XenoCanto, Quiz}
 
   @moduletag services: [:ebird, :xeno_canto]
+  @moduletag :capture_log
 
   @path "/quiz"
 
-  @ebird_path "/v2/data/obs/US-NC-067/recent"
-  @xeno_canto_path "/api/2/recordings"
-
-  @raw_data "test/mock_data/recent_observations.json"
-            |> Path.relative_to_cwd()
-            |> File.read!()
-
-  @full_mock_expects [
-    {"GET", @ebird_path, &__MODULE__.ebird_success_response/1},
-    {"GET", @xeno_canto_path, &__MODULE__.xeno_canto_success_response/1}
-  ]
-
-  setup %{conn: conn, caches: caches} do
+  setup %{conn: conn, services: services} do
     {:ok, view, html} = live(conn, @path)
     send(view.pid, {:register_render_listener, self()})
-    send(view.pid, {:caches, caches})
+    send(view.pid, {:services, services})
     {:ok, view: view, html: html}
   end
 
-  @tag expect: @full_mock_expects
-  test("connected mount", %{view: view, html: html}) do
-    CaptureLog.capture_log(fn ->
-      assert html =~ "How well do you know your bird songs?"
-      assert view |> form("#settings") |> render_submit() =~ "Loading..."
-      assert_receive %{bird_count: count} when count > 0
+  @tag use_mock: false
+  test "default assigns" do
+    %Socket{}
+    |> QuizLive.assign_defaults()
+    |> TestHelpers.assert_expected_keys([
+      :__changed__,
+      :birds,
+      :current,
+      :ets_tables,
+      :max_api_tries,
+      :quiz,
+      :render_listeners,
+      :services,
+      :show_answer?,
+      :show_image?,
+      :show_recording_details?,
+      :task_timeout,
+      :text_input_class
+    ])
+    |> TestHelpers.assert_assigned(:birds, [])
+    |> TestHelpers.assert_assigned(
+      :services,
+      %Services{}
+    )
+    |> TestHelpers.assert_assigned(:current, %Current{})
+    |> TestHelpers.assert_assigned(
+      :ets_tables,
+      fn ets_tables ->
+        assert %EtsTables{tasks: tasks} = ets_tables
+        assert is_reference(tasks), "expected tasks to be a ref but got " <> inspect(tasks)
+      end
+    )
+    |> TestHelpers.assert_assigned(:quiz, Quiz.changeset(%Quiz{}, %{}))
+    |> TestHelpers.assert_assigned(:render_listeners, [])
+    |> TestHelpers.assert_assigned(:show_answer?, false)
+    |> TestHelpers.assert_assigned(:show_image?, false)
+    |> TestHelpers.assert_assigned(:show_recording_details?, false)
+    |> TestHelpers.assert_assigned(
+      :text_input_class,
+      &(&1
+        |> is_list()
+        |> assert("expected :test_input_class to be a list, but got #{&1}"))
+    )
+  end
 
-      assert_receive %{current_bird: %{bird: %Bird{}, recording: %XenoCanto.Recording{}}}, 1_000
+  @tag expect: &MockServer.success_response/1
+  describe "connected mount" do
+    setup [:seed_from_mock_taxonomy]
 
-      assert render(view) =~ "What bird do you hear?"
-    end)
-    |> TestHelpers.parse_logs()
-    |> Enum.each(&assert &1 =~ "api_calls_remaining")
+    test("connected mount", %{view: view, html: html}) do
+      CaptureLog.capture_log(fn ->
+        assert html =~ "How well do you know your bird songs?"
+        assert view |> form("#settings") |> render_submit() =~ "Loading..."
+        assert_receive {:render, %{birds: [%Bird{} | _]}}, 1_000
+
+        assert render(view) =~ "What bird do you hear?"
+      end)
+    end
   end
 
   describe "start event" do
-    @tag expect: &__MODULE__.ebird_success_response/1
+    setup [:seed_from_mock_taxonomy]
+    @describetag expect: &MockServer.success_response/1
+
     test "fetches recent observations and saves them to state when response is successful", %{
       view: view
     } do
@@ -55,24 +91,24 @@ defmodule BirdSongWeb.QuizLiveTest do
                |> form("#settings", quiz: %{})
                |> render_submit()
 
-        assert_receive %{bird_count: count} when count > 0
+        assert_current_gets_assigned()
       end)
     end
 
-    @tag expect: @full_mock_expects
-    test "fetches recordings for all birds", %{view: view} do
+    test "fetches recordings for bird", %{view: view} do
       CaptureLog.capture_log(fn ->
         assert view
                |> form("#settings", quiz: %{})
                |> render_submit()
 
-        assert await_all_recordings() === :ok
+        assert_current_gets_assigned()
       end)
     end
   end
 
-  @tag :skip
   describe "user can enter a location" do
+    @describetag :skip
+
     @tag use_mock: false
     test "by typing", %{conn: conn} do
       assert {:ok, view, html} = live(conn, @path)
@@ -92,51 +128,14 @@ defmodule BirdSongWeb.QuizLiveTest do
     end
   end
 
-  def ebird_success_response(conn) do
-    Plug.Conn.resp(conn, 200, @raw_data)
-  end
-
-  def xeno_canto_success_response(%Conn{params: %{"query" => _query}} = conn) do
-    Conn.resp(conn, 200, Map.fetch!(@recordings, @red_shouldered_hawk.sci_name))
-  end
-
-  @spec check_for_recordings([Bird.t()], Socket.t()) :: :ok | :error
-  def check_for_recordings([], cache) when is_pid(cache), do: :ok
-
-  def check_for_recordings([%Bird{} = bird | rest], cache) when is_pid(cache) do
-    case XenoCanto.has_data?(bird, cache) do
-      true -> check_for_recordings(rest, cache)
-      false -> :error
-    end
-  end
-
-  def await_all_recordings() do
-    receive do
-      %{bird_count: count} when count === 0 ->
-        await_all_recordings()
-
-      %{bird_count: count, ets_tables: %{birds: birds_ets}, caches: %{xeno_canto: cache}}
-      when count > 0 ->
-        birds_ets
-        |> Birds.all()
-        |> check_for_recordings(cache)
-        |> case do
-          :ok -> :ok
-          :error -> await_all_recordings()
-        end
-
-      _ ->
-        await_all_recordings()
-    end
-  end
-
-  def await_observations() do
-    receive do
-      %{birds: birds} when Kernel.map_size(birds) === 0 ->
-        await_observations()
-
-      %{birds: birds} when Kernel.map_size(birds) > 0 ->
-        :ok
-    end
+  def assert_current_gets_assigned() do
+    assert_receive {:render,
+                    %{
+                      current: %{
+                        bird: %Bird{},
+                        recording: %XenoCanto.Recording{}
+                      }
+                    }},
+                   5_000
   end
 end

@@ -46,12 +46,24 @@ defmodule BirdSong.MockApiCase do
       require Logger
       import BirdSong.MockApiCase
       use BirdSong.MockDataAttributes
-      alias BirdSong.{MockServer, TestHelpers}
+      alias BirdSong.{MockServer, TestHelpers, Services.Ebird}
 
-      defp listen_to_services(%{services: %Services{images: images, recordings: recordings}}) do
-        for %Service{whereis: whereis, name: name} <- [images, recordings] do
-          apply(name, :register_request_listener, [whereis])
-        end
+      defp listen_to_services(%{services: %Services{} = services}) do
+        do_for_services(services, &listen_to_service/1)
+
+        :ok
+      end
+
+      defp listen_to_service(%Service{name: name, whereis: whereis}) do
+        apply(name, :register_request_listener, [whereis])
+      end
+
+      def seed_from_mock_taxonomy(%{}) do
+        assert {:ok, [%Services{} | _]} =
+                 "mock_taxonomy"
+                 |> TestHelpers.mock_file_path()
+                 |> Ebird.Taxonomy.read_data_file()
+                 |> Ebird.Taxonomy.seed()
 
         :ok
       end
@@ -70,14 +82,23 @@ defmodule BirdSong.MockApiCase do
 
       images_module = Map.get(tags, :images_service, Flickr)
       recordings_module = Map.get(tags, :recordings_module, XenoCanto)
+      observations_module = Map.get(tags, :observations_service, Ebird)
 
-      [{:ok, recordings_server}, {:ok, images_server}] =
-        Enum.map([recordings_module, images_module], &start_service_supervised(&1, tags))
+      [{:ok, recordings_server}, {:ok, images_server}, {:ok, observations_server}] =
+        Enum.map(
+          [
+            recordings_module,
+            images_module,
+            observations_module
+          ],
+          &start_service_supervised(&1, tags)
+        )
 
       services = %Services{
         bird: bird,
         images: %Service{name: images_module, whereis: images_server},
         recordings: %Service{name: recordings_module, whereis: recordings_server},
+        observations: %Service{name: observations_module, whereis: observations_server},
         timeout: Map.get(tags, :timeout, 1_000)
       }
 
@@ -103,9 +124,9 @@ defmodule BirdSong.MockApiCase do
   defguard is_configured_service(service_name) when service_name in [XenoCanto, Flickr, Ebird]
   defguard is_module_name(name) when is_atom(name) and name not in [:xeno_canto, :flickr, :ebird]
 
-  def setup_bypass(%Services{images: images, recordings: recordings}) do
+  def setup_bypass(%Services{} = services) do
     bypass = Bypass.open()
-    Enum.each([images, recordings], &update_base_url(&1, bypass))
+    do_for_services(services, &update_base_url(&1, bypass))
     {:ok, bypass}
   end
 
@@ -189,4 +210,10 @@ defmodule BirdSong.MockApiCase do
   end
 
   def mock_url(%Bypass{port: port}), do: "http://localhost:#{port}"
+
+  def do_for_services(%Services{} = services, callback) when is_function(callback) do
+    for %Service{} = service <- services |> Map.from_struct() |> Map.values() do
+      callback.(service)
+    end
+  end
 end

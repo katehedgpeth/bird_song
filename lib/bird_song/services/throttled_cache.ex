@@ -73,6 +73,7 @@ defmodule BirdSong.Services.ThrottledCache do
       def get_from_api(request, %State{} = state) do
         request
         |> url()
+        |> log_external_api_call()
         |> HTTPoison.get(headers(request), params: params(request))
         |> maybe_write_to_disk(state)
         |> Helpers.parse_api_response()
@@ -225,6 +226,27 @@ defmodule BirdSong.Services.ThrottledCache do
       defp maybe_write_to_disk(response, %State{}) do
         # Ignore for now. Plan to refactor later to save responses as JSON files to use as test mocks.
         response
+      end
+
+      @spec log_external_api_call(String.t()) :: String.t()
+      defp log_external_api_call("" <> url) do
+        case Mix.env() do
+          :test -> log_external_api_call(url, :test)
+          _ -> url
+        end
+      end
+
+      @spec log_external_api_call(String.t(), atom()) :: String.t()
+      defp log_external_api_call("http://localhost" <> _ = url, :test) do
+        url
+      end
+
+      defp log_external_api_call("" <> url, :test) do
+        [inspect([__MODULE__]), "event=external_api_call", "url=" <> url]
+        |> Enum.join(" ")
+        |> Logger.warn()
+
+        url
       end
     end
   end

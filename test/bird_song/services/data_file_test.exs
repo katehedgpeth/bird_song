@@ -44,6 +44,7 @@ defmodule BirdSong.Services.DataFileTest do
   @moduletag capture_log: true
 
   setup %{test: test, tmp_dir: tmp_dir} = tags do
+    prev_level = Logger.level()
     name = Map.get(tags, :instance_name)
     use_correct_folder? = Map.get(tags, :use_correct_folder?, true)
     {:ok, instance} = DataFile.start_link(name: name)
@@ -76,7 +77,10 @@ defmodule BirdSong.Services.DataFileTest do
 
     data = %{@good_data | bird: bird, service: service, service_instance: service_instance}
 
-    on_exit(fn -> remove_generated_files(service, bird, data) end)
+    on_exit(fn ->
+      Logger.configure(level: prev_level)
+      remove_generated_files(service, bird, data)
+    end)
 
     {:ok, instance: instance, data: data}
   end
@@ -98,14 +102,14 @@ defmodule BirdSong.Services.DataFileTest do
     end
 
     test "logs a message when write is successful", %{instance: instance, data: data} do
-      log =
+      Logger.configure(level: :info)
+
+      [log] =
         ExUnit.CaptureLog.capture_log(fn ->
           assert DataFile.write(data, instance) === :ok
           assert_receive {DataFile, {:ok, %{written?: true}}}
         end)
         |> TestHelpers.parse_logs()
-
-      assert [log] = log
 
       expected =
         Enum.join(

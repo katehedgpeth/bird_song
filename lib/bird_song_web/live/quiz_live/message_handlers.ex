@@ -1,6 +1,6 @@
 defmodule BirdSongWeb.QuizLive.MessageHandlers do
   require Logger
-  alias Phoenix.{LiveView, LiveView.Socket}
+  use BirdSongWeb.QuizLive.Assign
 
   alias BirdSong.{
     Bird,
@@ -11,59 +11,107 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     Services.Flickr
   }
 
-  alias BirdSongWeb.{QuizLive, QuizLive.Caches, QuizLive.EtsTables}
+  alias BirdSongWeb.{
+    QuizLive,
+    QuizLive.EtsTables
+  }
 
   def handle_info(:get_recent_observations, socket) do
-    task =
-      Task.Supervisor.async(
-        Services,
-        Ebird,
-        :get_recent_observations,
-        [get_region(socket)]
-      )
-
-    {:noreply, EtsTables.Tasks.remember_task(socket, task, :recent_observations)}
+    send(self(), {:get_recent_observations, tries: 0})
+    {:noreply, socket}
   end
 
   def handle_info(
-        :start_throttled_data_collection,
-        %Socket{} = socket
-      ) do
-    {:noreply, EtsTables.Tasks.start_tasks_for_all_birds(socket)}
+        {:get_recent_observations, tries: number_of_tries} = msg,
+        %Socket{
+          assigns: %{max_api_tries: max}
+        } = socket
+      )
+      when number_of_tries < max do
+    task =
+      Task.Supervisor.async(
+        Services.Tasks,
+        Ebird,
+        :get_recent_observations,
+        [get_region(socket), get_server(socket, :observations)]
+      )
+
+    socket = EtsTables.Tasks.remember_task(socket, task, msg)
+
+    timeout = get_assign(socket, :task_timeout)
+
+    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
+      nil ->
+        send(self(), {:get_recent_observations, tries: number_of_tries + 1})
+
+        {:noreply,
+         socket
+         |> EtsTables.Tasks.forget_task(task)
+         |> Phoenix.LiveView.put_flash(
+           :warning,
+           "Getting birds is taking longer than expected..."
+         )}
+
+      {:ok, response} ->
+        handle_task_response({:ok, :recent_observations}, socket, response)
+
+      {:exit, reason} ->
+        send(self(), {:exit, {:recent_observations, reason}})
+
+        Logger.warn("task died: #{reason}")
+        {:noreply, EtsTables.Tasks.forget_task(socket, task)}
+    end
   end
 
-  def handle_info({ref, response}, %Socket{} = socket) when is_reference(ref) do
-    socket
-    |> EtsTables.Tasks.lookup_task(ref)
-    |> handle_task_response(socket, response)
+  def handle_info(
+        {:get_recent_observations, tries: tries},
+        %Socket{assigns: %{max_api_tries: max}} = socket
+      )
+      when tries >= max do
+    {:noreply,
+     socket
+     |> Phoenix.LiveView.clear_flash()
+     |> Phoenix.LiveView.put_flash(
+       :error,
+       "eBird is not responding to our requests at the moment. Please try again later."
+     )}
   end
 
   def handle_info({:DOWN, ref, :process, _pid, :normal}, socket) do
     {:noreply, EtsTables.Tasks.forget_task(socket, ref)}
   end
 
-  def handle_info(
-        {:DOWN, ref, :process, _pid,
-         {:timeout, {GenServer, :call, [XenoCanto.Cache, {:get_from_api, bird}, _timeout]}}},
-        socket
-      ) do
-    {:noreply,
-     socket
-     |> EtsTables.Tasks.forget_task(ref)
-     |> EtsTables.Tasks.start_task(bird, :recordings)}
+  def handle_info({ref, response}, %Socket{} = socket)
+      when is_reference(ref) do
+    socket
+    |> EtsTables.Tasks.lookup_task(ref)
+    |> handle_task_response(socket, response)
   end
+
+  ####################################
+  ####################################
+  ##  USED IN TESTS
+  ##
 
   def handle_info({:register_render_listener, pid}, socket) do
     {:noreply,
-     LiveView.assign(
+     assign(
        socket,
        :render_listeners,
        [pid | socket.assigns[:render_listeners]]
      )}
   end
 
-  def handle_info({:caches, %Caches{} = caches}, socket) do
-    {:noreply, LiveView.assign(socket, :caches, caches)}
+  def handle_info({:services, %Services{} = services}, socket) do
+    {:noreply, assign(socket, :services, services)}
+  end
+
+  def handle_call(:socket, _from, %Socket{} = socket) do
+    {:reply, socket, socket}
+  end
+
+  def handle_call(:kill_all_tasks, _from, socket) do
+    {:reply, EtsTables.Tasks.kill_all_tasks(socket), socket}
   end
 
   ####################################
@@ -71,20 +119,33 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   ##  PRIVATE METHODS
   ##
 
-  defp handle_task_response({:not_found, ref}, socket, _response) when is_reference(ref) do
+  @spec handle_task_response(
+          {:ok, any()} | {:not_found, reference()},
+          Socket.t(),
+          Helpers.api_response()
+        ) :: {:noreply, Socket.t()}
+  defp handle_task_response({:not_found, ref}, socket, _response)
+       when is_reference(ref) do
     # ignore messages from unknown tasks
+    Logger.warn("received message from unknown task")
     {:noreply, socket}
   end
 
-  defp handle_task_response({:ok, :recent_observations}, socket, {:ok, recent_observations}) do
-    Enum.each(
-      recent_observations,
-      &EtsTables.Birds.save_bird(socket, &1)
-    )
-
-    Process.send(self(), :start_throttled_data_collection, [])
-
-    {:noreply, EtsTables.Birds.update_bird_count(socket)}
+  defp handle_task_response(
+         {:ok, :recent_observations},
+         socket,
+         {:ok, %Ebird.Response{observations: observations}}
+       ) do
+    observations
+    |> Enum.map(& &1.sci_name)
+    |> Bird.get_many_by_sci_name()
+    |> case do
+      [%Bird{} | _] = birds ->
+        {:noreply,
+         socket
+         |> assign(:birds, Enum.shuffle(birds))
+         |> QuizLive.assign_next_bird()}
+    end
   end
 
   defp handle_task_response(
@@ -92,8 +153,10 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
          socket,
          {:ok, %XenoCanto.Response{num_recordings: "0"}}
        ) do
-    {:ok, %Bird{sci_name: sci_name, common_name: common_name}} =
-      EtsTables.Birds.lookup_bird(socket, sci_name)
+    {:ok,
+     %Bird{
+       common_name: common_name
+     }} = Bird.get_by_sci_name(sci_name)
 
     [
       "message=no_recordings",
@@ -103,7 +166,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     |> Enum.join(" ")
     |> Logger.warn()
 
-    {:noreply, remove_bird_with_no_recordings(socket, sci_name)}
+    {:noreply, socket}
   end
 
   defp handle_task_response(
@@ -125,6 +188,15 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     {:noreply, QuizLive.assign_next_bird(socket)}
   end
 
+  defp handle_task_response({:ok, name}, socket, {:error, error}) do
+    {:noreply,
+     Phoenix.LiveView.put_flash(
+       socket,
+       :error,
+       "#{inspect(name)} task returned an error: \n\n #{inspect(error)}"
+     )}
+  end
+
   defp handle_task_response({:ok, name}, socket, response) do
     Logger.error(
       "error=unexpected_task_response name=#{inspect(name)} response=#{inspect(response)}"
@@ -133,14 +205,8 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     {:noreply, socket}
   end
 
-  @spec remove_bird_with_no_recordings(Socket.t(), String.t()) :: Socket.t()
-  defp remove_bird_with_no_recordings(%{assigns: %{birds: birds}} = socket, bird_id) do
-    :ets.delete(birds, bird_id)
-    EtsTables.Birds.update_bird_count(socket)
-  end
-
   defp add_bird_to_quiz(%Socket{assigns: %{quiz: quiz}} = socket, %Bird{sci_name: sci_name}) do
-    LiveView.assign(
+    assign(
       socket,
       :quiz,
       Quiz.add_bird(quiz, sci_name)
@@ -148,4 +214,11 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   end
 
   defp get_region(%Socket{assigns: %{quiz: %Quiz{region: region}}}), do: region
+
+  defp get_server(%Socket{assigns: %{services: %Services{} = services}}, service_name)
+       when is_atom(service_name) do
+    services
+    |> Map.fetch!(service_name)
+    |> Map.fetch!(:whereis)
+  end
 end

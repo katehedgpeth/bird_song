@@ -1,7 +1,6 @@
 defmodule BirdSong.Bird do
   use Ecto.Schema
   import Ecto.Changeset
-  alias Ecto.Query
   import Ecto.Query, only: [from: 2]
   alias BirdSong.{Family, Order}
 
@@ -59,7 +58,7 @@ defmodule BirdSong.Bird do
 
   def get_many_by_sci_name(["" <> _ | _] = sci_names) do
     BirdSong.Repo.all(
-      from b in has_data_query(),
+      from b in __MODULE__,
         where: b.sci_name in ^sci_names
     )
   end
@@ -122,12 +121,5 @@ defmodule BirdSong.Bird do
 
   def cast_keys() do
     @cast_keys
-  end
-
-  defp has_data_query() do
-    Query.from(__MODULE__,
-      where: [has_recordings?: true, has_images?: true],
-      preload: ^@assoc_keys
-    )
   end
 end

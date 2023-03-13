@@ -11,6 +11,10 @@ defmodule BirdSong.MockServer do
     Services.XenoCanto
   }
 
+  @ebird_token :bird_song
+               |> Application.compile_env(BirdSong.Services.Ebird)
+               |> Keyword.fetch!(:token)
+
   def success_response(
         %Conn{
           request_path: @xeno_canto_path,
@@ -27,6 +31,40 @@ defmodule BirdSong.MockServer do
         } = conn
       ) do
     do_success_response(conn, Flickr, sci_name)
+  end
+
+  def success_response(
+        %Conn{
+          path_info: ["v2", "data", "obs", _, "recent"],
+          params: %{"back" => "30"},
+          req_headers: headers
+        } = conn
+      ) do
+    case Enum.into(headers, %{}) do
+      %{"x-ebirdapitoken" => @ebird_token} ->
+        Conn.resp(
+          conn,
+          200,
+          "test/mock_data/recent_observations.json"
+          |> Path.relative_to_cwd()
+          |> File.read!()
+        )
+
+      %{} ->
+        Logger.warn("""
+        EBIRD TOKEN NOT FOUND IN HEADERS
+        \t\texpected: [{"x-ebirdapitoken", #{inspect(@ebird_token)}}]
+        \t\tgot: #{inspect(headers)}
+        """)
+
+        Conn.resp(conn, 403, "token not found in #{inspect(headers)}")
+    end
+  end
+
+  def success_response(%Conn{req_headers: headers} = conn) when is_list(headers) do
+    conn
+    |> Map.replace!(:req_headers, Enum.into(headers, %{}))
+    |> success_response()
   end
 
   defp do_success_response(%Conn{} = conn, service, "" <> sci_name) when is_atom(service) do
