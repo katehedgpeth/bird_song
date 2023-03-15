@@ -3,15 +3,13 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
 
   alias BirdSong.{
     Order,
-    Services,
-    Services.DataFile,
     Services.Ebird.Taxonomy,
     Services.Flickr,
-    Services.Service,
     Services.XenoCanto
   }
 
   @moduletag service: [XenoCanto, Flickr]
+  @moduletag use_mock: false
   @moduletag :capture_log
   @moduletag seed_data?: false
 
@@ -28,96 +26,64 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
     {:ok, raw_data: raw_data, mocked_codes: mocked_codes, short_list: short_list}
   end
 
-  setup %{test: test} do
-    {:ok, data_file} = DataFile.start_link(name: Module.concat(test, :DataFile))
-
-    {:ok, data_file: data_file}
-  end
-
   describe "&seed/1" do
     @tag :capture_log
-    @tag expect: &MockServer.success_response/1
     test "seeds the database and fetches images and recordings",
          %{
-           services: services,
-           short_list: birds
+           short_list: raw_birds
          } do
-      assert length(birds) === 3
+      assert length(raw_birds) === 3
 
-      assert {:ok, tasks} = Taxonomy.seed(birds, services)
+      assert {:ok, inserted_birds} = Taxonomy.seed(raw_birds)
 
-      assert [%Services{} | _] = tasks
+      assert [%Bird{} | _] = inserted_birds
 
-      assert length(tasks) === length(birds)
-
-      assert Enum.map(
-               tasks,
-               &get_responses_summary/1
-             ) === [
-               {@eastern_bluebird.common_name, recordings: :ok, images: :ok},
-               {@carolina_wren.common_name, recordings: :error, images: :ok},
-               {@red_shouldered_hawk.common_name, recordings: :error, images: :error}
-             ]
+      assert length(raw_birds) === length(inserted_birds)
     end
   end
 
   describe "Family parser functions" do
     setup [:listen_to_services, :insert_order]
-    @describetag expect: &MockServer.success_response/1
     @describetag :tmp_dir
 
     @tag :only
     test "&parse_and_insert_families/3 writes multiple families to the DB", %{
       raw_data: raw_data,
-      order: order,
-      services: services
+      order: order
     } do
       list_size = 10
 
-      assert {:ok, tasks} =
+      assert {:ok, inserted_birds} =
                raw_data
                |> Enum.take(list_size)
-               |> Taxonomy.parse_and_insert_families(order, services, [])
+               |> Taxonomy.parse_and_insert_families(order, [])
 
-      assert length(tasks) === list_size
+      assert length(inserted_birds) === list_size
 
-      assert Process.info(self(), :message_queue_len) ===
-               {:message_queue_len,
-                list_size
-                |> Kernel.*([XenoCanto, Flickr] |> length())
-                |> Kernel.*([:start_request, :end_request] |> length())}
-
-      raw_data
-      |> Enum.take(list_size)
-      |> Enum.each(&assert_services_called/1)
+      assert Process.info(self(), :message_queue_len) === {:message_queue_len, 0}
     end
 
     test "&parse_and_insert_family/3 writes a family to the DB and adds birds", %{
-      short_list: birds,
-      services: services,
+      short_list: raw_birds,
       order: order
     } do
-      assert length(birds) === 3
+      assert length(raw_birds) === 3
 
-      assert {:ok, [%Services{} | _] = tasks} =
+      assert {:ok, [%Bird{} | _] = inserted_birds} =
                Taxonomy.parse_and_insert_family(
                  [
                    {
-                     birds |> List.first() |> Taxonomy.family_name(),
-                     birds
+                     raw_birds |> List.first() |> Taxonomy.family_name(),
+                     raw_birds
                    }
                  ],
                  order,
-                 services,
                  []
                )
 
-      assert length(tasks) === length(birds)
+      assert length(inserted_birds) === length(raw_birds)
 
-      # 3 birds x 2 services x (1 start message + 1 end message) = 12
-      assert Process.info(self(), :message_queue_len) === {:message_queue_len, 12}
-
-      Enum.each(birds, &assert_services_called/1)
+      assert Process.info(self(), :message_queue_len) === {:message_queue_len, 0}
     end
   end
 
@@ -218,36 +184,5 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
       |> Order.insert()
 
     {:ok, order: order}
-  end
-
-  defp raw(%{"familyComName" => name}, :family_common), do: name
-  defp raw(%{"comName" => name}, :common_name), do: name
-  defp raw(%{"sciName" => name}, :sci_name), do: name
-
-  defp assert_services_called(bird) do
-    common_name = raw(bird, :common_name)
-    sci_name = raw(bird, :sci_name)
-
-    for module <- [Flickr, XenoCanto] do
-      assert_received {:start_request,
-                       %{
-                         module: ^module,
-                         bird: %Bird{common_name: ^common_name, sci_name: ^sci_name}
-                       }}
-
-      assert_received {:end_request,
-                       %{
-                         module: ^module,
-                         bird: %Bird{common_name: ^common_name, sci_name: ^sci_name}
-                       }}
-    end
-  end
-
-  defp get_responses_summary(%Services{
-         bird: %Bird{common_name: common_name},
-         recordings: %Service{response: {recordings_status, _}},
-         images: %Service{response: {images_status, _}}
-       }) do
-    {common_name, recordings: recordings_status, images: images_status}
   end
 end

@@ -47,7 +47,13 @@ defmodule BirdSong.MockApiCase do
       require Logger
       import BirdSong.MockApiCase
       use BirdSong.MockDataAttributes
-      alias BirdSong.{MockServer, TestHelpers, Services.Ebird}
+
+      alias BirdSong.{
+        Bird,
+        MockServer,
+        TestHelpers,
+        Services.Ebird
+      }
 
       def listen_to_services(%{services: %Services{} = services}) do
         do_for_services(services, &listen_to_service/1)
@@ -64,7 +70,7 @@ defmodule BirdSong.MockApiCase do
       end
 
       def seed_from_mock_taxonomy(%{}) do
-        assert {:ok, [%Services{} | _]} =
+        assert {:ok, [%Bird{} | _]} =
                  "mock_taxonomy"
                  |> TestHelpers.mock_file_path()
                  |> Ebird.Taxonomy.read_data_file()
