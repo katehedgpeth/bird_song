@@ -13,6 +13,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
 
   @moduletag service: [XenoCanto, Flickr]
   @moduletag :capture_log
+  @moduletag seed_data?: false
 
   setup_all do
     raw_data = Taxonomy.read_data_file()
@@ -29,6 +30,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
 
   setup %{test: test} do
     {:ok, data_file} = DataFile.start_link(name: Module.concat(test, :DataFile))
+
     {:ok, data_file: data_file}
   end
 
@@ -62,6 +64,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
   describe "Family parser functions" do
     setup [:listen_to_services, :insert_order]
     @describetag expect: &MockServer.success_response/1
+    @describetag :tmp_dir
 
     @tag :only
     test "&parse_and_insert_families/3 writes multiple families to the DB", %{

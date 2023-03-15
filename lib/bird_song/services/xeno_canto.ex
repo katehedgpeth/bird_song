@@ -1,8 +1,12 @@
 defmodule BirdSong.Services.XenoCanto do
-  use BirdSong.Services.ThrottledCache, ets_opts: [:bag], ets_name: :xeno_canto
+  use BirdSong.Services.ThrottledCache,
+    ets_opts: [:bag],
+    ets_name: :xeno_canto,
+    data_folder_path: "data/recordings"
+
   alias __MODULE__.Response
   alias BirdSong.Bird
-  alias BirdSong.Services.{Helpers, DataFile.Data}
+  alias BirdSong.Services.Helpers
 
   def url(%Bird{sci_name: sci_name}) do
     __MODULE__
@@ -10,10 +14,6 @@ defmodule BirdSong.Services.XenoCanto do
     |> List.wrap()
     |> Enum.concat(["api", "2", "recordings?query=" <> format_query(sci_name)])
     |> Path.join()
-  end
-
-  def data_folder_path(%Data{}) do
-    "data/recordings"
   end
 
   #########################################################

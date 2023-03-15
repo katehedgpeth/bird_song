@@ -6,9 +6,9 @@ defmodule BirdSong.MockServer do
 
   alias BirdSong.{
     Bird,
+    Services,
     Services.DataFile,
-    Services.Flickr,
-    Services.XenoCanto
+    Services.Service
   }
 
   @ebird_token :bird_song
@@ -21,7 +21,7 @@ defmodule BirdSong.MockServer do
           params: %{"query" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, XenoCanto, sci_name)
+    do_success_response(conn, Map.fetch!(%Services{}, :recordings), sci_name)
   end
 
   def success_response(
@@ -30,7 +30,7 @@ defmodule BirdSong.MockServer do
           params: %{"text" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, Flickr, sci_name)
+    do_success_response(conn, Map.fetch!(%Services{}, :images), sci_name)
   end
 
   def success_response(
@@ -67,20 +67,9 @@ defmodule BirdSong.MockServer do
     |> success_response()
   end
 
-  defp do_success_response(%Conn{} = conn, service, "" <> sci_name) when is_atom(service) do
-    @birds_by_sci_name
-    |> Map.fetch(sci_name)
-    |> case do
-      {:ok, %Bird{} = bird} ->
-        service_response(conn, bird, service)
-
-      :error ->
-        unmocked_bird_response(conn, sci_name, service)
-    end
-  end
-
-  defp unmocked_bird_response(%Conn{} = conn, "" <> sci_name, service) do
-    logged_not_found_response(conn, %{error: :unmocked_bird, sci_name: sci_name, service: service})
+  defp do_success_response(%Conn{} = conn, %Service{} = service, "" <> sci_name) do
+    {:ok, %Bird{} = bird} = Bird.get_by_sci_name(sci_name)
+    service_response(conn, bird, service)
   end
 
   defp logged_not_found_response(conn, %{} = body) do
@@ -99,7 +88,7 @@ defmodule BirdSong.MockServer do
   def error_response(conn), do: Plug.Conn.resp(conn, 500, "there was an error")
 
   defp service_response(%Conn{} = conn, %Bird{} = bird, service) do
-    %DataFile.Data{bird: bird, service: service}
+    %DataFile.Data{request: bird, service: service}
     |> DataFile.read()
     |> case do
       {:ok, "" <> body} ->
@@ -113,7 +102,7 @@ defmodule BirdSong.MockServer do
         logged_not_found_response(conn, %{
           error: :file_not_found,
           bird: bird.common_name,
-          service: service
+          service: service.name
         })
     end
   end

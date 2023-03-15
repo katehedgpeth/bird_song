@@ -1,6 +1,5 @@
 defmodule BirdSong.Services.FlickrTest do
   use BirdSong.MockApiCase
-  alias ExUnit.CaptureLog
 
   alias BirdSong.{
     Services,
@@ -14,11 +13,15 @@ defmodule BirdSong.Services.FlickrTest do
   @moduletag services: [Flickr]
 
   setup_all do
-    {:ok, images} = DataFile.read(%DataFile.Data{bird: @bird, service: Flickr})
+    {:ok, images} =
+      DataFile.read(%DataFile.Data{request: @bird, service: Map.fetch!(%Services{}, :images)})
+
     {:ok, images: images}
   end
 
   describe "&get_image/1" do
+    setup [:listen_to_services]
+
     @tag use_mock: false
     test "returns {:ok, %Flickr.Response{}} when request is successful", %{
       bypass: bypass,
@@ -42,14 +45,8 @@ defmodule BirdSong.Services.FlickrTest do
       url = Flickr.url(@red_shouldered_hawk)
       assert GenServer.call(whereis, {:get_from_cache, @bird}) === :not_found
 
-      assert [log] =
-               CaptureLog.capture_log(fn ->
-                 assert Flickr.get_images(@red_shouldered_hawk, whereis) ===
-                          {:error, {:not_found, url}}
-               end)
-               |> TestHelpers.parse_logs()
-
-      assert log =~ "request_status=error status_code=404 url=" <> url
+      assert Flickr.get_images(@red_shouldered_hawk, whereis) ===
+               {:error, {:not_found, url}}
     end
   end
 end

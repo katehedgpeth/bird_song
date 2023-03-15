@@ -1,6 +1,6 @@
 defmodule BirdSong.Services.Helpers do
   require Logger
-  alias HTTPoison.{Request, Response, Error}
+  alias HTTPoison.{Response, Error}
 
   @type api_error() ::
           {:error, {:not_found, String.t()}}
@@ -9,38 +9,54 @@ defmodule BirdSong.Services.Helpers do
   @type api_response(t) ::
           {:ok, t} | api_error()
 
-  @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}) :: api_response(any())
+  @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}, String.t()) ::
+          api_response(Map.t())
   def parse_api_response(
         {:ok,
          %Response{
            status_code: 200,
-           body: "" <> body,
-           request: %Request{url: url}
-         }}
+           body: "" <> body
+         }},
+        "" <> _url
       ) do
-    Logger.debug("request_status=success url=" <> url)
     Jason.decode(body)
   end
 
   def parse_api_response(
         {:ok,
          %Response{
-           status_code: 404,
-           request: %Request{url: url}
-         } = response}
+           status_code: 404
+         }},
+        "" <> url
       ) do
-    log_error(response)
     {:error, {:not_found, url}}
   end
 
-  def parse_api_response({:ok, %Response{} = response}) do
-    log_error(response)
+  def parse_api_response({:ok, %Response{} = response}, "" <> _url) do
     {:error, {:bad_response, response}}
   end
 
-  def parse_api_response({:error, error}) do
-    log_error(error)
+  def parse_api_response({:error, error}, "" <> _url) do
     {:error, error}
+  end
+
+  @spec log(atom(), atom(), Keyword.t() | Map.t()) :: :ok
+  def log(level \\ :debug, module, args) do
+    log_fn =
+      case level do
+        :debug -> &Logger.debug/1
+        :info -> &Logger.info/1
+        :warning -> &Logger.warning/1
+        :error -> &Logger.error/1
+      end
+
+    [inspect([module]) | parse_log_args(args)]
+    |> Enum.join(" ")
+    |> log_fn.()
+  end
+
+  defp parse_log_args(args) do
+    Enum.map(args, fn {key, val} -> "#{key}=#{inspect(val)}" end)
   end
 
   def get_env(app, key, default \\ :fetch!) do
@@ -51,14 +67,4 @@ defmodule BirdSong.Services.Helpers do
 
   defp do_get_env(env, key, :fetch!), do: Keyword.fetch!(env, key)
   defp do_get_env(env, key, default), do: Keyword.get(env, key, default)
-
-  defp log_error(%Response{status_code: code, request: %Request{url: url}}) do
-    Logger.error("request_status=error status_code=#{code} url=" <> url)
-  end
-
-  defp log_error(%Error{reason: reason}) do
-    Logger.error(
-      "request_status=error status_code=unknown url=unknown error=#{reason} pid=#{self() |> inspect()}"
-    )
-  end
 end

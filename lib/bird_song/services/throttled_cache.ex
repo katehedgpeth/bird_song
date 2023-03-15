@@ -1,4 +1,5 @@
 defmodule BirdSong.Services.ThrottledCache do
+  alias BirdSong.Services.DataFile
   alias BirdSong.Services.Helpers
 
   @type request_data() :: Bird.t() | {:recent_observations, String.t()}
@@ -21,7 +22,7 @@ defmodule BirdSong.Services.ThrottledCache do
       require Logger
       use GenServer
       alias BirdSong.{Bird, Services}
-      alias Services.{Helpers, ThrottledCache.State}
+      alias Services.{Helpers, ThrottledCache.State, Service}
       alias __MODULE__.Response
 
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
@@ -30,15 +31,19 @@ defmodule BirdSong.Services.ThrottledCache do
 
       @type request_data() :: Services.ThrottledCache.request_data()
 
-      @spec get(request_data(), GenServer.server()) ::
-              {:ok, any} | :not_found
-      def get(data, server) do
-        case get_from_cache(data, server) do
+      @spec get(request_data(), Service.t() | GenServer.server()) ::
+              Helpers.api_response(Response.t())
+      def get(data, %Service{whereis: pid}) do
+        get(data, pid)
+      end
+
+      def get(data, pid) when is_pid(pid) do
+        case get_from_cache(data, pid) do
           {:ok, data} ->
             {:ok, data}
 
           :not_found ->
-            GenServer.call(server, {:get_from_api, data}, :infinity)
+            GenServer.call(pid, {:get_from_api, data}, :infinity)
         end
       end
 
@@ -69,14 +74,20 @@ defmodule BirdSong.Services.ThrottledCache do
 
       # unfortunately it seems that this has to be public in order
       # for it to be called as a task in the :send_request call.
-      @spec get_from_api(request_data(), State.t()) :: Helpers.api_response(Response.t())
+      @spec get_from_api(request_data(), State.t()) :: {:ok, Response.t()} | Helpers.api_error()
       def get_from_api(request, %State{} = state) do
         request
         |> url()
         |> log_external_api_call()
         |> HTTPoison.get(headers(request), params: params(request))
-        |> maybe_write_to_disk(state)
-        |> Helpers.parse_api_response()
+        |> log_external_api_response(request)
+        |> maybe_write_to_disk(request, state)
+        |> parse_response(request)
+      end
+
+      def parse_response(response, request) do
+        response
+        |> Helpers.parse_api_response(url(request))
         |> case do
           {:ok, raw} ->
             {:ok, Response.parse(raw)}
@@ -84,6 +95,10 @@ defmodule BirdSong.Services.ThrottledCache do
           {:error, error} ->
             {:error, error}
         end
+      end
+
+      def data_folder_path(%Service{whereis: pid}) do
+        GenServer.call(pid, :data_folder_path)
       end
 
       #########################################################
@@ -108,11 +123,37 @@ defmodule BirdSong.Services.ThrottledCache do
       @spec message_details(request_data()) :: Map.t()
       def message_details(%Bird{} = bird), do: %{bird: bird}
 
+      @spec write_to_disk(Helpers.api_response(), request_data(), State.t()) ::
+              :ok | {:error, any()}
+      def write_to_disk({:ok, %HTTPoison.Response{}} = response, request, %State{
+            data_file_instance: instance
+          }) do
+        DataFile.write(
+          %DataFile.Data{
+            request: request,
+            response: response,
+            service: %Service{name: __MODULE__, whereis: self()}
+          },
+          instance
+        )
+      end
+
+      @spec data_file_name(request_data()) :: String.t()
+      def data_file_name(%Bird{common_name: common_name}) do
+        String.replace(common_name, " ", "_")
+      end
+
+      def data_file_name({:recent_observations, region}) do
+        region
+      end
+
       defoverridable(headers: 1)
       defoverridable(params: 1)
       defoverridable(ets_key: 1)
       defoverridable(message_details: 1)
       defoverridable(url: 1)
+      defoverridable(write_to_disk: 3)
+      defoverridable(data_file_name: 1)
 
       #########################################################
       #########################################################
@@ -123,8 +164,8 @@ defmodule BirdSong.Services.ThrottledCache do
 
       def start_link(opts) do
         {name, opts} =
-          opts
-          |> Keyword.merge(@module_opts)
+          @module_opts
+          |> Keyword.merge(opts)
           |> Keyword.put(:service, __MODULE__)
           |> Keyword.put_new(:throttle_ms, @throttle_ms)
           |> Keyword.pop(:name, __MODULE__)
@@ -160,6 +201,14 @@ defmodule BirdSong.Services.ThrottledCache do
 
       def handle_call({:has_data?, request_data}, _from, %State{ets_table: ets_table} = state) do
         {:reply, :ets.member(ets_table, ets_key(request_data)), state}
+      end
+
+      def handle_call(:data_folder_path, _from, %State{} = state) do
+        {:reply, State.data_folder_path(state), state}
+      end
+
+      def handle_cast({:update_write_config, write_to_disk?}, %State{} = state) do
+        {:noreply, State.update_write_config(state, write_to_disk?)}
       end
 
       def handle_cast(:clear_cache, state) do
@@ -223,30 +272,69 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.reply(from, response)
       end
 
-      defp maybe_write_to_disk(response, %State{}) do
-        # Ignore for now. Plan to refactor later to save responses as JSON files to use as test mocks.
-        response
-      end
-
       @spec log_external_api_call(String.t()) :: String.t()
       defp log_external_api_call("" <> url) do
-        case Mix.env() do
-          :test -> log_external_api_call(url, :test)
-          _ -> url
-        end
+        log_external_api_call(url, Mix.env())
       end
 
       @spec log_external_api_call(String.t(), atom()) :: String.t()
-      defp log_external_api_call("http://localhost" <> _ = url, :test) do
+      defp log_external_api_call("http://localhost" <> _ = url, _test) do
         url
       end
 
-      defp log_external_api_call("" <> url, :test) do
-        [inspect([__MODULE__]), "event=external_api_call", "url=" <> url]
-        |> Enum.join(" ")
-        |> Logger.warn()
+      defp log_external_api_call("" <> url, _test) do
+        Helpers.log(:warning, __MODULE__, event: "external_api_call", url: url, status: "sent")
 
         url
+      end
+
+      defp log_external_api_response(
+             response,
+             request
+           ) do
+        case url(request) do
+          "http://localhost" <> _ -> :ok
+          url -> do_log_external_api_response(url, response)
+        end
+
+        response
+      end
+
+      defp do_log_external_api_response(url, response) do
+        {level, details} =
+          case response do
+            {:ok, %HTTPoison.Response{status_code: 200}} ->
+              {:debug, status_code: 200}
+
+            {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
+              {:warning, status_code: code, body: body}
+
+            {:error, %HTTPoison.Error{} = error} ->
+              {:warning, error: error}
+          end
+
+        Helpers.log(level, __MODULE__, [
+          {:event, "external_api_call"},
+          {:url, url} | details
+        ])
+      end
+
+      defp response_status({:ok, %HTTPoison.Response{status_code: 200}}), do: {:debug, "success"}
+
+      defp maybe_write_to_disk(
+             {:ok, %HTTPoison.Response{status_code: 200}} = response,
+             request,
+             %State{} = state
+           ) do
+        if State.write_to_disk?(state) do
+          write_to_disk(response, request, state)
+        end
+
+        response
+      end
+
+      defp maybe_write_to_disk(response, _request, %State{}) do
+        response
       end
     end
   end

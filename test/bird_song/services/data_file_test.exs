@@ -1,9 +1,18 @@
 defmodule BirdSong.Services.DataFileTest.FakeService do
   use GenServer
-  alias BirdSong.Services.DataFile.Data
 
-  def data_folder_path(%Data{service_instance: instance}) do
-    GenServer.call(instance, :tmp_dir)
+  alias BirdSong.{
+    Bird,
+    Services.DataFile.Data,
+    Services.Service
+  }
+
+  def data_folder_path(%Service{whereis: pid}) do
+    GenServer.call(pid, :tmp_dir)
+  end
+
+  def data_file_name(%Bird{common_name: common_name}) do
+    common_name
   end
 
   def start_link(opts) do
@@ -27,8 +36,15 @@ defmodule BirdSong.Services.DataFileTest do
   use ExUnit.Case
   use BirdSong.MockDataAttributes
 
+  alias BirdSong.MockApiCase
   alias BirdSong.TestHelpers
-  alias BirdSong.{Services.Ebird, Services.DataFile}
+
+  alias BirdSong.{
+    Services.Ebird,
+    Services.DataFile,
+    Services.Service
+  }
+
   alias __MODULE__.FakeService
   alias DataFile.Data
 
@@ -36,7 +52,7 @@ defmodule BirdSong.Services.DataFileTest do
   @bird_with_existing_file @eastern_bluebird
   @good_response %HTTPoison.Response{status_code: 200, body: ~s({message: "hello"})}
   @good_data %Data{
-    bird: @bird_without_existing_file,
+    request: @bird_without_existing_file,
     response: {:ok, @good_response}
   }
 
@@ -63,7 +79,7 @@ defmodule BirdSong.Services.DataFileTest do
     {:ok, service_instance} =
       case tags do
         %{service: service} when is_atom(service) ->
-          {:ok, service}
+          MockApiCase.start_service_supervised(service, tags)
 
         %{} ->
           FakeService.start_link(
@@ -73,13 +89,19 @@ defmodule BirdSong.Services.DataFileTest do
           )
       end
 
+    assert is_pid(service_instance)
+
     DataFile.register_listener(instance)
 
-    data = %{@good_data | bird: bird, service: service, service_instance: service_instance}
+    data = %{
+      @good_data
+      | request: bird,
+        service: %Service{name: service, whereis: service_instance}
+    }
 
     on_exit(fn ->
       Logger.configure(level: prev_level)
-      remove_generated_files(service, bird, data)
+      MockApiCase.clean_up_tmp_folders(tags)
     end)
 
     {:ok, instance: instance, data: data}
@@ -94,14 +116,17 @@ defmodule BirdSong.Services.DataFileTest do
       assert DataFile.write(data, instance) === :ok
 
       assert_receive {DataFile, message}
+      expected_path = expected_file_path(tmp_dir)
+      assert {:ok, %{written?: true, path: ^expected_path}} = message
 
-      assert message ===
-               {:ok, data |> Map.from_struct() |> Map.merge(%{written?: true})}
-
-      assert File.ls(tmp_dir) === {:ok, ["Giant_Dodo.json"]}
+      assert File.ls(tmp_dir) === {:ok, ["Giant Dodo.json"]}
     end
 
-    test "logs a message when write is successful", %{instance: instance, data: data} do
+    test "logs a message when write is successful", %{
+      instance: instance,
+      data: data,
+      tmp_dir: tmp_dir
+    } do
       Logger.configure(level: :info)
 
       [log] =
@@ -114,7 +139,7 @@ defmodule BirdSong.Services.DataFileTest do
       expected =
         Enum.join(
           [
-            " bird=Giant Dodo",
+            " path=" <> expected_file_path(tmp_dir),
             "service=Elixir.BirdSong.Services.DataFileTest.FakeService",
             "written?=true"
           ],
@@ -136,7 +161,12 @@ defmodule BirdSong.Services.DataFileTest do
                {:error,
                 data
                 |> Map.from_struct()
-                |> Map.merge(%{written?: false, error: :write_error, reason: :enoent})}
+                |> Map.merge(%{
+                  written?: false,
+                  error: :write_error,
+                  reason: :enoent,
+                  path: expected_file_path("data/fake_folder")
+                })}
     end
 
     @tag use_correct_folder?: false
@@ -158,21 +188,14 @@ defmodule BirdSong.Services.DataFileTest do
       assert log ===
                Enum.join(
                  [
-                   "bird=Giant Dodo",
                    "error=write_error",
+                   "path=data/fake_folder/Giant Dodo.json",
                    "reason=enoent",
                    "service=Elixir.BirdSong.Services.DataFileTest.FakeService",
                    "written?=false"
                  ],
                  " "
                )
-    end
-
-    test "returns error for Ebird", %{instance: instance} do
-      assert DataFile.write(%{@good_data | service: Ebird}, instance) ===
-               {:error, :forbidden_service}
-
-      refute_receive {DataFile, _}
     end
 
     @tag instance_name: FakeService
@@ -195,52 +218,69 @@ defmodule BirdSong.Services.DataFileTest do
       refute_receive {DataFile, _}
     end
 
-    test "returns error if response is bad", %{instance: instance} do
-      expected = {:error, :bad_response}
+    test "throws error if response is bad", %{instance: instance} do
+      assert_raise FunctionClauseError, fn ->
+        @good_data
+        |> Map.put(:response, {:ok, %{@good_response | status_code: 404}})
+        |> DataFile.write(instance)
+      end
 
-      assert @good_data
-             |> Map.put(:response, {:ok, %{@good_response | status_code: 404}})
-             |> DataFile.write(instance) === expected
-
-      assert @good_data
-             |> Map.put(:response, {:error, %HTTPoison.Error{}})
-             |> DataFile.write(instance) === expected
+      assert_raise FunctionClauseError, fn ->
+        @good_data
+        |> Map.put(:response, {:error, %HTTPoison.Error{}})
+        |> DataFile.write(instance)
+      end
     end
 
     @tag service: XenoCanto
-    test "works for XenoCanto service", %{data: data, instance: instance} do
-      assert DataFile.read(data) === {:error, :enoent}
-      DataFile.write(data, instance)
-      assert_receive {DataFile, {:ok, %{}}}
-      assert {:ok, _} = DataFile.read(data)
+    test "works for XenoCanto service", tags do
+      assert_works_for_service(tags)
+    end
+
+    @tag service: Flickr
+    test "works for Flickr service", tags do
+      assert_works_for_service(tags)
+    end
+
+    @tag service: Ebird
+    test "works for Ebird service", tags do
+      tags =
+        Map.update!(tags, :data, &Map.replace!(&1, :request, {:recent_observations, "US-NC-067"}))
+
+      data = Map.fetch!(tags, :data)
+      assert Path.join(tags[:tmp_dir], "US-NC-067.json") =~ DataFile.data_file_path(data)
+      assert_works_for_service(tags)
     end
   end
 
   describe "&read/1" do
     @tag service: XenoCanto
     @tag use_existing_file?: true
+    @tag tmp_dir: false
     test "returns {:ok, string} when read is successful", %{
       data:
         %Data{
-          service: XenoCanto,
-          bird: @bird_with_existing_file
+          request: @bird_with_existing_file
         } = data
     } do
-      assert data |> DataFile.data_file_path() |> File.exists?()
+      file = DataFile.data_file_path(data)
+      assert file === "data/recordings/Eastern_Bluebird.json"
+      assert File.exists?(file)
       assert {:ok, "" <> _} = DataFile.read(data)
     end
   end
 
-  def remove_generated_files(FakeService, %Bird{}, %Data{}) do
-    File.rm_rf!("tmp")
+  defp assert_works_for_service(%{data: data, instance: instance, tmp_dir: tmp_dir}) do
+    assert apply(data.service.name, :data_folder_path, [data.service]) === tmp_dir
+    assert DataFile.read(data) === {:error, :enoent}
+    assert :ok = DataFile.write(data, instance)
+    assert_receive {DataFile, {:ok, %{}}}
+    assert {:ok, _} = DataFile.read(data)
   end
 
-  def remove_generated_files(service, bird, %Data{} = data)
-      when is_atom(service) and bird === @bird_without_existing_file do
-    DataFile.remove(data)
-  end
-
-  def remove_generated_files(service, %Bird{}, %Data{}) when is_atom(service) do
-    :ok
+  def expected_file_path(tmp_dir) do
+    tmp_dir
+    |> Path.relative_to_cwd()
+    |> Path.join("Giant Dodo.json")
   end
 end

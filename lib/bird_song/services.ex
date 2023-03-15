@@ -1,5 +1,6 @@
 defmodule BirdSong.Services do
   use GenServer
+  alias BirdSong.Services.DataFile
   alias BirdSong.Bird
   alias __MODULE__.Service
   @env Application.compile_env(:bird_song, BirdSong.Services)
@@ -23,6 +24,7 @@ defmodule BirdSong.Services do
       name: @observations,
       whereis: @observations
     },
+    overwrite?: false,
     timeout: @timeout,
     __tasks: []
   ]
@@ -67,13 +69,47 @@ defmodule BirdSong.Services do
         from,
         %__MODULE__{__from: nil} = state
       ) do
-    {:noreply, Enum.reduce([:images, :recordings], %{state | __from: from}, &start_task/2)}
+    {:noreply,
+     [:images, :recordings]
+     |> Enum.reduce(%{state | __from: from}, &maybe_start_task/2)
+     |> maybe_reply()}
   end
 
-  def start_task(
-        key,
-        %__MODULE__{bird: bird, timeout: timeout} = state
-      ) do
+  def maybe_start_task(key, %__MODULE__{overwrite?: true} = state) do
+    start_task(key, state)
+  end
+
+  def maybe_start_task(key, %__MODULE__{bird: bird, overwrite?: false} = state) do
+    service = Map.fetch!(state, key)
+
+    case DataFile.read(%DataFile.Data{
+           service: service,
+           request: bird
+         }) do
+      {:ok, saved_response} ->
+        # overwrite? is false and a data file exists for this bird,
+        # so do not call the service.
+        Map.update!(
+          state,
+          key,
+          &Map.replace!(
+            &1,
+            :response,
+            # at this point in development, we do not need to preserve response headers;
+            # this may change in the future.
+            apply(service.name, :parse_response, [
+              {:ok, %HTTPoison.Response{status_code: 200, body: saved_response}},
+              bird
+            ])
+          )
+        )
+
+      {:error, :enoent} ->
+        start_task(key, state)
+    end
+  end
+
+  def start_task(key, %__MODULE__{bird: bird, timeout: timeout} = state) do
     %Service{name: name, whereis: whereis} = Map.fetch!(state, key)
 
     %Task{ref: task_ref} =
@@ -89,10 +125,10 @@ defmodule BirdSong.Services do
     do: handle_response({ref, {:error, error}}, state)
 
   def handle_info({:DOWN, ref, :process, _pid, reason}, %__MODULE__{} = state) do
-    state = %__MODULE__{} = handle_downed_task(state, ref, reason)
-
-    maybe_reply(state)
-    {:noreply, state}
+    {:noreply,
+     state
+     |> handle_downed_task(ref, reason)
+     |> maybe_reply()}
   end
 
   def terminate(reason, _state) do
@@ -120,24 +156,32 @@ defmodule BirdSong.Services do
     |> Map.update!(key, &%{&1 | exit_reason: exit_reason})
   end
 
+  @spec maybe_reply(t()) :: t()
   defp maybe_reply(%__MODULE__{__tasks: []} = state) do
     # all tasks are finished, so we can reply and also terminate the server
     reply(state)
-
-    # DynamicSupervisor.terminate_child(__MODULE__.GenServers, self())
   end
 
-  defp maybe_reply(%__MODULE__{}) do
+  defp maybe_reply(%__MODULE__{} = state) do
     # at least one task has not finished yet,
     # so we are not ready to reply
-    :ok
+    state
   end
 
-  defp reply(%__MODULE__{__from: from, bird: bird, images: images, recordings: recordings}) do
+  defp reply(state) do
+    %__MODULE__{
+      __from: from,
+      bird: bird,
+      images: images,
+      recordings: recordings
+    } = state
+
     GenServer.reply(from, %__MODULE__{
       bird: bird,
       images: images,
       recordings: recordings
     })
+
+    state
   end
 end

@@ -1,11 +1,13 @@
 defmodule BirdSong.Services.Flickr do
-  use BirdSong.Services.ThrottledCache, ets_opts: [], ets_name: :flickr_cache
+  use BirdSong.Services.ThrottledCache,
+    ets_opts: [],
+    ets_name: :flickr_cache,
+    data_folder_path: "data/images"
 
   alias BirdSong.{
     Bird,
     Services.Helpers,
-    Services.Flickr.Response,
-    Services.DataFile.Data
+    Services.Flickr.Response
   }
 
   @api_key :bird_song
@@ -22,9 +24,6 @@ defmodule BirdSong.Services.Flickr do
   def get_images(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
     get(bird, server)
   end
-
-  def data_file_name(%Bird{common_name: name}), do: "flickr_" <> name
-  def data_folder_path(%Data{}), do: "data/images"
 
   def url(%Bird{} = bird) do
     __MODULE__

@@ -1,55 +1,56 @@
 defmodule BirdSong.Services.DataFile.Data do
-  defstruct [:response, :bird, :service, :service_instance]
+  alias BirdSong.{
+    Services.Service,
+    Services.ThrottledCache
+  }
+
+  defstruct [:response, :request, :service]
+
+  @type t() :: %__MODULE__{
+          request: ThrottledCache.request_data(),
+          response: {:ok, HTTPoison.Response.t()} | nil,
+          service: Service.t()
+        }
 end
 
 defmodule BirdSong.Services.DataFile do
   require Logger
   use GenServer
 
-  alias BirdSong.Bird
+  alias BirdSong.Services.{Helpers, Service}
+
   alias __MODULE__.Data
 
   defstruct overwrite?: false, listeners: []
 
-  @bad_response_error {:error, :bad_response}
-
   @type error() :: :not_alive | :file.posix() | :bad_response | :forbidden_service
 
   @spec read(Data.t()) :: {:ok, String.t()} | {:error, :file.posix()}
-  def read(%Data{bird: %Bird{}, service: service} = data) when is_atom(service) do
+  def read(%Data{} = data) do
     data
     |> data_file_path()
     |> File.read()
   end
 
   @spec write(Data.t(), pid | atom) :: :ok | {:error, error()}
-  def write(%Data{service: BirdSong.Services.Ebird}, _instance) do
-    {:error, :forbidden_service}
-  end
-
   def write(
-        %Data{bird: %Bird{}, response: {:ok, %HTTPoison.Response{status_code: 200}}} = info,
+        %Data{response: {:ok, %HTTPoison.Response{status_code: 200}}} = info,
         instance
       )
       when is_pid(instance) or is_atom(instance) do
     case whereis(instance) do
-      {:ok, server} ->
-        GenServer.cast(server, {:write, info})
-        :ok
+      {:ok, pid} ->
+        GenServer.cast(pid, {:write, info})
 
-      error ->
+      {:error, :not_alive} = error ->
+        Helpers.log(:warning, __MODULE__, %{
+          write: false,
+          error: "data_file_instance_not_alive",
+          instance: instance
+        })
+
         error
     end
-  end
-
-  def write(%Data{response: {:error, %HTTPoison.Error{}}}, _instance), do: @bad_response_error
-
-  def write(%Data{response: {:ok, %HTTPoison.Response{}}}, _instance), do: @bad_response_error
-
-  def remove(%Data{} = data) do
-    data
-    |> data_file_path()
-    |> File.rm!()
   end
 
   def register_listener(instance) when is_pid(instance) or is_atom(instance) do
@@ -63,23 +64,24 @@ defmodule BirdSong.Services.DataFile do
     end
   end
 
-  defp whereis(instance) when is_atom(instance) do
+  defp whereis(instance) do
     case GenServer.whereis(instance) do
       nil -> {:error, :not_alive}
       pid_or_tuple -> {:ok, pid_or_tuple}
     end
   end
 
-  defp data_file_name(%Bird{common_name: common_name}) do
-    common_name
-    |> String.replace(" ", "_")
+  defp data_file_name(%Data{service: %Service{name: service_module}, request: request}) do
+    service_module
+    |> apply(:data_file_name, [request])
     |> Kernel.<>(".json")
   end
 
-  def data_file_path(%Data{bird: bird, service: service} = data) do
+  def data_file_path(%Data{service: service} = data) do
     service
-    |> apply(:data_folder_path, [data])
-    |> Path.join(data_file_name(bird))
+    |> Map.fetch!(:name)
+    |> apply(:data_folder_path, [service])
+    |> Path.join(data_file_name(data))
     |> Path.relative_to_cwd()
   end
 
@@ -88,15 +90,11 @@ defmodule BirdSong.Services.DataFile do
   def log_fn(%{written?: false}), do: &Logger.warn/1
 
   defp log(%Data{} = data, %{} = specifics) do
-    {%Bird{common_name: common_name}, data} =
-      data
-      |> Map.from_struct()
-      |> Map.pop!(:bird)
-
     data
-    |> Map.put(:bird, common_name)
+    |> Map.from_struct()
+    |> Map.delete(:request)
     |> Map.delete(:response)
-    |> Map.delete(:service_instance)
+    |> Map.update!(:service, fn %Service{name: name} -> name end)
     |> Map.merge(specifics)
     |> Enum.map(fn {key, val} -> "#{key}=#{val}" end)
     |> Enum.join(" ")
@@ -105,6 +103,7 @@ defmodule BirdSong.Services.DataFile do
 
   defp log_and_send_messages(%{} = info, %Data{} = data, %__MODULE__{listeners: listeners}) do
     log(data, info)
+
     Enum.each(listeners, &send_message(&1, data, info))
   end
 
@@ -143,15 +142,16 @@ defmodule BirdSong.Services.DataFile do
          } = data},
         %__MODULE__{} = state
       ) do
-    data
-    |> data_file_path()
+    path = data_file_path(data)
+
+    path
     |> File.write(body)
     |> case do
       :ok ->
-        %{written?: true}
+        %{written?: true, path: path}
 
       {:error, reason} ->
-        %{written?: false, error: :write_error, reason: reason}
+        %{written?: false, error: :write_error, reason: reason, path: path}
     end
     |> log_and_send_messages(data, state)
 

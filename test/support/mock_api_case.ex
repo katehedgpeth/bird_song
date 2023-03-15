@@ -41,6 +41,7 @@ defmodule BirdSong.MockApiCase do
     quote location: :keep do
       if unquote(Keyword.get(opts, :use_data_case, true)) do
         use BirdSong.DataCase
+        setup [:seed_from_mock_taxonomy]
       end
 
       require Logger
@@ -48,7 +49,7 @@ defmodule BirdSong.MockApiCase do
       use BirdSong.MockDataAttributes
       alias BirdSong.{MockServer, TestHelpers, Services.Ebird}
 
-      defp listen_to_services(%{services: %Services{} = services}) do
+      def listen_to_services(%{services: %Services{} = services}) do
         do_for_services(services, &listen_to_service/1)
 
         :ok
@@ -56,6 +57,10 @@ defmodule BirdSong.MockApiCase do
 
       defp listen_to_service(%Service{name: name, whereis: whereis}) do
         apply(name, :register_request_listener, [whereis])
+      end
+
+      def seed_from_mock_taxonomy(%{seed_data?: false}) do
+        :ok
       end
 
       def seed_from_mock_taxonomy(%{}) do
@@ -106,19 +111,35 @@ defmodule BirdSong.MockApiCase do
 
       setup_mocks(tags, bypass)
 
+      on_exit(fn ->
+        clean_up_tmp_folders(tags)
+      end)
+
       {:ok, bypass: bypass, services: services}
     end
   end
 
-  def start_service_supervised(module, %{test: test}) do
-    module_alias =
-      module
-      |> Module.split()
-      |> List.last()
+  def clean_up_tmp_folders(%{tmp_dir: "" <> tmp_dir}) do
+    tmp_dir
+    |> Path.join("..")
+    |> File.rm_rf!()
+  end
 
-    test
-    |> Module.concat(module_alias)
+  def clean_up_tmp_folders(%{}), do: :ok
+
+  def start_service_supervised(module, %{test: test} = tags) do
+    case tags do
+      %{tmp_dir: "" <> tmp_dir} -> [data_folder_path: tmp_dir]
+      %{} -> []
+    end
+    |> Keyword.merge(name: Module.concat(test, module_alias(module)))
     |> TestHelpers.start_cache(module)
+  end
+
+  defp module_alias(module) do
+    module
+    |> Module.split()
+    |> List.last()
   end
 
   defguard is_configured_service(service_name) when service_name in [XenoCanto, Flickr, Ebird]
@@ -142,6 +163,9 @@ defmodule BirdSong.MockApiCase do
           },
           Bypass.t()
         ) :: :ok
+
+  def setup_mocks(%{use_mock: false}, %Bypass{}), do: :ok
+
   def setup_mocks(%{expect_once: func}, %Bypass{} = bypass) when is_function(func),
     do: Bypass.expect_once(bypass, func)
 
@@ -176,8 +200,6 @@ defmodule BirdSong.MockApiCase do
         Enum.each(funcs, fn {method, path, func} ->
           Bypass.stub(bypass, method, path, func)
         end)
-
-  def setup_mocks(%{use_mock: false}, %Bypass{}), do: :ok
 
   def update_base_url(%Service{name: name}, %Bypass{} = bypass) do
     update_base_url(name, bypass)

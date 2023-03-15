@@ -19,9 +19,9 @@ defmodule BirdSong.TestHelpers do
 
   @spec start_cache(atom) ::
           {:error, any} | {:ok, :undefined | pid} | {:ok, :undefined | pid, any}
-  def start_cache(name \\ Ecto.UUID.generate() |> String.to_atom(), module)
-      when is_atom(module) do
-    ExUnit.Callbacks.start_supervised({module, name: name})
+  def start_cache(opts \\ [name: Ecto.UUID.generate() |> String.to_atom()], module)
+      when is_atom(module) and is_list(opts) do
+    ExUnit.Callbacks.start_supervised({module, opts})
   end
 
   def parse_logs("" <> logs) do

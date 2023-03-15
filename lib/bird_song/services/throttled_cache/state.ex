@@ -14,19 +14,23 @@ defmodule BirdSong.Services.ThrottledCache.State do
   @type request_data() :: {GenServer.from(), any()}
 
   @type t() :: %__MODULE__{
+          data_folder_path: String.t(),
           ets_table: :ets.table(),
           ets_name: atom(),
           ets_opts: [:ets.table_type()],
           backlog: [request_data],
-          data_file_instance: GenServer.server(),
+          data_file_instance: GenServer.server() | nil,
           request_listeners: [pid()],
           service: [XenoCanto | Flickr | Ebird],
           tasks: %{reference() => request_data()},
           throttled?: boolean(),
-          throttle_ms: integer()
+          throttle_ms: integer(),
+          write_responses_to_disk?: boolean()
         }
 
+  @enforce_keys [:data_folder_path]
   defstruct [
+    :data_folder_path,
     :ets_table,
     :ets_name,
     :service,
@@ -39,7 +43,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
     throttle_ms:
       :bird_song
       |> Application.compile_env(ThrottledCache)
-      |> Keyword.fetch!(:throttle_ms)
+      |> Keyword.fetch!(:throttle_ms),
+    write_responses_to_disk?: false
   ]
 
   defguard is_known_service(service)
@@ -145,6 +150,33 @@ defmodule BirdSong.Services.ThrottledCache.State do
         build_request_message(start_or_end, request, service)
       )
     )
+  end
+
+  def update_write_config(%__MODULE__{} = state, write_to_disk?) do
+    case write_to_disk? do
+      true ->
+        ensure_data_file_started(state)
+
+      false ->
+        state
+    end
+    |> Map.replace!(:write_responses_to_disk?, write_to_disk?)
+  end
+
+  def write_to_disk?(%__MODULE__{write_responses_to_disk?: write_to_disk?}), do: write_to_disk?
+
+  def data_folder_path(%__MODULE__{data_folder_path: "" <> data_folder_path}) do
+    data_folder_path
+  end
+
+  defp ensure_data_file_started(%__MODULE__{} = state) do
+    pid =
+      case GenServer.start(state.data_file_instance, []) do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
+
+    Map.replace!(state, :data_file_instance, pid)
   end
 
   defp ets_table(%__MODULE__{ets_table: ets_table}), do: ets_table

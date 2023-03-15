@@ -1,7 +1,6 @@
 defmodule BirdSong.Services.EbirdTest do
   use BirdSong.MockApiCase
   alias BirdSong.MockServer
-  alias ExUnit.CaptureLog
 
   alias BirdSong.{
     Services,
@@ -53,28 +52,17 @@ defmodule BirdSong.Services.EbirdTest do
       bypass: bypass,
       instance: instance
     } do
-      log =
-        CaptureLog.capture_log(fn ->
-          assert Ebird.get_recent_observations(@forsyth_county, instance) ==
-                   {:error,
-                    {:not_found,
-                     mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent?back=30"}}
-        end)
-
-      assert log =~ "status_code=404 url=" <> mock_url(bypass)
+      assert Ebird.get_recent_observations(@forsyth_county, instance) ==
+               {:error,
+                {:not_found, mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent"}}
     end
 
     @tag expect_once: &MockServer.error_response/1
     test "returns {:error, {:bad_response, %HTTPoison.Response{}}} for bad status code", %{
       instance: instance
     } do
-      log =
-        CaptureLog.capture_log(fn ->
-          assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
-                   Ebird.get_recent_observations(@forsyth_county, instance)
-        end)
-
-      assert log =~ "status_code=500"
+      assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
+               Ebird.get_recent_observations(@forsyth_county, instance)
     end
 
     @tag use_mock: false
@@ -84,13 +72,8 @@ defmodule BirdSong.Services.EbirdTest do
     } do
       Bypass.down(bypass)
 
-      log =
-        CaptureLog.capture_log(fn ->
-          assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
-                   Ebird.get_recent_observations(@forsyth_county, instance)
-        end)
-
-      assert log =~ "status_code=unknown url=unknown error=econnrefused"
+      assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
+               Ebird.get_recent_observations(@forsyth_county, instance)
     end
   end
 end

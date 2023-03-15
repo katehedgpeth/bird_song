@@ -33,12 +33,6 @@ defmodule BirdSong.MockDataAttributes do
       }
       @mocked_birds [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird]
 
-      @birds_by_sci_name Enum.reduce(
-                           [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird],
-                           %{},
-                           fn bird, acc -> Map.put(acc, bird.sci_name, bird) end
-                         )
-
       @xeno_canto_path BirdSong.MockDataAttributes.url_path(XenoCanto)
       @flickr_path BirdSong.MockDataAttributes.url_path(Flickr)
       @ebird_path BirdSong.MockDataAttributes.url_path(Ebird, {:recent_observations, ":region"})
