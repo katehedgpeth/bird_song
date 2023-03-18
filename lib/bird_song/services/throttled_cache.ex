@@ -310,17 +310,19 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       @spec log_external_api_call(String.t()) :: String.t()
-      defp log_external_api_call("" <> url) do
-        log_external_api_call(url, Mix.env())
-      end
-
-      @spec log_external_api_call(String.t(), atom()) :: String.t()
-      defp log_external_api_call("http://localhost" <> _ = url, _test) do
+      defp log_external_api_call("http://localhost" <> _ = url) do
         url
       end
 
-      defp log_external_api_call("" <> url, _test) do
-        Helpers.log([event: "external_api_call", url: url, status: "sent"], __MODULE__, :info)
+      defp log_external_api_call("" <> url) do
+        Helpers.log(
+          [event: "external_api_call", url: url, status: "sent"],
+          __MODULE__,
+          case Mix.env() do
+            :test -> :warning
+            _ -> :info
+          end
+        )
 
         url
       end
