@@ -2,6 +2,7 @@ defmodule BirdSong.MockServer do
   require Logger
   use BirdSong.MockDataAttributes
 
+  alias BirdSong.Services.Helpers
   alias Plug.Conn
 
   alias BirdSong.{
@@ -81,10 +82,7 @@ defmodule BirdSong.MockServer do
   end
 
   defp logged_not_found_response(conn, %{} = body) do
-    body
-    |> Enum.map(&(&1 |> Tuple.to_list() |> Enum.join("=")))
-    |> Enum.join(" ")
-    |> Logger.warn()
+    Helpers.log(body, __MODULE__)
 
     not_found_response(conn, body)
   end
@@ -100,8 +98,13 @@ defmodule BirdSong.MockServer do
     |> DataFile.read()
     |> case do
       {:ok, "" <> body} ->
-        Logger.debug(
-          "[#{__MODULE__}] response_mocked=true service=#{service} bird=#{bird.common_name}"
+        Helpers.log(
+          %{
+            response_mocked: true,
+            service: service.module,
+            bird: bird.common_name
+          },
+          __MODULE__
         )
 
         Conn.resp(conn, 200, body)
