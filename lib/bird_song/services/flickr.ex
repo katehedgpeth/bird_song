@@ -1,8 +1,7 @@
 defmodule BirdSong.Services.Flickr do
   use BirdSong.Services.ThrottledCache,
     ets_opts: [],
-    ets_name: :flickr_cache,
-    data_folder_path: "data/images"
+    ets_name: :flickr_cache
 
   alias BirdSong.{
     Bird,

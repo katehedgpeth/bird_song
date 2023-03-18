@@ -27,7 +27,7 @@ defmodule BirdSong.Services.ThrottledCache do
 
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
-      @module_opts module_opts
+      @module_opts Keyword.put(module_opts, :data_folder_path, "data")
 
       @type request_data() :: Services.ThrottledCache.request_data()
 
@@ -37,13 +37,13 @@ defmodule BirdSong.Services.ThrottledCache do
         get(data, pid)
       end
 
-      def get(data, pid) when is_pid(pid) do
-        case get_from_cache(data, pid) do
+      def get(data, server) when is_pid(server) or is_atom(server) do
+        case get_from_cache(data, server) do
           {:ok, data} ->
             {:ok, data}
 
           :not_found ->
-            GenServer.call(pid, {:get_from_api, data}, :infinity)
+            GenServer.call(server, {:get_from_api, data}, :infinity)
         end
       end
 
@@ -97,8 +97,15 @@ defmodule BirdSong.Services.ThrottledCache do
         end
       end
 
-      def data_folder_path(%Service{whereis: pid}) do
+      def data_folder_path(%Service{whereis: pid}) when is_pid(pid) do
         GenServer.call(pid, :data_folder_path)
+      end
+
+      def data_folder_path(%Service{whereis: server} = service) do
+        case GenServer.whereis(server) do
+          nil -> {:error, {:not_alive, server}}
+          pid -> data_folder_path(%{service | whereis: pid})
+        end
       end
 
       #########################################################
@@ -126,13 +133,14 @@ defmodule BirdSong.Services.ThrottledCache do
       @spec write_to_disk(Helpers.api_response(), request_data(), State.t()) ::
               :ok | {:error, any()}
       def write_to_disk({:ok, %HTTPoison.Response{}} = response, request, %State{
-            data_file_instance: instance
+            data_file_instance: instance,
+            service: service
           }) do
         DataFile.write(
           %DataFile.Data{
             request: request,
             response: response,
-            service: %Service{name: __MODULE__, whereis: self()}
+            service: service
           },
           instance
         )
@@ -140,11 +148,17 @@ defmodule BirdSong.Services.ThrottledCache do
 
       @spec data_file_name(request_data()) :: String.t()
       def data_file_name(%Bird{common_name: common_name}) do
-        String.replace(common_name, " ", "_")
+        common_name
+        |> String.replace(" ", "_")
+        |> String.replace("/", "\\")
       end
 
       def data_file_name({:recent_observations, region}) do
         region
+      end
+
+      def seed_ets_table(%State{} = state) do
+        State.seed_ets_table(state)
       end
 
       defoverridable(headers: 1)
@@ -166,7 +180,6 @@ defmodule BirdSong.Services.ThrottledCache do
         {name, opts} =
           @module_opts
           |> Keyword.merge(opts)
-          |> Keyword.put(:service, __MODULE__)
           |> Keyword.put_new(:throttle_ms, @throttle_ms)
           |> Keyword.pop(:name, __MODULE__)
 
@@ -174,7 +187,12 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       def init(opts) do
-        {:ok, State.new(opts)}
+        send(self(), :create_data_folder)
+
+        {:ok,
+         opts
+         |> Keyword.put(:service, %Service{module: __MODULE__, whereis: self()})
+         |> State.new()}
       end
 
       def handle_call(
@@ -219,6 +237,19 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, State.register_request_listener(state, pid)}
       end
 
+      def handle_info(:seed_ets_table, state) do
+        {:noreply, seed_ets_table(state)}
+      end
+
+      def handle_info(:create_data_folder, state) do
+        :ok =
+          state
+          |> State.data_folder_path()
+          |> File.mkdir_p()
+
+        {:noreply, state}
+      end
+
       def handle_info(
             :send_request,
             %State{} = state
@@ -251,12 +282,18 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, %{state | tasks: tasks}}
       end
 
+      defoverridable(handle_info: 2)
+
       #########################################################
       #########################################################
       ##
       ##  PRIVATE METHODS
       ##
       #########################################################
+
+      defp handle_response({:seed_data_task, request}, response, %State{}) do
+        :ok
+      end
 
       defp handle_response(
              {from, request_data},
@@ -283,7 +320,7 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       defp log_external_api_call("" <> url, _test) do
-        Helpers.log(:warning, __MODULE__, event: "external_api_call", url: url, status: "sent")
+        Helpers.log([event: "external_api_call", url: url, status: "sent"], __MODULE__, :info)
 
         url
       end
@@ -304,19 +341,20 @@ defmodule BirdSong.Services.ThrottledCache do
         {level, details} =
           case response do
             {:ok, %HTTPoison.Response{status_code: 200}} ->
-              {:debug, status_code: 200}
+              {:info, status_code: 200}
 
             {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
-              {:warning, status_code: code, body: body}
+              {:error, status_code: code, body: body}
 
             {:error, %HTTPoison.Error{} = error} ->
-              {:warning, error: error}
+              {:error, error: error}
           end
 
-        Helpers.log(level, __MODULE__, [
+        [
           {:event, "external_api_call"},
           {:url, url} | details
-        ])
+        ]
+        |> Helpers.log(__MODULE__, level)
       end
 
       defp response_status({:ok, %HTTPoison.Response{status_code: 200}}), do: {:debug, "success"}

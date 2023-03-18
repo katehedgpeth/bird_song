@@ -1,6 +1,7 @@
 defmodule BirdSong.Services.Ebird.Taxonomy do
   require Logger
   alias Ecto.Changeset
+  alias BirdSong.Services.Helpers
 
   alias BirdSong.{
     Bird,
@@ -25,10 +26,14 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
 
     Enum.map(
       no_family,
-      &Logger.warning(
-        taxonomy_parse_error: :no_family,
-        common_name: &1["comName"],
-        sci_name: &1["sciName"]
+      &Helpers.log(
+        [
+          taxonomy_parse_error: :no_family,
+          common_name: &1["comName"],
+          sci_name: &1["sciName"]
+        ],
+        __MODULE__,
+        :warning
       )
     )
 

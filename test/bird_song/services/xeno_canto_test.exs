@@ -1,6 +1,6 @@
 defmodule BirdSong.Services.XenoCantoTest do
   use BirdSong.MockApiCase
-  alias BirdSong.Services
+  alias BirdSong.{Services, TestHelpers}
 
   alias Services.{
     Service,
@@ -20,10 +20,10 @@ defmodule BirdSong.Services.XenoCantoTest do
     {:ok, whereis: whereis}
   end
 
-  @tag use_mock: false
+  @tag use_mock_routes?: false
   test "&url/1 builds a full URL", %{bird: bird, bypass: bypass} do
     assert XenoCanto.url(bird) ===
-             mock_url(bypass) <>
+             TestHelpers.mock_url(bypass) <>
                "/api/2/recordings?query=" <> String.replace(bird.sci_name, " ", "+")
   end
 

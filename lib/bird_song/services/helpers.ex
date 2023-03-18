@@ -40,8 +40,8 @@ defmodule BirdSong.Services.Helpers do
     {:error, error}
   end
 
-  @spec log(atom(), atom(), Keyword.t() | Map.t()) :: :ok
-  def log(level \\ :debug, module, args) do
+  @spec log(Keyword.t() | Map.t(), atom(), atom()) :: :ok
+  def log(args, module, level \\ :debug) do
     log_fn =
       case level do
         :debug -> &Logger.debug/1

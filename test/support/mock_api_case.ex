@@ -5,8 +5,8 @@ defmodule BirdSong.MockApiCase do
   Expects all services to have a :base_url config under the :bird_song config.
 
   Use one of these tags to skip bypass setup:
-    * `@tag use_bypass: false` will skip all bypass setup
-    * `@tag use_mocks: false` will initialize bypass but skip setting up expects
+    * `@tag use_bypass?: false` will skip all bypass setup
+    * `@tag use_mock_routes?: false` will initialize bypass but skip setting up expects
 
   To use the mock setup process, the `:service` tag is always required. This specifies which services
   should have their `:base_url` config updated.
@@ -26,26 +26,25 @@ defmodule BirdSong.MockApiCase do
     * `@tag images_service: ModuleName`
   """
   use ExUnit.CaseTemplate
-  use BirdSong.MockDataAttributes
-
-  alias BirdSong.{
-    TestHelpers,
-    Services,
-    Services.Service,
-    Services.Ebird,
-    Services.Flickr,
-    Services.XenoCanto
-  }
 
   using opts do
-    quote location: :keep do
-      if unquote(Keyword.get(opts, :use_data_case, true)) do
+    quote location: :keep, bind_quoted: [opts: opts] do
+      import BirdSong.TestSetup
+
+      @moduletag seed_services?: Keyword.get(opts, :seed_services?, true)
+
+      if Keyword.get(opts, :use_data_case, true) do
         use BirdSong.DataCase
         setup [:seed_from_mock_taxonomy]
       end
 
+      setup [:start_services]
+      setup [:listen_to_services]
+      setup [:setup_bypass]
+      setup [:setup_route_mocks]
+      setup [:clean_up_tmp_folder_on_exit]
+
       require Logger
-      import BirdSong.MockApiCase
       use BirdSong.MockDataAttributes
 
       alias BirdSong.{
@@ -55,193 +54,7 @@ defmodule BirdSong.MockApiCase do
         Services.Ebird
       }
 
-      def listen_to_services(%{services: %Services{} = services}) do
-        do_for_services(services, &listen_to_service/1)
-
-        :ok
-      end
-
-      defp listen_to_service(%Service{name: name, whereis: whereis}) do
-        apply(name, :register_request_listener, [whereis])
-      end
-
-      def seed_from_mock_taxonomy(%{seed_data?: false}) do
-        :ok
-      end
-
-      def seed_from_mock_taxonomy(%{}) do
-        assert {:ok, [%Bird{} | _]} =
-                 "mock_taxonomy"
-                 |> TestHelpers.mock_file_path()
-                 |> Ebird.Taxonomy.read_data_file()
-                 |> Ebird.Taxonomy.seed()
-
-        :ok
-      end
-    end
-  end
-
-  setup tags do
-    if Map.get(tags, :use_bypass) === false do
-      :ok
-    else
-      bird =
-        case Map.get(tags, :bird) do
-          bird when bird in @mocked_birds -> bird
-          nil -> nil
-        end
-
-      images_module = Map.get(tags, :images_service, Flickr)
-      recordings_module = Map.get(tags, :recordings_module, XenoCanto)
-      observations_module = Map.get(tags, :observations_service, Ebird)
-
-      [{:ok, recordings_server}, {:ok, images_server}, {:ok, observations_server}] =
-        Enum.map(
-          [
-            recordings_module,
-            images_module,
-            observations_module
-          ],
-          &start_service_supervised(&1, tags)
-        )
-
-      services = %Services{
-        bird: bird,
-        images: %Service{name: images_module, whereis: images_server},
-        recordings: %Service{name: recordings_module, whereis: recordings_server},
-        observations: %Service{name: observations_module, whereis: observations_server},
-        timeout: Map.get(tags, :timeout, 1_000)
-      }
-
-      {:ok, bypass} = setup_bypass(services)
-
-      setup_mocks(tags, bypass)
-
-      on_exit(fn ->
-        clean_up_tmp_folders(tags)
-      end)
-
-      {:ok, bypass: bypass, services: services}
-    end
-  end
-
-  def clean_up_tmp_folders(%{tmp_dir: "" <> tmp_dir}) do
-    tmp_dir
-    |> Path.join("..")
-    |> File.rm_rf!()
-  end
-
-  def clean_up_tmp_folders(%{}), do: :ok
-
-  def start_service_supervised(module, %{test: test} = tags) do
-    case tags do
-      %{tmp_dir: "" <> tmp_dir} -> [data_folder_path: tmp_dir]
-      %{} -> []
-    end
-    |> Keyword.merge(name: Module.concat(test, module_alias(module)))
-    |> TestHelpers.start_cache(module)
-  end
-
-  defp module_alias(module) do
-    module
-    |> Module.split()
-    |> List.last()
-  end
-
-  defguard is_configured_service(service_name) when service_name in [XenoCanto, Flickr, Ebird]
-  defguard is_module_name(name) when is_atom(name) and name not in [:xeno_canto, :flickr, :ebird]
-
-  def setup_bypass(%Services{} = services) do
-    bypass = Bypass.open()
-    do_for_services(services, &update_base_url(&1, bypass))
-    {:ok, bypass}
-  end
-
-  @type bypass_generic_cb :: (Plug.Conn.t() -> Plug.Conn.t())
-  @type bypass_path_cb :: {String.t(), String.t(), bypass_generic_cb()}
-
-  @spec setup_mocks(
-          %{
-            optional(:expect_once) => bypass_generic_cb() | List.t(bypass_generic_cb()),
-            optional(:expect) => bypass_generic_cb() | List.t(bypass_generic_cb()),
-            optional(:stub) => bypass_path_cb() | List.t(bypass_path_cb()),
-            optional(any) => any
-          },
-          Bypass.t()
-        ) :: :ok
-
-  def setup_mocks(%{use_mock: false}, %Bypass{}), do: :ok
-
-  def setup_mocks(%{expect_once: func}, %Bypass{} = bypass) when is_function(func),
-    do: Bypass.expect_once(bypass, func)
-
-  def setup_mocks(
-        %{expect_once: [{"" <> _, "" <> _, func} | _] = funcs},
-        %Bypass{} = bypass
-      )
-      when is_function(func),
-      do:
-        Enum.each(funcs, fn {method, path, func} ->
-          Bypass.expect_once(bypass, method, path, func)
-        end)
-
-  def setup_mocks(%{expect: func}, %Bypass{} = bypass) when is_function(func),
-    do: Bypass.expect(bypass, func)
-
-  def setup_mocks(
-        %{expect: [{"" <> _, "" <> _, func} | _] = funcs},
-        %Bypass{} = bypass
-      )
-      when is_function(func),
-      do:
-        Enum.each(funcs, fn {method, path, func} -> Bypass.expect(bypass, method, path, func) end)
-
-  def setup_mocks(%{stub: {"" <> method, "" <> path, func}}, %Bypass{} = bypass)
-      when is_function(func),
-      do: Bypass.stub(bypass, method, path, func)
-
-  def setup_mocks(%{stub: [{"" <> _, "" <> _, func} | _] = funcs}, %Bypass{} = bypass)
-      when is_function(func),
-      do:
-        Enum.each(funcs, fn {method, path, func} ->
-          Bypass.stub(bypass, method, path, func)
-        end)
-
-  def update_base_url(%Service{name: name}, %Bypass{} = bypass) do
-    update_base_url(name, bypass)
-  end
-
-  def update_base_url(%Service{name: name}, "" <> url) do
-    update_base_url(name, url)
-  end
-
-  def update_base_url(service_name, %Bypass{} = bypass)
-      when is_configured_service(service_name) do
-    do_update_base_url(service_name, mock_url(bypass))
-  end
-
-  def update_base_url(service_name, "" <> url) when is_configured_service(service_name) do
-    do_update_base_url(service_name, url)
-  end
-
-  def update_base_url(service_name, %Bypass{}) when is_module_name(service_name) do
-    :not_updated
-  end
-
-  def update_base_url(service_name, "" <> _) when is_module_name(service_name) do
-    :not_updated
-  end
-
-  defp do_update_base_url(service_name, url) do
-    TestHelpers.update_env(service_name, :base_url, url)
-    {:ok, {service_name, url}}
-  end
-
-  def mock_url(%Bypass{port: port}), do: "http://localhost:#{port}"
-
-  def do_for_services(%Services{} = services, callback) when is_function(callback) do
-    for %Service{} = service <- services |> Map.from_struct() |> Map.values() do
-      callback.(service)
+      # @moduletag seed_services?: false
     end
   end
 end

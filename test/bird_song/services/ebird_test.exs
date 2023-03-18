@@ -5,7 +5,8 @@ defmodule BirdSong.Services.EbirdTest do
   alias BirdSong.{
     Services,
     Services.Ebird,
-    Services.Service
+    Services.Service,
+    TestHelpers
   }
 
   @moduletag services: [Ebird]
@@ -26,10 +27,11 @@ defmodule BirdSong.Services.EbirdTest do
     {:ok, instance: instance}
   end
 
-  @tag use_mock: false
+  @tag use_mock_routes?: false
   test "url builds a full endpoint", %{bypass: bypass} do
     assert Ebird.url({:recent_observations, @forsyth_county}) ===
-             mock_url(bypass) <> Path.join(["/v2/data/obs/", @forsyth_county, "recent"])
+             TestHelpers.mock_url(bypass) <>
+               Path.join(["/v2/data/obs/", @forsyth_county, "recent"])
   end
 
   describe "get_recent_observations" do
@@ -54,7 +56,8 @@ defmodule BirdSong.Services.EbirdTest do
     } do
       assert Ebird.get_recent_observations(@forsyth_county, instance) ==
                {:error,
-                {:not_found, mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent"}}
+                {:not_found,
+                 TestHelpers.mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent"}}
     end
 
     @tag expect_once: &MockServer.error_response/1
@@ -65,7 +68,7 @@ defmodule BirdSong.Services.EbirdTest do
                Ebird.get_recent_observations(@forsyth_county, instance)
     end
 
-    @tag use_mock: false
+    @tag use_mock_routes?: false
     test "returns {:error, %HTTPoison.Error{}} for all other errors", %{
       bypass: bypass,
       instance: instance

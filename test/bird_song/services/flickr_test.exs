@@ -12,17 +12,20 @@ defmodule BirdSong.Services.FlickrTest do
 
   @moduletag services: [Flickr]
 
+  @service Map.fetch!(%Services{}, :images)
+
   setup_all do
     {:ok, images} =
-      DataFile.read(%DataFile.Data{request: @bird, service: Map.fetch!(%Services{}, :images)})
+      DataFile.read(%DataFile.Data{
+        request: @bird,
+        service: Service.ensure_started(@service)
+      })
 
     {:ok, images: images}
   end
 
   describe "&get_image/1" do
-    setup [:listen_to_services]
-
-    @tag use_mock: false
+    @tag use_mock_routes?: false
     test "returns {:ok, %Flickr.Response{}} when request is successful", %{
       bypass: bypass,
       images: images,

@@ -9,7 +9,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
   }
 
   @moduletag service: [XenoCanto, Flickr]
-  @moduletag use_mock: false
+  @moduletag use_mock_routes?: false
   @moduletag :capture_log
   @moduletag seed_data?: false
 
@@ -43,10 +43,9 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
   end
 
   describe "Family parser functions" do
-    setup [:listen_to_services, :insert_order]
+    setup [:insert_order]
     @describetag :tmp_dir
 
-    @tag :only
     test "&parse_and_insert_families/3 writes multiple families to the DB", %{
       raw_data: raw_data,
       order: order
@@ -88,7 +87,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
   end
 
   describe "taxonomy form" do
-    @describetag use_bypass: false
+    @describetag use_bypass?: false
     test "species codes are unique", %{raw_data: raw_data} do
       assert length(raw_data) === 16_860
       by_species_code = raw_data |> Enum.map(&{&1["speciesCode"], &1})

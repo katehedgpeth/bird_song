@@ -1,8 +1,7 @@
 defmodule BirdSong.Services.XenoCanto do
   use BirdSong.Services.ThrottledCache,
     ets_opts: [:bag],
-    ets_name: :xeno_canto,
-    data_folder_path: "data/recordings"
+    ets_name: :xeno_canto
 
   alias __MODULE__.Response
   alias BirdSong.Bird

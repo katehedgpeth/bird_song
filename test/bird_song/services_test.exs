@@ -1,6 +1,5 @@
 defmodule BirdSong.ServicesTest do
   use BirdSong.MockApiCase
-  alias BirdSong.MockApiCase
   alias BirdSong.{Bird, Services, MockServer}
   alias Services.{Flickr, XenoCanto, Service, DataFile}
 
@@ -8,15 +7,10 @@ defmodule BirdSong.ServicesTest do
   @moduletag :capture_log
   @moduletag expect: &MockServer.success_response/1
 
-  setup tags do
-    on_exit(fn -> MockApiCase.clean_up_tmp_folders(tags) end)
-  end
-
   describe "&fetch_data_for_bird/1" do
-    setup [:listen_to_services]
-
     @tag bird: @eastern_bluebird
     @tag :tmp_dir
+    @tag seed_services?: false
     test "fetches data from all services for the specified bird", %{
       services: services,
       bird: bird
@@ -64,7 +58,7 @@ defmodule BirdSong.ServicesTest do
     end
 
     @tag bird: @eastern_bluebird
-    @tag use_mock: false
+    @tag use_mock_routes?: false
     test "does not call service if file exists and overwrite? is false", %{
       bird: bird,
       services: services
@@ -90,8 +84,8 @@ defmodule BirdSong.ServicesTest do
 
   def assert_file_not_exist(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do
     data = %DataFile.Data{service: flickr, request: bird}
-    assert DataFile.read(data) === {:error, :enoent}
-    assert DataFile.read(%{data | service: xeno_canto}) === {:error, :enoent}
+    assert {:error, {:enoent, "" <> _}} = DataFile.read(data)
+    assert {:error, {:enoent, "" <> _}} = DataFile.read(%{data | service: xeno_canto})
   end
 
   def assert_file_exists(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do

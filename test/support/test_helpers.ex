@@ -1,6 +1,6 @@
 defmodule BirdSong.TestHelpers do
   require Logger
-  alias BirdSong.Bird
+  alias BirdSong.{Bird, Services, Services.Service}
   alias Phoenix.LiveView.Socket
   import ExUnit.Assertions, only: [assert: 1, assert: 2]
 
@@ -104,5 +104,47 @@ defmodule BirdSong.TestHelpers do
     )
 
     socket
+  end
+
+  def start_service_supervised(module, tags) do
+    []
+    |> get_data_folder_path_opt(tags)
+    |> get_seed_data_opt(tags)
+    |> get_service_name_opt(tags, module)
+    |> start_cache(module)
+  end
+
+  def module_alias(module) do
+    module
+    |> Module.split()
+    |> List.last()
+  end
+
+  def mock_url(%Bypass{port: port}), do: "http://localhost:#{port}"
+
+  def do_for_services(%Services{} = services, callback) when is_function(callback) do
+    for %Service{} = service <- services |> Map.from_struct() |> Map.values() do
+      callback.(service)
+    end
+  end
+
+  defp get_data_folder_path_opt(opts, %{tmp_dir: "" <> tmp_dir}) do
+    Keyword.put(opts, :data_folder_path, tmp_dir)
+  end
+
+  defp get_data_folder_path_opt(opts, %{}) do
+    opts
+  end
+
+  defp get_seed_data_opt(opts, %{seed_services?: seed?}) do
+    Keyword.put(opts, :seed_data?, seed?)
+  end
+
+  defp get_seed_data_opt(opts, %{}) do
+    opts
+  end
+
+  defp get_service_name_opt(opts, %{test: test}, module) do
+    Keyword.put(opts, :name, Module.concat(test, module_alias(module)))
   end
 end

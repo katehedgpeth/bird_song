@@ -27,12 +27,13 @@ end
 
 defmodule BirdSong.Services.ThrottledCacheTest do
   use ExUnit.Case
-  import BirdSong.MockApiCase, only: [mock_url: 1]
 
   alias BirdSong.{
     Bird,
     Services.DataFile,
-    Services.Helpers
+    Services.Helpers,
+    Services.Service,
+    TestHelpers
   }
 
   @moduletag :capture_log
@@ -92,19 +93,30 @@ defmodule BirdSong.Services.ThrottledCacheTest do
 
   describe "&ThrottledCache.write_to_disk/3 writes a response to disk" do
     @describetag :tmp_dir
-    @describetag use_bypass: false
+    @describetag use_bypass?: false
 
     test "does nothing if data file instance is not running", %{
-      tmp_dir: tmp_dir
+      tmp_dir: tmp_dir,
+      cache: cache
     } do
       assert ThrottledCacheUnderTest.write_to_disk(
                {:ok, %HTTPoison.Response{status_code: 200, body: ~s({foo: "bar"})}},
                {@carolina_wren, ""},
-               %BirdSong.Services.ThrottledCache.State{data_folder_path: tmp_dir}
+               %BirdSong.Services.ThrottledCache.State{
+                 data_folder_path: tmp_dir,
+                 service: %Service{
+                   module: ThrottledCacheUnderTest,
+                   whereis: cache
+                 }
+               }
              ) === {:error, :not_alive}
     end
 
-    test "writes to disk if data file instance is running", %{test: test, tmp_dir: tmp_dir} do
+    test "writes to disk if data file instance is running", %{
+      test: test,
+      tmp_dir: tmp_dir,
+      cache: cache
+    } do
       assert {:ok, data_file_instance} =
                start_supervised({DataFile, name: Module.concat(test, DataFile)})
 
@@ -117,12 +129,10 @@ defmodule BirdSong.Services.ThrottledCacheTest do
                request,
                %BirdSong.Services.ThrottledCache.State{
                  data_folder_path: tmp_dir,
-                 data_file_instance: data_file_instance
+                 data_file_instance: data_file_instance,
+                 service: %Service{module: ThrottledCacheUnderTest, whereis: cache}
                }
              ) === :ok
-
-      assert_receive {:"$gen_call", from, :data_folder_path}
-      GenServer.reply(from, tmp_dir)
 
       assert_receive {DataFile, {:ok, %{written?: true, path: path}}}
 
@@ -135,14 +145,14 @@ defmodule BirdSong.Services.ThrottledCacheTest do
   end
 
   def args(%Bypass{} = bypass, %Bird{} = bird \\ @red_shouldered_hawk) do
-    {bird, mock_url(bypass)}
+    {bird, TestHelpers.mock_url(bypass)}
   end
 
   defp start_cache(%{}) do
     {:ok, cache: start_supervised!(ThrottledCacheUnderTest)}
   end
 
-  defp mock_response(%{use_bypass: false}) do
+  defp mock_response(%{use_bypass?: false}) do
     :ok
   end
 

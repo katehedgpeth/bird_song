@@ -25,16 +25,22 @@ defmodule BirdSong.Services.DataFile do
 
   @type error() :: :not_alive | :file.posix() | :bad_response | :forbidden_service
 
-  @spec read(Data.t()) :: {:ok, String.t()} | {:error, :file.posix()}
+  @spec read(Data.t()) :: {:ok, String.t()} | {:error, {:file.posix(), String.t()}}
   def read(%Data{} = data) do
-    data
-    |> data_file_path()
-    |> File.read()
+    path = data_file_path(data)
+
+    case File.read(path) do
+      {:error, error} -> {:error, {error, path}}
+      result -> result
+    end
   end
 
   @spec write(Data.t(), pid | atom) :: :ok | {:error, error()}
   def write(
-        %Data{response: {:ok, %HTTPoison.Response{status_code: 200}}} = info,
+        %Data{
+          response: {:ok, %HTTPoison.Response{status_code: 200}},
+          service: %Service{}
+        } = info,
         instance
       )
       when is_pid(instance) or is_atom(instance) do
@@ -43,11 +49,15 @@ defmodule BirdSong.Services.DataFile do
         GenServer.cast(pid, {:write, info})
 
       {:error, :not_alive} = error ->
-        Helpers.log(:warning, __MODULE__, %{
-          write: false,
-          error: "data_file_instance_not_alive",
-          instance: instance
-        })
+        Helpers.log(
+          %{
+            write: false,
+            error: "data_file_instance_not_alive",
+            instance: instance
+          },
+          __MODULE__,
+          :warning
+        )
 
         error
     end
@@ -71,7 +81,7 @@ defmodule BirdSong.Services.DataFile do
     end
   end
 
-  defp data_file_name(%Data{service: %Service{name: service_module}, request: request}) do
+  defp data_file_name(%Data{service: %Service{module: service_module}, request: request}) do
     service_module
     |> apply(:data_file_name, [request])
     |> Kernel.<>(".json")
@@ -79,26 +89,24 @@ defmodule BirdSong.Services.DataFile do
 
   def data_file_path(%Data{service: service} = data) do
     service
-    |> Map.fetch!(:name)
+    |> Service.module()
     |> apply(:data_folder_path, [service])
     |> Path.join(data_file_name(data))
     |> Path.relative_to_cwd()
   end
 
-  def log_fn(%{written?: true}), do: &Logger.info/1
+  def log_level(%{written?: true}), do: :info
 
-  def log_fn(%{written?: false}), do: &Logger.warn/1
+  def log_level(%{written?: false}), do: :warning
 
   defp log(%Data{} = data, %{} = specifics) do
     data
     |> Map.from_struct()
     |> Map.delete(:request)
     |> Map.delete(:response)
-    |> Map.update!(:service, fn %Service{name: name} -> name end)
+    |> Map.update!(:service, fn %Service{module: module} -> module end)
     |> Map.merge(specifics)
-    |> Enum.map(fn {key, val} -> "#{key}=#{val}" end)
-    |> Enum.join(" ")
-    |> log_fn(specifics).()
+    |> Helpers.log(__MODULE__, log_level(specifics))
   end
 
   defp log_and_send_messages(%{} = info, %Data{} = data, %__MODULE__{listeners: listeners}) do

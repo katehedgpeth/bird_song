@@ -3,7 +3,10 @@ defmodule BirdSong.Services.Ebird do
          |> Application.compile_env(__MODULE__)
          |> Keyword.fetch!(:token)
 
-  use BirdSong.Services.ThrottledCache, ets_opts: [], ets_name: :throttled_cache
+  use BirdSong.Services.ThrottledCache,
+    ets_opts: [],
+    ets_name: :throttled_cache
+
   require Logger
   alias BirdSong.Services.Helpers
   alias __MODULE__.Observation
@@ -45,4 +48,12 @@ defmodule BirdSong.Services.Ebird do
   end
 
   def ets_key({:recent_observations, region}), do: region
+
+  def handle_info(:seed_ets_table, state) do
+    {:noreply, state}
+  end
+
+  def handle_info(message, state) do
+    super(message, state)
+  end
 end

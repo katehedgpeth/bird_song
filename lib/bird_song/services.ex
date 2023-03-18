@@ -13,16 +13,13 @@ defmodule BirdSong.Services do
     :bird,
     :__from,
     images: %Service{
-      name: @images,
-      whereis: @images
+      module: @images
     },
     recordings: %Service{
-      name: @recordings,
-      whereis: @recordings
+      module: @recordings
     },
     observations: %Service{
-      name: @observations,
-      whereis: @observations
+      module: @observations
     },
     overwrite?: false,
     timeout: @timeout,
@@ -53,6 +50,14 @@ defmodule BirdSong.Services do
 
     :ok = DynamicSupervisor.terminate_child(__MODULE__.GenServers, server)
     response
+  end
+
+  def ensure_started() do
+    Enum.reduce(
+      [:images, :recordings, :observations],
+      %__MODULE__{},
+      fn key, state -> Map.update!(state, key, &Service.ensure_started/1) end
+    )
   end
 
   def start_link(%__MODULE__{} = state) do
@@ -97,23 +102,26 @@ defmodule BirdSong.Services do
             :response,
             # at this point in development, we do not need to preserve response headers;
             # this may change in the future.
-            apply(service.name, :parse_response, [
+            apply(service.module, :parse_response, [
               {:ok, %HTTPoison.Response{status_code: 200, body: saved_response}},
               bird
             ])
           )
         )
 
-      {:error, :enoent} ->
+      {:error, {:enoent, _path}} ->
         start_task(key, state)
     end
   end
 
   def start_task(key, %__MODULE__{bird: bird, timeout: timeout} = state) do
-    %Service{name: name, whereis: whereis} = Map.fetch!(state, key)
+    service = Map.fetch!(state, key)
+    %Service{module: module} = service
 
     %Task{ref: task_ref} =
-      Task.Supervisor.async_nolink(__MODULE__.Tasks, name, :get, [bird, whereis], timeout: timeout)
+      Task.Supervisor.async_nolink(__MODULE__.Tasks, module, :get, [bird, service],
+        timeout: timeout
+      )
 
     Map.update!(state, :__tasks, fn tasks -> [{task_ref, key} | tasks] end)
   end

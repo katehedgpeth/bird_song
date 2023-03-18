@@ -8,7 +8,9 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Services.DataFile,
     Services.XenoCanto,
     Services.Flickr,
-    Services.Ebird
+    Services.Helpers,
+    Services.Ebird,
+    Services.Service
   }
 
   @type request_data() :: {GenServer.from(), any()}
@@ -21,7 +23,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
           backlog: [request_data],
           data_file_instance: GenServer.server() | nil,
           request_listeners: [pid()],
-          service: [XenoCanto | Flickr | Ebird],
+          service: Service.t(),
           tasks: %{reference() => request_data()},
           throttled?: boolean(),
           throttle_ms: integer(),
@@ -95,7 +97,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   def send_request(%__MODULE__{throttled?: false} = state) do
     [{from, request_data} | backlog] = Map.fetch!(state, :backlog)
-    service = Map.fetch!(state, :service)
+    %Service{module: module} = Map.fetch!(state, :service)
 
     log_request(state, request_data, :start)
 
@@ -104,7 +106,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
     %Task{ref: ref} =
       Task.Supervisor.async(
         Services.Tasks,
-        service,
+        module,
         :get_from_api,
         [request_data, state],
         timeout: :infinity
@@ -116,7 +118,13 @@ defmodule BirdSong.Services.ThrottledCache.State do
     |> Map.update!(:tasks, &Map.put(&1, ref, {from, request_data}))
   end
 
-  def save_response(%__MODULE__{} = state, {request_data, {:ok, response}}) do
+  def save_response(
+        %__MODULE__{service: %Service{module: module}} = state,
+        {request_data, {:ok, response}}
+      ) do
+    response_module = Module.concat(module, :Response)
+    %{__struct__: ^response_module} = response
+
     state
     |> Map.fetch!(:ets_table)
     |> :ets.insert({ets_key(state, request_data), response})
@@ -165,8 +173,68 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   def write_to_disk?(%__MODULE__{write_responses_to_disk?: write_to_disk?}), do: write_to_disk?
 
-  def data_folder_path(%__MODULE__{data_folder_path: "" <> data_folder_path}) do
-    data_folder_path
+  def data_folder_path(%__MODULE__{
+        data_folder_path: "" <> data_folder_path,
+        service: %Service{} = service
+      }) do
+    Path.join(
+      data_folder_path,
+      service
+      |> Service.data_type()
+      |> Atom.to_string()
+    )
+  end
+
+  def seed_ets_table(%__MODULE__{} = state) do
+    Bird
+    |> BirdSong.Repo.all()
+    |> List.first()
+    |> List.wrap()
+    |> Enum.reduce(state, &start_ets_seed_task/2)
+  end
+
+  def start_ets_seed_task(%Bird{} = bird, %__MODULE__{} = state) do
+    %Task{ref: ref} =
+      Task.Supervisor.async(Services.Tasks, __MODULE__, :add_data_file_to_ets, [bird, state])
+
+    Map.update!(state, :tasks, &Map.put(&1, ref, {:seed_data_task, bird.common_name}))
+  end
+
+  def add_data_file_to_ets(
+        %Bird{} = bird,
+        %__MODULE__{} = state
+      ) do
+    service_module =
+      state
+      |> service()
+      |> Service.module()
+
+    response_module = Module.concat(service_module, :Response)
+
+    case DataFile.read(%DataFile.Data{request: bird, service: service(state)}) do
+      {:ok, str} ->
+        data =
+          str
+          |> Jason.decode!()
+          |> response_module.parse()
+
+        state
+        |> service()
+        |> Map.fetch!(:whereis)
+        |> send({:save, {bird, {:ok, data}}})
+
+      {:error, {error, path}} ->
+        Helpers.log(
+          [
+            error: "data_file_read_error",
+            reason: error,
+            bird: bird.common_name,
+            path: path
+          ],
+          service_module,
+          :error
+        )
+    end
   end
 
   defp ensure_data_file_started(%__MODULE__{} = state) do
@@ -181,10 +249,13 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   defp ets_table(%__MODULE__{ets_table: ets_table}), do: ets_table
 
-  defp ets_key(%__MODULE__{service: service}, request_data),
-    do: apply(service, :ets_key, [request_data])
+  defp ets_key(%__MODULE__{service: %Service{module: module}}, request_data),
+    do: apply(module, :ets_key, [request_data])
 
-  @spec build_request_message(:start | {:end, any()}, {GenServer.from(), any()}, atom()) ::
+  @spec service(t()) :: Service.t()
+  def service(%__MODULE__{service: %Service{} = service}), do: service
+
+  @spec build_request_message(:start | {:end, any()}, {GenServer.from(), any()}, Service.t()) ::
           {:start_request | :end_request,
            %{
              optional(:bird) => Bird.t(),
@@ -193,12 +264,17 @@ defmodule BirdSong.Services.ThrottledCache.State do
              module: atom(),
              time: DateTime.t()
            }}
-  defp build_request_message(start_or_end, request, service) do
+  defp build_request_message(start_or_end, request, %Service{} = service) do
+    details =
+      service
+      |> Service.module()
+      |> apply(:message_details, [request])
+
     {
       message_name(start_or_end),
       service
       |> default_message()
-      |> Map.merge(apply(service, :message_details, [request]))
+      |> Map.merge(details)
       |> maybe_add_response_to_message(start_or_end)
     }
   end
@@ -211,8 +287,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Map.put(message, :response, response)
   end
 
-  @spec default_message(atom()) :: %{module: atom(), time: DateTime.t()}
-  defp default_message(module) do
+  @spec default_message(Service.t()) :: %{module: atom(), time: DateTime.t()}
+  defp default_message(%Service{module: module}) do
     %{
       module: module,
       time: DateTime.now!("Etc/UTC")
@@ -222,22 +298,31 @@ defmodule BirdSong.Services.ThrottledCache.State do
   defp message_name(:start), do: :start_request
   defp message_name({:end, _response}), do: :end_request
 
-  defp log_request(%__MODULE__{service: service}, request, start_or_end)
+  defp log_request(%__MODULE__{service: %Service{module: module}}, request, start_or_end)
        when start_or_end in [:start, :end] do
-    [
-      inspect([service]),
-      "message=#{start_or_end}_request",
-      log_request_details(request)
-    ]
-    |> Enum.join(" ")
-    |> String.trim()
-    |> Logger.debug()
+    [message: "#{start_or_end}_request"]
+    |> log_request_details(request)
+    |> Helpers.log(module, :debug)
   end
 
-  defp log_request_details({:recent_observations, region}), do: "region=" <> region
-  defp log_request_details(%Bird{common_name: common_name}), do: "bird=" <> common_name
+  defp log_request_details(log, {:recent_observations, region}) do
+    [{:region, region} | log]
+  end
 
-  defp verify_state(%__MODULE__{service: service, ets_name: ets_name} = state)
-       when is_known_service(service) and ets_name !== nil,
+  defp log_request_details(log, %Bird{common_name: common_name}) do
+    [{:bird, common_name} | log]
+  end
+
+  defp log_request_details(log, _) do
+    log
+  end
+
+  defp verify_state(
+         %__MODULE__{
+           service: %Service{module: service_module, whereis: service_pid},
+           ets_name: ets_name
+         } = state
+       )
+       when is_known_service(service_module) and is_pid(service_pid) and ets_name !== nil,
        do: {:ok, state}
 end

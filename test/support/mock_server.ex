@@ -21,7 +21,7 @@ defmodule BirdSong.MockServer do
           params: %{"query" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, Map.fetch!(%Services{}, :recordings), sci_name)
+    do_success_response(conn, :recordings, sci_name)
   end
 
   def success_response(
@@ -30,7 +30,7 @@ defmodule BirdSong.MockServer do
           params: %{"text" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, Map.fetch!(%Services{}, :images), sci_name)
+    do_success_response(conn, :images, sci_name)
   end
 
   def success_response(
@@ -67,9 +67,17 @@ defmodule BirdSong.MockServer do
     |> success_response()
   end
 
-  defp do_success_response(%Conn{} = conn, %Service{} = service, "" <> sci_name) do
+  defp do_success_response(%Conn{} = conn, service_type, "" <> sci_name)
+       when service_type in [:images, :recordings] do
     {:ok, %Bird{} = bird} = Bird.get_by_sci_name(sci_name)
-    service_response(conn, bird, service)
+
+    service_response(
+      conn,
+      bird,
+      %Services{}
+      |> Map.fetch!(service_type)
+      |> Service.ensure_started()
+    )
   end
 
   defp logged_not_found_response(conn, %{} = body) do
@@ -87,7 +95,7 @@ defmodule BirdSong.MockServer do
 
   def error_response(conn), do: Plug.Conn.resp(conn, 500, "there was an error")
 
-  defp service_response(%Conn{} = conn, %Bird{} = bird, service) do
+  defp service_response(%Conn{} = conn, %Bird{} = bird, %Service{} = service) do
     %DataFile.Data{request: bird, service: service}
     |> DataFile.read()
     |> case do
@@ -98,11 +106,12 @@ defmodule BirdSong.MockServer do
 
         Conn.resp(conn, 200, body)
 
-      {:error, :enoent} ->
+      {:error, {:enoent, path}} ->
         logged_not_found_response(conn, %{
           error: :file_not_found,
           bird: bird.common_name,
-          service: service.name
+          service: service.module,
+          path: path
         })
     end
   end
