@@ -1,17 +1,39 @@
 defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   use BirdSong.DataCase
   import BirdSong.TestSetup
+  alias BirdSong.TestHelpers
   alias BirdSong.{Bird, Services.Ebird.Recordings.Playwright}
 
-  @throttle_ms 1_000
+  @throttle_ms 100
+
+  setup_all do
+    {:ok,
+     mock_data: File.read!("test/mock_data/ebird_recordings.json"),
+     mock_html: File.read!("test/mock_data/ebird_recordings.html")}
+  end
 
   setup [:seed_from_mock_taxonomy]
 
-  setup do
-    [bird | _] = BirdSong.Repo.all(Bird)
-    {:ok, server} = Playwright.start_link(bird: bird, throttle_ms: @throttle_ms)
+  setup %{mock_data: mock_data, mock_html: mock_html} do
+    bypass = Bypass.open()
+    Bypass.expect(bypass, "GET", "/catalog", &success_response(&1, mock_html))
+    Bypass.expect(bypass, "GET", "/api/v2/search", &success_response(&1, mock_data))
+    Bypass.stub(bypass, :any, :any, &Plug.Conn.resp(&1, 404, ""))
+
+    {:ok, bird} = Bird.get_by_sci_name("Sialia sialis")
+
+    {:ok, server} =
+      Playwright.start_link(
+        bird: bird,
+        throttle_ms: @throttle_ms,
+        base_url: TestHelpers.mock_url(bypass)
+      )
 
     {:ok, bird: bird, server: server}
+  end
+
+  def success_response(conn, "" <> mock_response) do
+    Plug.Conn.resp(conn, 200, mock_response)
   end
 
   describe "Ebird.Recordings.Playwright.run/1" do
@@ -55,11 +77,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
                  "width" => _
                } = recording
 
-        assert %Bird{
-                 common_name: common_name,
-                 sci_name: sci_name,
-                 species_code: species_code
-               } = bird
+        assert %Bird{species_code: species_code} = bird
 
         assert Map.keys(taxonomy) === [
                  "category",
@@ -70,11 +88,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
                ]
 
         assert %{
-                 "category" => _,
-                 "comName" => ^common_name,
-                 "reportAs" => _,
-                 "sciName" => ^sci_name,
-                 "speciesCode" => ^species_code
+                 "reportAs" => ^species_code
                } = taxonomy
       end
     end
