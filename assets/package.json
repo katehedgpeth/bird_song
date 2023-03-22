@@ -9,6 +9,7 @@
   "author": "Kate Hedgpeth Leahy",
   "license": "ISC",
   "dependencies": {
-    "daisyui": "^2.50.2"
+    "daisyui": "^2.50.2",
+    "playwright": "^1.31.2"
   }
 }

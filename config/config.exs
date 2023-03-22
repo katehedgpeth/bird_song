@@ -51,6 +51,9 @@ config :bird_song, BirdSong.Services.Flickr,
        nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
      end)
 
+config :bird_song, BirdSong.Services.Ebird.Recordings,
+  base_url: "https://search.macaulaylibrary.org"
+
 config :bird_song, BirdSong.Services,
   images: BirdSong.Services.Flickr,
   recordings: BirdSong.Services.XenoCanto,
@@ -63,6 +66,12 @@ config :esbuild,
   default: [
     args:
       ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+  ],
+  playwright_runner: [
+    args:
+      ~w(js/playwright_runner.js --bundle --outdir=../priv/static/assets --platform=node --log-level=error),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]

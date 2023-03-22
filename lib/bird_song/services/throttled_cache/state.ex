@@ -16,12 +16,12 @@ defmodule BirdSong.Services.ThrottledCache.State do
   @type request_data() :: {GenServer.from(), any()}
 
   @type t() :: %__MODULE__{
+          backlog: [request_data],
+          data_file_instance: GenServer.server() | nil,
           data_folder_path: String.t(),
           ets_table: :ets.table(),
           ets_name: atom(),
           ets_opts: [:ets.table_type()],
-          backlog: [request_data],
-          data_file_instance: GenServer.server() | nil,
           request_listeners: [pid()],
           service: Service.t(),
           tasks: %{reference() => request_data()},
@@ -50,7 +50,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
   ]
 
   defguard is_known_service(service)
-           when service in [XenoCanto, Flickr, Ebird, ThrottledCacheUnderTest]
+           when service in [XenoCanto, Flickr, Ebird, ThrottledCacheUnderTest, Ebird.Recordings]
 
   def new(opts) do
     __MODULE__
@@ -83,25 +83,43 @@ defmodule BirdSong.Services.ThrottledCache.State do
     end
   end
 
-  @spec send_request(t()) :: t()
-  def send_request(%__MODULE__{backlog: []} = state) do
-    # ignore message, because there are no requests to send
-    state
+  @spec should_send_request?(t()) :: boolean
+  def should_send_request?(%__MODULE__{backlog: []}) do
+    # no, because there are no requests to send
+    false
   end
 
-  def send_request(%__MODULE__{throttled?: true} = state) do
-    # do nothing, because requests are currently throttled.
+  def should_send_request?(%__MODULE__{throttled?: true}) do
+    # no, because requests are currently throttled.
     # :send_request will be called again when requests are unthrottled.
-    state
+    false
   end
 
+  def should_send_request?(%__MODULE__{throttled?: false}) do
+    # requests are not throttled and the backlog is not empty,
+    # so we can send the next request.
+    true
+  end
+
+  @spec send_request(t()) :: t()
   def send_request(%__MODULE__{throttled?: false} = state) do
-    [{from, request_data} | backlog] = Map.fetch!(state, :backlog)
+    case get_next_request_from_backlog(state) do
+      {:ok, {{from, data}, state}} ->
+        side_effects(state, {:request, data})
+        start_get_from_api_task(state, from, data)
+
+      {:error, :backlog_empty} ->
+        state
+    end
+  end
+
+  def side_effects(%__MODULE__{} = state, {:request, data}) do
+    log_request(state, data, :start)
+    notify_listeners(state, data, :start)
+  end
+
+  defp start_get_from_api_task(%__MODULE__{} = state, from, request_data) do
     %Service{module: module} = Map.fetch!(state, :service)
-
-    log_request(state, request_data, :start)
-
-    notify_listeners(state, :start, request_data)
 
     %Task{ref: ref} =
       Task.Supervisor.async(
@@ -114,8 +132,15 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
     state
     |> Map.replace!(:throttled?, true)
-    |> Map.replace!(:backlog, backlog)
     |> Map.update!(:tasks, &Map.put(&1, ref, {from, request_data}))
+  end
+
+  defp get_next_request_from_backlog(%__MODULE__{backlog: [{from, data} | backlog]} = state) do
+    {:ok, {{from, data}, Map.replace!(state, :backlog, backlog)}}
+  end
+
+  defp get_next_request_from_backlog(%__MODULE__{backlog: []}) do
+    {:error, :backlog_empty}
   end
 
   def save_response(
@@ -138,6 +163,24 @@ defmodule BirdSong.Services.ThrottledCache.State do
     {:error, :bad_response}
   end
 
+  def add_request_to_backlog(%__MODULE__{} = state, from, request_data) do
+    Map.update!(
+      state,
+      :backlog,
+      &(&1 |> Enum.reverse([{from, request_data}]) |> Enum.reverse())
+    )
+  end
+
+  def forget_task(%__MODULE__{} = state, ref) do
+    Map.update!(
+      state,
+      :tasks,
+      &(&1
+        |> Map.pop!(ref)
+        |> elem(1))
+    )
+  end
+
   def unthrottle(%__MODULE__{} = state) do
     Map.replace!(state, :throttled?, false)
   end
@@ -148,8 +191,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   def notify_listeners(
         %__MODULE__{request_listeners: listeners, service: service},
-        start_or_end,
-        request
+        request,
+        start_or_end
       ) do
     Enum.each(
       listeners,

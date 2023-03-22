@@ -1,0 +1,205 @@
+{
+  "cookies": [
+    {
+      "name": "_0ad1c",
+      "value": "http://10.0.85.23:8080",
+      "domain": "search.macaulaylibrary.org",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "i18n_redirected",
+      "value": "en",
+      "domain": "search.macaulaylibrary.org",
+      "path": "/",
+      "expires": 1710797211,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_0b247",
+      "value": "http://10.0.66.30:8080",
+      "domain": "secure.birds.cornell.edu",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ml-search-session",
+      "value": "eyJ1c2VyIjp7ImFub255bW91cyI6dHJ1ZX19",
+      "domain": "search.macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679866010.171885,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ml-search-session.sig",
+      "value": "XZPO3pJ50PRL94J3OagC3Bg1IVk",
+      "domain": "search.macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679866010.17196,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gcl_au",
+      "value": "1.1.155520366.1679261212",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1687037211,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_QR4NVXZ8BM",
+      "value": "GS1.1.1679261211.1.0.1679261211.60.0.0",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1713821211.774479,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "test_cookie",
+      "value": "CheckForPermission",
+      "domain": ".doubleclick.net",
+      "path": "/",
+      "expires": 1679262111.781296,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga_DTHTPXK4V9",
+      "value": "GS1.1.1679261211.1.0.1679261211.0.0.0",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1713821211.80481,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_YT7Y2S4MBX",
+      "value": "GS1.1.1679261211.1.0.1679261211.0.0.0",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1713821211.830894,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.3.1529752663.1679261212",
+      "domain": ".search.macaulaylibrary.org",
+      "path": "/",
+      "expires": 1713821211.890719,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.3.1639669456.1679261212",
+      "domain": ".search.macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679347611,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gat_UA-8293310-1",
+      "value": "1",
+      "domain": ".search.macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679261271,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.2.1529752663.1679261212",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1713821211.897948,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.2.1639669456.1679261212",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679347611,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_dc_gtm_UA-51396009-1",
+      "value": "1",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679261271,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__hstc",
+      "value": "264660688.d7102f5c268850420b66ba30f98e49f2.1679261212002.1679261212002.1679261212002.1",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1694813212,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "hubspotutk",
+      "value": "d7102f5c268850420b66ba30f98e49f2",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1694813212,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__hssrc",
+      "value": "1",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__hssc",
+      "value": "264660688.1.1679261212002",
+      "domain": ".macaulaylibrary.org",
+      "path": "/",
+      "expires": 1679263012,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

@@ -12,6 +12,12 @@ defmodule BirdSong.Services.ThrottledCache do
 
   @env Application.compile_env!(:bird_song, __MODULE__)
 
+  @admin_email Application.compile_env!(:bird_song, :admin_email)
+
+  def user_agent(headers) do
+    [{"User-Agent", "BirdSongBot (#{@admin_email})"} | headers]
+  end
+
   defmacro __using__(module_opts) do
     quote location: :keep,
           bind_quoted: [
@@ -22,7 +28,7 @@ defmodule BirdSong.Services.ThrottledCache do
       require Logger
       use GenServer
       alias BirdSong.{Bird, Services}
-      alias Services.{Helpers, ThrottledCache.State, Service}
+      alias Services.{Helpers, ThrottledCache, ThrottledCache.State, Service}
       alias __MODULE__.Response
 
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
@@ -79,7 +85,10 @@ defmodule BirdSong.Services.ThrottledCache do
         request
         |> url()
         |> log_external_api_call()
-        |> HTTPoison.get(headers(request), params: params(request))
+        |> HTTPoison.get(
+          request |> headers() |> ThrottledCache.user_agent(),
+          params: params(request)
+        )
         |> log_external_api_response(request)
         |> maybe_write_to_disk(request, state)
         |> parse_response(request)
@@ -168,6 +177,7 @@ defmodule BirdSong.Services.ThrottledCache do
       defoverridable(url: 1)
       defoverridable(write_to_disk: 3)
       defoverridable(data_file_name: 1)
+      defoverridable(get_from_api: 2)
 
       #########################################################
       #########################################################
@@ -202,15 +212,7 @@ defmodule BirdSong.Services.ThrottledCache do
           ) do
         send(self(), :send_request)
 
-        {:noreply,
-         %{
-           state
-           | backlog:
-               state
-               |> Map.fetch!(:backlog)
-               |> Enum.reverse([{from, request_data}])
-               |> Enum.reverse()
-         }}
+        {:noreply, State.add_request_to_backlog(state, from, request_data)}
       end
 
       def handle_call({:get_from_cache, data}, _from, state) do
@@ -254,7 +256,8 @@ defmodule BirdSong.Services.ThrottledCache do
             :send_request,
             %State{} = state
           ) do
-        {:noreply, State.send_request(state)}
+        state = if State.should_send_request?(state), do: State.send_request(state), else: state
+        {:noreply, state}
       end
 
       def handle_info({:save, data}, %State{} = state) do
@@ -267,7 +270,7 @@ defmodule BirdSong.Services.ThrottledCache do
         state
         |> Map.fetch!(:tasks)
         |> Map.fetch!(ref)
-        |> handle_response(response, state)
+        |> handle_task_response(response, state)
 
         {:noreply, state}
       end
@@ -278,11 +281,11 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       def handle_info({:DOWN, ref, :process, _pid, _reason}, %State{} = state) do
-        {_, tasks} = Map.pop!(state.tasks, ref)
-        {:noreply, %{state | tasks: tasks}}
+        {:noreply, State.forget_task(state, ref)}
       end
 
       defoverridable(handle_info: 2)
+      defoverridable(handle_call: 3)
 
       #########################################################
       #########################################################
@@ -291,11 +294,11 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      defp handle_response({:seed_data_task, request}, response, %State{}) do
+      defp handle_task_response({:seed_data_task, request}, response, %State{}) do
         :ok
       end
 
-      defp handle_response(
+      defp handle_task_response(
              {from, request_data},
              response,
              %State{throttle_ms: throttle_ms} = state
