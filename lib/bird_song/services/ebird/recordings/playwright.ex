@@ -13,6 +13,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
                |> Keyword.fetch!(:throttle_ms)
 
   defstruct [
+    :base_url,
     :bird,
     :error,
     :parent,
@@ -25,12 +26,16 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   ]
 
   @type t() :: %__MODULE__{
+          base_url: String.t(),
           bird: Bird.t(),
           current_request_number: integer(),
+          error: {:error, any()} | nil,
+          parent: pid(),
           port: port() | nil,
           ready?: boolean(),
           reply_to: GenServer.from(),
-          responses: [Map.t()]
+          responses: [Map.t()],
+          throttle_ms: integer()
         }
 
   @runner_script :bird_song
@@ -84,7 +89,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:noreply, send_request(state)}
   end
 
-  def handle_info({:DOWN, _, :port, _port, :normal}, %__MODULE__{} = state) do
+  def handle_info({:DOWN, _, :port, port, :normal}, %__MODULE__{port: port} = state) do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
@@ -110,10 +115,6 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     )
   end
 
-  defp close_port(%__MODULE__{port: port}) do
-    Port.close(port)
-  end
-
   defp get_initial_cursor_mark(%__MODULE__{current_request_number: 1}) do
     nil
   end
@@ -127,6 +128,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
       __MODULE__,
       opts
       |> Keyword.put_new(:parent, self())
+      |> Keyword.put_new(:base_url, Recordings.base_url())
       |> Keyword.put_new(
         :throttle_ms,
         Helpers.get_env(ThrottledCache, :throttle_ms)
@@ -134,18 +136,28 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     )
   end
 
+  defp log_external_api_call(%__MODULE__{base_url: "http://localhost" <> _}) do
+    :ok
+  end
+
+  defp log_external_api_call(%__MODULE__{base_url: url}) do
+    Helpers.log(%{message: "external_api_call", url: url}, __MODULE__, :warning)
+  end
+
   defp notify_parent(%__MODULE__{parent: parent}, message) do
     send(parent, {__MODULE__, DateTime.now!("Etc/UTC"), message})
   end
 
-  def open_port(%__MODULE__{} = state) do
+  def open_port(%__MODULE__{base_url: base_url} = state) do
+    log_external_api_call(state)
+
     port =
       Port.open({:spawn_executable, @node_path}, [
         :binary,
         :stderr_to_stdout,
         args: [
           @runner_script,
-          Recordings.base_url(),
+          base_url,
           @auth_json
         ]
       ])
@@ -198,7 +210,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp reply_and_close(%__MODULE__{} = state) do
-    true = close_port(state)
+    true = shutdown_runner(state)
 
     reply(state)
   end
@@ -237,5 +249,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
          call_count: count
        })
      )}
+  end
+
+  defp shutdown_runner(%__MODULE__{port: port}) do
+    # JS script shuts itself down with process.exit()
+    Port.command(port, "shutdown")
   end
 end
