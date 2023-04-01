@@ -7,7 +7,6 @@ defmodule BirdSong.MockServer do
 
   alias BirdSong.{
     Bird,
-    Services,
     Services.DataFile,
     Services.Service
   }
@@ -15,32 +14,56 @@ defmodule BirdSong.MockServer do
   @ebird_token :bird_song
                |> Application.compile_env(BirdSong.Services.Ebird)
                |> Keyword.fetch!(:token)
+  @ebird_api_path_info ["api", "v2", "search"]
+
+  # defguard is_ebird_observation_path(info) when match?(["v2", "data", "obs", _, "recent"], info)
+  defguardp is_ebird_obs_3(info) when tl(info) === ["recent"]
+
+  defguardp is_ebird_obs_2(info)
+            when hd(info) === "obs" and info |> tl() |> is_ebird_obs_3()
+
+  defguardp is_ebird_obs_1(info)
+            when hd(info) === "data" and is_ebird_obs_2(tl(info))
+
+  defguard is_ebird_observation_path(info)
+           when hd(info) === "v2" and is_ebird_obs_1(tl(info))
 
   def success_response(
         %Conn{
-          request_path: @xeno_canto_path,
+          request_path: "/" <> @xeno_canto_path,
           params: %{"query" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, :recordings, sci_name)
+    do_success_response(conn, XenoCanto, String.replace(sci_name, "+", " "))
   end
 
   def success_response(
         %Conn{
-          request_path: @flickr_path,
+          request_path: "/" <> @flickr_path,
           params: %{"text" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, :images, sci_name)
+    do_success_response(conn, Flickr, sci_name)
+  end
+
+  def success_response(%Conn{request_path: "/" <> @ebird_recordings_path} = conn) do
+    {:ok, body} = File.read("test/mock_data/ebird_recordings.html")
+    Conn.resp(conn, 200, body)
+  end
+
+  def success_response(%Conn{path_info: @ebird_api_path_info} = conn) do
+    {:ok, body} = File.read("test/mock_data/ebird_recordings.json")
+    Conn.resp(conn, 200, body)
   end
 
   def success_response(
         %Conn{
-          path_info: ["v2", "data", "obs", _, "recent"],
+          path_info: path_info,
           params: %{"back" => "30"},
           req_headers: headers
         } = conn
-      ) do
+      )
+      when is_ebird_observation_path(path_info) do
     case Enum.into(headers, %{}) do
       %{"x-ebirdapitoken" => @ebird_token} ->
         Conn.resp(
@@ -62,27 +85,33 @@ defmodule BirdSong.MockServer do
     end
   end
 
+  def success_response(%Conn{path_info: ["api", "v1", "asset", _, "spectrogram_small"]} = conn) do
+    Conn.resp(conn, 200, ~s({"mocked_data": true}))
+  end
+
+  def success_response(%Conn{path_info: ["_nuxt", _]} = conn) do
+    Conn.resp(conn, 200, "{}")
+  end
+
   def success_response(%Conn{req_headers: headers} = conn) when is_list(headers) do
     conn
     |> Map.replace!(:req_headers, Enum.into(headers, %{}))
     |> success_response()
   end
 
-  defp do_success_response(%Conn{} = conn, service_type, "" <> sci_name)
-       when service_type in [:images, :recordings] do
+  defp do_success_response(%Conn{} = conn, service, "" <> sci_name)
+       when is_atom(service) do
     {:ok, %Bird{} = bird} = Bird.get_by_sci_name(sci_name)
 
     service_response(
       conn,
       bird,
-      %Services{}
-      |> Map.fetch!(service_type)
-      |> Service.ensure_started()
+      Service.ensure_started(%Service{module: service})
     )
   end
 
   defp logged_not_found_response(conn, %{} = body) do
-    Helpers.log(body, __MODULE__)
+    Helpers.log(body, __MODULE__, :warning)
 
     not_found_response(conn, body)
   end

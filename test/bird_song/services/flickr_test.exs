@@ -43,13 +43,17 @@ defmodule BirdSong.Services.FlickrTest do
 
     @tag expect_once: &MockServer.not_found_response/1
     test "returns {:error, {:not_found, url}} when API returns 404", %{
-      services: %Services{images: %Service{whereis: whereis}}
+      services: %Services{images: %Service{whereis: whereis}},
+      bypass: bypass
     } do
-      url = Flickr.url(@red_shouldered_hawk)
       assert GenServer.call(whereis, {:get_from_cache, @bird}) === :not_found
 
       assert Flickr.get_images(@red_shouldered_hawk, whereis) ===
-               {:error, {:not_found, url}}
+               {:error,
+                {:not_found,
+                 bypass
+                 |> TestHelpers.mock_url()
+                 |> Path.join(Flickr.endpoint(@red_shouldered_hawk))}}
     end
   end
 end

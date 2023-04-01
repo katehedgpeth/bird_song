@@ -55,6 +55,7 @@ end
 defmodule BirdSong.Services.DataFileTest do
   use ExUnit.Case
   use BirdSong.MockDataAttributes
+  import BirdSong.TestSetup
 
   alias BirdSong.{
     Services.Ebird,
@@ -76,6 +77,8 @@ defmodule BirdSong.Services.DataFileTest do
 
   @moduletag :tmp_dir
   @moduletag capture_log: true
+
+  setup [:setup_bypass, :make_tmp_dir_path_relative]
 
   setup %{test: test, tmp_dir: tmp_dir} = tags do
     prev_level = Logger.level()
@@ -121,7 +124,7 @@ defmodule BirdSong.Services.DataFileTest do
       Logger.configure(level: prev_level)
     end)
 
-    {:ok, instance: instance, data: data}
+    {:ok, instance: instance, data: data, tmp_dir: tmp_dir}
   end
 
   describe "&write/1" do
@@ -275,7 +278,12 @@ defmodule BirdSong.Services.DataFileTest do
 
       data = Map.fetch!(tags, :data)
 
-      assert Path.join(tags[:tmp_dir], "observations/US-NC-067.json") =~
+      tmp_dir =
+        tags
+        |> Map.fetch!(:tmp_dir)
+        |> Path.relative_to_cwd()
+
+      assert Path.join(tmp_dir, "US-NC-067.json") =~
                DataFile.data_file_path(data)
 
       assert_works_for_service(tags)
@@ -293,7 +301,7 @@ defmodule BirdSong.Services.DataFileTest do
         } = data
     } do
       file = DataFile.data_file_path(data)
-      assert file === "data/recordings/Eastern_Bluebird.json"
+      assert file === "data/recordings/xeno_canto/Eastern_Bluebird.json"
       assert File.exists?(file)
       assert {:ok, "" <> _} = DataFile.read(data)
     end
@@ -319,7 +327,14 @@ defmodule BirdSong.Services.DataFileTest do
   def expected_file_path(tmp_dir, folder_name) do
     tmp_dir
     |> Path.join(folder_name)
-    |> Path.relative_to_cwd()
     |> Path.join("Giant Dodo.json")
+  end
+
+  def make_tmp_dir_path_relative(%{tmp_dir: "" <> tmp_dir}) do
+    {:ok, tmp_dir: Path.relative_to_cwd(tmp_dir)}
+  end
+
+  def make_tmp_dir_path_relative(%{}) do
+    :ok
   end
 end

@@ -1,8 +1,14 @@
 defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   use BirdSong.DataCase
-  import BirdSong.TestSetup
+  import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1]
   alias BirdSong.TestHelpers
-  alias BirdSong.{Bird, Services.Ebird.Recordings.Playwright}
+
+  alias BirdSong.{
+    Bird,
+    Services.Ebird.Recordings
+  }
+
+  alias Recordings.{Playwright, TimeoutError, BadResponseError}
 
   @throttle_ms 100
 
@@ -14,29 +20,51 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
   setup [:seed_from_mock_taxonomy]
 
-  setup %{mock_data: mock_data, mock_html: mock_html} do
+  setup do
     bypass = Bypass.open()
-    Bypass.expect(bypass, "GET", "/catalog", &success_response(&1, mock_html))
-    Bypass.expect(bypass, "GET", "/api/v2/search", &success_response(&1, mock_data))
-    Bypass.stub(bypass, :any, :any, &Plug.Conn.resp(&1, 404, ""))
+    Bypass.stub(bypass, :any, :any, &Plug.Conn.resp(&1, 500, ""))
 
     {:ok, bird} = Bird.get_by_sci_name("Sialia sialis")
 
     {:ok, server} =
       Playwright.start_link(
         bird: bird,
+        listeners: [self()],
         throttle_ms: @throttle_ms,
         base_url: TestHelpers.mock_url(bypass)
       )
 
-    {:ok, bird: bird, server: server}
+    {:ok, bird: bird, bypass: bypass, server: server}
   end
 
-  def success_response(conn, "" <> mock_response) do
-    Plug.Conn.resp(conn, 200, mock_response)
+  defp endpoint(:html), do: "/catalog"
+  defp endpoint(:api), do: "/api/v2/search"
+
+  def mock_response(bypass, html_or_api, status_code, body) do
+    Bypass.expect(
+      bypass,
+      "GET",
+      endpoint(html_or_api),
+      &Plug.Conn.resp(&1, status_code, body)
+    )
   end
 
-  describe "Ebird.Recordings.Playwright.run/1" do
+  def do_not_expect_api_response(bypass) do
+    Bypass.stub(
+      bypass,
+      "GET",
+      endpoint(:api),
+      &Plug.Conn.resp(&1, 500, "this should not have been called")
+    )
+  end
+
+  describe "Ebird.Recordings.Playwright.run/1 - success response" do
+    setup %{bypass: bypass, mock_html: mock_html, mock_data: mock_data} do
+      mock_response(bypass, :html, 200, mock_html)
+      mock_response(bypass, :api, 200, mock_data)
+      :ok
+    end
+
     test "opens a port and returns a response", %{bird: bird, server: server} do
       response = Playwright.run(server)
 
@@ -121,6 +149,86 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
       assert DateTime.diff(request_2_time, request_1_time, :millisecond) > @throttle_ms
       assert DateTime.diff(request_3_time, request_2_time, :millisecond) > @throttle_ms
+    end
+  end
+
+  describe "Ebird.Recordings.Playwright.run/1 - error responses" do
+    test "returns an error response without crashing when HTML page returns a bad response", %{
+      server: server,
+      bypass: bypass
+    } do
+      body_404 = "<div>That page doesn't exist</div>"
+      mock_response(bypass, :html, 404, body_404)
+      do_not_expect_api_response(bypass)
+
+      assert {:error,
+              %BadResponseError{
+                response_body: ^body_404,
+                status: 404,
+                url: url
+              }} = Playwright.run(server)
+
+      assert url === bypass |> TestHelpers.mock_url() |> Path.join("/catalog?view=list")
+
+      refute_receive {
+        Playwright,
+        %DateTime{},
+        {:request, %{current_request_number: 1, responses: []}}
+      }
+    end
+
+    test "returns an error without crashing when .ResponseList is not found", %{
+      bypass: bypass,
+      server: server
+    } do
+      mock_response(bypass, :html, 200, "<div>This is an unexpected document structure</div>")
+      do_not_expect_api_response(bypass)
+
+      assert Playwright.run(server) ===
+               {:error,
+                %TimeoutError{
+                  js_message:
+                    Enum.join(
+                      [
+                        "Timeout 3000ms exceeded.",
+                        "=========================== logs ===========================",
+                        "waiting for locator('.ResultsList') to be visible",
+                        "============================================================"
+                      ],
+                      "\n"
+                    )
+                }}
+
+      refute_receive {
+        Playwright,
+        %DateTime{},
+        {:request, %{current_request_number: 1, responses: []}}
+      }
+    end
+
+    test "returns an error response without crashing when API request returns a bad response", %{
+      bypass: bypass,
+      mock_html: mock_html,
+      server: server
+    } do
+      mock_response(bypass, :html, 200, mock_html)
+
+      mock_response(
+        bypass,
+        :api,
+        403,
+        ~s({"error": "You are not authorized to perform this action"})
+      )
+
+      assert Playwright.run(server) === {
+               :error,
+               %BirdSong.Services.Ebird.Recordings.BadResponseError{
+                 __exception__: true,
+                 response_body: "{\"error\": \"You are not authorized to perform this action\"}",
+                 status: 403,
+                 url: bypass |> TestHelpers.mock_url() |> Path.join("/api/v2/search")
+               }
+             }
     end
   end
 end

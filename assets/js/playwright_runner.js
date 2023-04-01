@@ -21,10 +21,35 @@ const sendMessage = (data) => {
   console.log("message=" + data)
 }
 
+
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: STORAGE_STATE });
   const page = await context.newPage();
+
+  const shutdown = async () => {
+    await page.close();
+    await context.close();
+    await browser.close();
+    process.exit(0);
+  }
+
+  const sendErrorMessage = (message) => {
+    sendMessage(JSON.stringify(message))
+    return shutdown();
+  }
+
+  const continueIfGoodResponse = async (response, url, callback) =>
+    response.status() === 200
+      ? callback()
+      : sendErrorMessage({
+          error: "bad_response",
+          response_body: await response.body().then(body => body.toString()),
+          status: response.status(),
+          url,
+        })
+
   const params = ({ initialCursorMark, taxonCode }) => (
     {
       initialCursorMark,
@@ -48,20 +73,37 @@ const sendMessage = (data) => {
     return page.click("#form-submit");
   }
 
-  const connectToSite = async () => {
-    await page.goto(BASE_URL + "/catalog?view=list");
+  const waitForResultsList = async () => {
     await page.waitForLoadState("load");
     if (await page.isVisible("#input-user-name")) { 
       await signIn();
     }
-    await locators.resultsList.waitFor({ timeout });
-    sendMessage("ready_for_requests")
+    return locators.resultsList.waitFor({ timeout })
+      .then(() => sendMessage("ready_for_requests"))
+      .catch((error) =>
+        sendErrorMessage({
+          error: error.message.startsWith("Timeout") ? "timeout" : "unknown",
+          message: error.message
+        }))
 
   }
 
-  const sendApiRequest = async (json) => {
+  const connectToSite = async () => {
+    const url = BASE_URL + "/catalog?view=list"
+    const response = await page.goto(url);
+    return continueIfGoodResponse(response, url, waitForResultsList)
+  }
 
-    const { initial_cursor_mark, code, call_count } = JSON.parse(json)
+  const parseJSON = (json) => {
+    try {
+      return JSON.parse(json)
+    } catch (error) {
+      sendErrorMessage({error: "json_parse_error", message: error.message, input: json})
+    }
+  }
+
+  const sendApiRequest = async (json) => {
+    const { initial_cursor_mark, code, call_count } = parseJSON(json)
     if (typeof(call_count) !== "number") {
       throw new Error("expected call_count to be a number, got: " + json)
     }
@@ -69,35 +111,38 @@ const sendMessage = (data) => {
       throw new Error("expected initial_cursor_mark after first request, got: " + json)
     }
 
-    const response = await page.request.get(
-      BASE_URL + "/api/v2/search",
-      { params: params({
+    const url = BASE_URL + "/api/v2/search";
+
+    const response = await page.request.get(url, {
+      params: params({
         initialCursorMark: initial_cursor_mark,
         taxonCode: code
-      }) }
-    );
-    const results = JSON.parse((await response.body()).toString());
-    sendMessage(JSON.stringify(results))
-  }
+      })
+    });
 
-  const shutdown = async () => {
-    await context.close();
-    await browser.close();
-    process.exit(0)
+    const sendResponseMessage = async () => {
+      const results = parseJSON((await response.body()).toString());
+      sendMessage(JSON.stringify(results));
+    }
+
+
+    return continueIfGoodResponse(
+      response,
+      url,
+      sendResponseMessage
+    )
   }
 
   const handleInput = async (buffer) => {
     const message = buffer.toString()
     if (message === "connect") {
-      return connectToSite()
+      return await connectToSite();
     }
     if (message === "shutdown") {
-      return shutdown()
+      return await shutdown();
     }
-    return sendApiRequest(message)
+    await sendApiRequest(message);
   }
 
   process.stdin.addListener("data", handleInput)
-
-
 })()

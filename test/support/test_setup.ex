@@ -2,7 +2,15 @@ defmodule BirdSong.TestSetup do
   require ExUnit.Assertions
   use BirdSong.MockDataAttributes
 
-  alias BirdSong.{Bird, Services, Services.Service, TestHelpers}
+  alias BirdSong.Services.Ebird.Recordings.BadResponseError
+
+  alias BirdSong.{
+    Bird,
+    MockJsScraper,
+    Services,
+    Services.Service,
+    TestHelpers
+  }
 
   def listen_to_services(%{services: %Services{} = services}) do
     TestHelpers.do_for_services(services, &listen_to_service/1)
@@ -30,9 +38,19 @@ defmodule BirdSong.TestSetup do
     :ok
   end
 
-  def start_services(tags) do
+  def start_services(%{bypass: %Bypass{}}) do
+    raise "Do not call :setup_bypass and :start_services in the same setup pipeline"
+  end
+
+  def start_services(%{} = tags) do
+    bypass = Bypass.open()
+
+    tags
+    |> Map.put(:bypass, bypass)
+    |> setup_route_mocks()
+
     images_module = Map.get(tags, :images_service, Flickr)
-    recordings_module = Map.get(tags, :recordings_module, XenoCanto)
+    recordings_module = Map.get(tags, :recordings_module, Ebird.Recordings)
     observations_module = Map.get(tags, :observations_service, Ebird)
 
     [{:ok, recordings_server}, {:ok, images_server}, {:ok, observations_server}] =
@@ -42,7 +60,7 @@ defmodule BirdSong.TestSetup do
           images_module,
           observations_module
         ],
-        &TestHelpers.start_service_supervised(&1, tags)
+        &TestHelpers.start_service_supervised(&1, Map.put(tags, :bypass, bypass))
       )
 
     bird =
@@ -51,14 +69,17 @@ defmodule BirdSong.TestSetup do
         nil -> nil
       end
 
-    {:ok,
-     services: %Services{
-       bird: bird,
-       images: %Service{module: images_module, whereis: images_server},
-       recordings: %Service{module: recordings_module, whereis: recordings_server},
-       observations: %Service{module: observations_module, whereis: observations_server},
-       timeout: Map.get(tags, :timeout, 1_000)
-     }}
+    {
+      :ok,
+      bypass: bypass,
+      services: %Services{
+        bird: bird,
+        images: %Service{module: images_module, whereis: images_server},
+        recordings: %Service{module: recordings_module, whereis: recordings_server},
+        observations: %Service{module: observations_module, whereis: observations_server},
+        timeout: Map.get(tags, :timeout, 1_000)
+      }
+    }
   end
 
   def clean_up_tmp_folder_on_exit(%{tmp_dir: "" <> tmp_dir}) do
@@ -78,14 +99,44 @@ defmodule BirdSong.TestSetup do
   defguard is_module_name(name)
            when is_atom(name) and name not in [:xeno_canto, :flickr, :ebird]
 
+  def inject_playwright(%{playwright_response: maybe_response, services: services}) do
+    response =
+      case maybe_response do
+        {:file, "" <> _} ->
+          maybe_response
+
+        {:ok, [%{} | _]} ->
+          maybe_response
+
+        {:error, %BadResponseError{}} ->
+          maybe_response
+
+        _ ->
+          raise """
+          Invalid playwright response format: #{inspect(maybe_response)}
+          """
+      end
+
+    scraper = ExUnit.Callbacks.start_supervised!({MockJsScraper, response: response})
+
+    services
+    |> Map.fetch!(:recordings)
+    |> Map.fetch!(:whereis)
+    |> send({:update_scraper_instance, scraper})
+
+    {:ok, scraper: scraper}
+  end
+
+  def inject_playwright(%{}) do
+    :ok
+  end
+
   def setup_bypass(%{use_bypass: false}) do
     :ok
   end
 
-  def setup_bypass(%{services: %Services{} = services}) do
-    bypass = Bypass.open()
-    TestHelpers.do_for_services(services, &update_base_url(&1, bypass))
-    {:ok, bypass: bypass}
+  def setup_bypass(%{}) do
+    {:ok, bypass: Bypass.open()}
   end
 
   @type bypass_generic_cb :: (Plug.Conn.t() -> Plug.Conn.t())
@@ -164,23 +215,5 @@ defmodule BirdSong.TestSetup do
 
   def copy_seed_files_to_tmp_folder(%{}) do
     :ok
-  end
-
-  defp update_base_url(%Service{module: name}, %Bypass{} = bypass) do
-    update_base_url(name, bypass)
-  end
-
-  defp update_base_url(service_name, %Bypass{} = bypass)
-       when is_configured_service(service_name) do
-    do_update_base_url(service_name, TestHelpers.mock_url(bypass))
-  end
-
-  defp update_base_url(service_name, %Bypass{}) when is_module_name(service_name) do
-    :not_updated
-  end
-
-  defp do_update_base_url(service_name, url) do
-    TestHelpers.update_env(service_name, :base_url, url)
-    {:ok, {service_name, url}}
   end
 end

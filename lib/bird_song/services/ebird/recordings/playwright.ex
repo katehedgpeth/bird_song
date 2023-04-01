@@ -1,12 +1,22 @@
 defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   use GenServer
 
+  alias BirdSong.Services.Ebird.Recordings.{
+    BadResponseError,
+    TimeoutError,
+    UnknownMessageError,
+    JsonParseError
+  }
+
   alias BirdSong.{
     Bird,
-    Services.Ebird.Recordings,
     Services.ThrottledCache,
     Services.Helpers
   }
+
+  @type response :: {:ok, [Map.t()]} | {:error, BadResponseError} | {:error, TimeoutError}
+
+  @callback run(pid()) :: response()
 
   @throttle_ms :bird_song
                |> Application.compile_env!(ThrottledCache)
@@ -16,10 +26,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     :base_url,
     :bird,
     :error,
-    :parent,
     :port,
     :reply_to,
     current_request_number: 0,
+    listeners: [],
     ready?: false,
     responses: [],
     throttle_ms: @throttle_ms
@@ -30,7 +40,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
           bird: Bird.t(),
           current_request_number: integer(),
           error: {:error, any()} | nil,
-          parent: pid(),
+          listeners: [pid()],
           port: port() | nil,
           ready?: boolean(),
           reply_to: GenServer.from(),
@@ -98,6 +108,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:noreply, %{state | reply_to: from}}
   end
 
+  def handle_call(:state, _from, %__MODULE__{} = state) do
+    {:reply, state, state}
+  end
+
   #########################################################
   #########################################################
   ##
@@ -127,8 +141,6 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     struct(
       __MODULE__,
       opts
-      |> Keyword.put_new(:parent, self())
-      |> Keyword.put_new(:base_url, Recordings.base_url())
       |> Keyword.put_new(
         :throttle_ms,
         Helpers.get_env(ThrottledCache, :throttle_ms)
@@ -144,8 +156,8 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     Helpers.log(%{message: "external_api_call", url: url}, __MODULE__, :warning)
   end
 
-  defp notify_parent(%__MODULE__{parent: parent}, message) do
-    send(parent, {__MODULE__, DateTime.now!("Etc/UTC"), message})
+  defp notify_listeners(%__MODULE__{listeners: listeners}, message) do
+    Enum.each(listeners, &send(&1, {__MODULE__, DateTime.now!("Etc/UTC"), message}))
   end
 
   def open_port(%__MODULE__{base_url: base_url} = state) do
@@ -167,6 +179,27 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     %{state | port: port}
   end
 
+  defp parse_error_message(%{"error" => "timeout", "message" => js_message}) do
+    TimeoutError.exception(js_message: js_message)
+  end
+
+  defp parse_error_message(%{
+         "error" => "bad_response",
+         "status" => status,
+         "response_body" => response_body,
+         "url" => url
+       }) do
+    BadResponseError.exception(status: status, response_body: response_body, url: url)
+  end
+
+  defp parse_error_message(%{
+         "error" => "json_parse_error",
+         "input" => input,
+         "message" => js_message
+       }) do
+    JsonParseError.exception(input: input, js_message: js_message)
+  end
+
   @spec receive_message(String.t(), t()) :: t()
   defp receive_message(message, state) do
     message
@@ -180,7 +213,12 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   defp do_receive_message("message=" <> message, %__MODULE__{} = state) do
     case Jason.decode(message) do
-      {:ok, recordings} ->
+      {:ok, %{"error" => _} = error} ->
+        error
+        |> parse_error_message()
+        |> handle_error(state)
+
+      {:ok, [_ | _] = recordings} ->
         recordings
         |> add_recordings_to_state(state)
         |> send_again_or_reply_and_close()
@@ -191,22 +229,29 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp do_receive_message(message, %__MODULE__{} = state) do
+    [data: message]
+    |> UnknownMessageError.exception()
+    |> handle_error(state)
+  end
+
+  defp handle_error(error, %__MODULE__{} = state) do
     state
-    |> Map.replace!(:error, {:error, UnknownMessageError, data: message})
+    |> Map.replace!(:error, {:error, error})
     |> reply_and_close()
   end
 
-  defp reply(%__MODULE__{reply_to: from, responses: [_ | _] = responses} = state) do
-    GenServer.reply(
-      from,
-      {:ok, Enum.reverse(responses)}
-    )
-
-    %{state | reply_to: nil, responses: [], current_request_number: 0}
+  defp reply(%__MODULE__{error: {:error, _} = error} = state) do
+    do_reply(state, error)
   end
 
-  defp reply(%__MODULE__{reply_to: from, error: {:error, error}}) do
-    GenServer.reply(from, {:error, error})
+  defp reply(%__MODULE__{responses: [_ | _] = responses} = state) do
+    do_reply(state, {:ok, Enum.reverse(responses)})
+  end
+
+  defp do_reply(%__MODULE__{reply_to: from} = state, reply) do
+    GenServer.reply(from, reply)
+
+    %{state | reply_to: nil, responses: [], current_request_number: 0}
   end
 
   defp reply_and_close(%__MODULE__{} = state) do
@@ -233,7 +278,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp do_send_request(%__MODULE__{port: port, current_request_number: count} = state) do
-    notify_parent(
+    notify_listeners(
       state,
       {:request, Map.take(state, [:current_request_number, :bird, :responses])}
     )

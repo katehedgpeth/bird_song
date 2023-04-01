@@ -4,6 +4,8 @@ defmodule BirdSong.Services.Ebird do
          |> Keyword.fetch!(:token)
 
   use BirdSong.Services.ThrottledCache,
+    base_url: "https://api.ebird.org",
+    data_folder_path: "data/observations/ebird",
     ets_opts: [],
     ets_name: :throttled_cache
 
@@ -33,12 +35,8 @@ defmodule BirdSong.Services.Ebird do
 
   def message_details({:recent_observations, region}), do: %{region: region}
 
-  def url({:recent_observations, region}) do
-    __MODULE__
-    |> Helpers.get_env(:base_url)
-    |> List.wrap()
-    |> Enum.concat(["v2/data/obs", region, "recent"])
-    |> Path.join()
+  def endpoint({:recent_observations, region}) do
+    Path.join(["v2/data/obs", region, "recent"])
   end
 
   @spec get_recent_observations(String.t(), GenServer.server()) ::

@@ -106,8 +106,9 @@ defmodule BirdSong.TestHelpers do
     socket
   end
 
-  def start_service_supervised(module, tags) do
+  def start_service_supervised(module, %{} = tags) do
     []
+    |> get_base_url(tags)
     |> get_data_folder_path_opt(tags)
     |> get_seed_data_opt(tags)
     |> get_service_name_opt(tags, module)
@@ -126,6 +127,14 @@ defmodule BirdSong.TestHelpers do
     for %Service{} = service <- services |> Map.from_struct() |> Map.values() do
       callback.(service)
     end
+  end
+
+  defp get_base_url(opts, %{bypass: %Bypass{} = bypass}) do
+    Keyword.put(opts, :base_url, mock_url(bypass))
+  end
+
+  defp get_base_url([], %{}) do
+    raise "Bypass must be initialized in order to use services in tests"
   end
 
   defp get_data_folder_path_opt(opts, %{tmp_dir: "" <> tmp_dir}) do

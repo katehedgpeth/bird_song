@@ -3,6 +3,7 @@ defmodule BirdSong.Services do
   alias BirdSong.Services.DataFile
   alias BirdSong.Bird
   alias __MODULE__.Service
+
   @env Application.compile_env(:bird_song, BirdSong.Services)
   @images Keyword.fetch!(@env, :images)
   @recordings Keyword.fetch!(@env, :recordings)
@@ -102,10 +103,12 @@ defmodule BirdSong.Services do
             :response,
             # at this point in development, we do not need to preserve response headers;
             # this may change in the future.
-            apply(service.module, :parse_response, [
-              {:ok, %HTTPoison.Response{status_code: 200, body: saved_response}},
-              bird
-            ])
+            GenServer.call(
+              service.whereis,
+              {:parse_response,
+               request: bird,
+               response: {:ok, %HTTPoison.Response{status_code: 200, body: saved_response}}}
+            )
           )
         )
 
@@ -137,11 +140,6 @@ defmodule BirdSong.Services do
      state
      |> handle_downed_task(ref, reason)
      |> maybe_reply()}
-  end
-
-  def terminate(reason, _state) do
-    IO.inspect(reason, label: "terminated")
-    :ok
   end
 
   defp handle_response({ref, response}, %__MODULE__{__tasks: tasks} = state) do

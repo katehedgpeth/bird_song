@@ -16,6 +16,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
   @type request_data() :: {GenServer.from(), any()}
 
   @type t() :: %__MODULE__{
+          base_url: String.t(),
           backlog: [request_data],
           data_file_instance: GenServer.server() | nil,
           data_folder_path: String.t(),
@@ -23,6 +24,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
           ets_name: atom(),
           ets_opts: [:ets.table_type()],
           request_listeners: [pid()],
+          scraper: atom() | pid(),
           service: Service.t(),
           tasks: %{reference() => request_data()},
           throttled?: boolean(),
@@ -30,11 +32,13 @@ defmodule BirdSong.Services.ThrottledCache.State do
           write_responses_to_disk?: boolean()
         }
 
-  @enforce_keys [:data_folder_path]
+  @enforce_keys [:data_folder_path, :base_url]
   defstruct [
+    :base_url,
     :data_folder_path,
     :ets_table,
     :ets_name,
+    :scraper,
     :service,
     ets_opts: [],
     backlog: [],
@@ -216,16 +220,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   def write_to_disk?(%__MODULE__{write_responses_to_disk?: write_to_disk?}), do: write_to_disk?
 
-  def data_folder_path(%__MODULE__{
-        data_folder_path: "" <> data_folder_path,
-        service: %Service{} = service
-      }) do
-    Path.join(
-      data_folder_path,
-      service
-      |> Service.data_type()
-      |> Atom.to_string()
-    )
+  def data_folder_path(%__MODULE__{data_folder_path: "" <> data_folder_path}) do
+    data_folder_path
   end
 
   def seed_ets_table(%__MODULE__{} = state) do
@@ -362,6 +358,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   defp verify_state(
          %__MODULE__{
+           base_url: "" <> _,
            service: %Service{module: service_module, whereis: service_pid},
            ets_name: ets_name
          } = state

@@ -8,7 +8,7 @@ defmodule BirdSong.Services.Service.NotStartedError do
 end
 
 defmodule BirdSong.Services.Service do
-  alias BirdSong.Services.{Ebird, Flickr, XenoCanto, GenServers}
+  alias BirdSong.Services.{Ebird, Flickr, XenoCanto, GenServers, Helpers}
 
   defstruct [:module, :whereis, :response, :exit_reason]
 
@@ -46,9 +46,14 @@ defmodule BirdSong.Services.Service do
   end
 
   def data_type(%__MODULE__{module: XenoCanto}), do: :recordings
+  def data_type(%__MODULE__{module: Ebird.Recordings}), do: :recordings
   def data_type(%__MODULE__{module: Flickr}), do: :images
   def data_type(%__MODULE__{module: Ebird}), do: :observations
-  def data_type(%__MODULE__{}), do: :misc
+
+  def data_type(%__MODULE__{module: module}) do
+    Helpers.log(%{message: "unknown_service", module: module}, __MODULE__, :warning)
+    :misc
+  end
 
   def module(%__MODULE__{module: module}), do: module
 

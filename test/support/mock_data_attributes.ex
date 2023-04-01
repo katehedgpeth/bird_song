@@ -1,9 +1,6 @@
 defmodule BirdSong.MockDataAttributes do
-  def url_path(service, request_data \\ %BirdSong.Bird{sci_name: ""}) do
-    request_data
-    |> service.url()
-    |> URI.parse()
-    |> Map.fetch!(:path)
+  def endpoint(service, request_data \\ %BirdSong.Bird{sci_name: ""}) do
+    service.endpoint(request_data)
   end
 
   defmacro __using__([]) do
@@ -33,9 +30,13 @@ defmodule BirdSong.MockDataAttributes do
       }
       @mocked_birds [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird]
 
-      @xeno_canto_path BirdSong.MockDataAttributes.url_path(XenoCanto)
-      @flickr_path BirdSong.MockDataAttributes.url_path(Flickr)
-      @ebird_path BirdSong.MockDataAttributes.url_path(Ebird, {:recent_observations, ":region"})
+      @xeno_canto_path BirdSong.MockDataAttributes.endpoint(XenoCanto)
+      @flickr_path BirdSong.MockDataAttributes.endpoint(Flickr)
+      @ebird_observations_path BirdSong.MockDataAttributes.endpoint(
+                                 Ebird,
+                                 {:recent_observations, ":region"}
+                               )
+      @ebird_recordings_path BirdSong.MockDataAttributes.endpoint(Ebird.Recordings)
     end
   end
 end

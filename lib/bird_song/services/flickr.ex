@@ -1,11 +1,12 @@
 defmodule BirdSong.Services.Flickr do
   use BirdSong.Services.ThrottledCache,
+    base_url: "https://www.flickr.com",
+    data_folder_path: "data/images/flickr",
     ets_opts: [],
     ets_name: :flickr_cache
 
   alias BirdSong.{
     Bird,
-    Services.Helpers,
     Services.Flickr.Response
   }
 
@@ -24,17 +25,11 @@ defmodule BirdSong.Services.Flickr do
     get(bird, server)
   end
 
-  def url(%Bird{} = bird) do
-    __MODULE__
-    |> Helpers.get_env(:base_url)
-    |> List.wrap()
-    |> Enum.concat(["services", "rest", "?" <> format_query(bird)])
-    |> Path.join()
+  def endpoint(%Bird{}) do
+    Path.join(["services", "rest"])
   end
 
-  def format_query(%Bird{sci_name: sci_name}) do
-    @query
-    |> Map.put(:text, sci_name)
-    |> URI.encode_query()
+  def params(%Bird{sci_name: sci_name}) do
+    Map.put(@query, :text, sci_name)
   end
 end

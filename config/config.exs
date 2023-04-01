@@ -10,7 +10,12 @@ import Config
 one_second = 1_000
 
 config :bird_song,
-  ecto_repos: [BirdSong.Repo]
+  ecto_repos: [BirdSong.Repo],
+  admin_email:
+    (case System.get_env("BIRD_SONG_ADMIN_EMAIL") do
+       "" <> email -> email
+       _ -> raise "missing environment variable: BIRD_SONG_ADMIN_EMAIL"
+     end)
 
 # Configures the endpoint
 config :bird_song, BirdSongWeb.Endpoint,
@@ -30,7 +35,6 @@ config :bird_song, BirdSong.Services.ThrottledCache,
   throttle_ms: 2 * one_second
 
 config :bird_song, BirdSong.Services.Ebird,
-  base_url: "https://api.ebird.org",
   token:
     (case System.get_env("EBIRD_API_TOKEN") do
        "" <> token -> token
@@ -38,12 +42,9 @@ config :bird_song, BirdSong.Services.Ebird,
      end),
   taxonomy_file: Path.relative_to_cwd("data/taxonomy.json")
 
-config :bird_song, BirdSong.Services.XenoCanto,
-  base_url: "https://xeno-canto.org",
-  write_to_disk?: false
+config :bird_song, BirdSong.Services.XenoCanto, write_to_disk?: false
 
 config :bird_song, BirdSong.Services.Flickr,
-  base_url: "https://www.flickr.com",
   write_to_disk?: false,
   api_key:
     (case System.get_env("FLICKR_API_KEY") do
@@ -51,12 +52,9 @@ config :bird_song, BirdSong.Services.Flickr,
        nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
      end)
 
-config :bird_song, BirdSong.Services.Ebird.Recordings,
-  base_url: "https://search.macaulaylibrary.org"
-
 config :bird_song, BirdSong.Services,
   images: BirdSong.Services.Flickr,
-  recordings: BirdSong.Services.XenoCanto,
+  recordings: BirdSong.Services.Ebird.Recordings,
   observations: BirdSong.Services.Ebird,
   stream_timeout_ms: :infinity
 

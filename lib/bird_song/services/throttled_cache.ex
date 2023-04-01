@@ -4,7 +4,7 @@ defmodule BirdSong.Services.ThrottledCache do
 
   @type request_data() :: Bird.t() | {:recent_observations, String.t()}
 
-  @callback url(request_data()) :: String.t()
+  @callback endpoint(request_data()) :: String.t()
   @callback ets_key(request_data()) :: String.t()
   @callback headers(request_data()) :: HTTPoison.headers()
   @callback params(request_data()) :: HTTPoison.params()
@@ -33,7 +33,7 @@ defmodule BirdSong.Services.ThrottledCache do
 
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
-      @module_opts Keyword.put(module_opts, :data_folder_path, "data")
+      @module_opts module_opts
 
       @type request_data() :: Services.ThrottledCache.request_data()
 
@@ -78,25 +78,23 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, {:register_request_listener, self()})
       end
 
-      # unfortunately it seems that this has to be public in order
-      # for it to be called as a task in the :send_request call.
       @spec get_from_api(request_data(), State.t()) :: {:ok, Response.t()} | Helpers.api_error()
       def get_from_api(request, %State{} = state) do
-        request
-        |> url()
+        state
+        |> url(request)
         |> log_external_api_call()
         |> HTTPoison.get(
           request |> headers() |> ThrottledCache.user_agent(),
           params: params(request)
         )
-        |> log_external_api_response(request)
+        |> log_external_api_response(request, state)
         |> maybe_write_to_disk(request, state)
-        |> parse_response(request)
+        |> parse_response(request, state)
       end
 
-      def parse_response(response, request) do
+      def parse_response(response, request, state) do
         response
-        |> Helpers.parse_api_response(url(request))
+        |> Helpers.parse_api_response(url(state, request))
         |> case do
           {:ok, raw} ->
             {:ok, Response.parse(raw)}
@@ -124,8 +122,9 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      @spec url(request_data) :: String.t()
-      def url(_), do: raise("ThrottledCache module must define a &url/1 method")
+      @spec endpoint(request_data()) :: String.t()
+      def endpoint(_),
+        do: raise("ThrottledCache module must define a &endpoint/1 method")
 
       @spec headers(request_data()) :: HTTPoison.headers()
       def headers(%Bird{}), do: []
@@ -174,7 +173,7 @@ defmodule BirdSong.Services.ThrottledCache do
       defoverridable(params: 1)
       defoverridable(ets_key: 1)
       defoverridable(message_details: 1)
-      defoverridable(url: 1)
+      defoverridable(endpoint: 1)
       defoverridable(write_to_disk: 3)
       defoverridable(data_file_name: 1)
       defoverridable(get_from_api: 2)
@@ -227,6 +226,14 @@ defmodule BirdSong.Services.ThrottledCache do
         {:reply, State.data_folder_path(state), state}
       end
 
+      def handle_call(
+            {:parse_response, request: request, response: response},
+            _from,
+            %State{} = state
+          ) do
+        {:reply, parse_response(response, request, state), state}
+      end
+
       def handle_cast({:update_write_config, write_to_disk?}, %State{} = state) do
         {:noreply, State.update_write_config(state, write_to_disk?)}
       end
@@ -265,14 +272,27 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, state}
       end
 
-      def handle_info({ref, response}, %State{} = state)
+      def handle_info(
+            {ref, {:ok, %{__struct__: __MODULE__.Response}} = response},
+            %State{} = state
+          )
           when is_reference(ref) do
-        state
-        |> Map.fetch!(:tasks)
-        |> Map.fetch!(ref)
-        |> handle_task_response(response, state)
+        handle_task_response(state, ref, response)
+      end
 
-        {:noreply, state}
+      def handle_info({ref, {:error, {:not_found, _}} = response}, %State{} = state)
+          when is_reference(ref) do
+        handle_task_response(state, ref, response)
+      end
+
+      def handle_info({ref, {:error, {:bad_response, _}} = response}, %State{} = state)
+          when is_reference(ref) do
+        handle_task_response(state, ref, response)
+      end
+
+      def handle_info({ref, {:error, %HTTPoison.Error{}} = response}, %State{} = state)
+          when is_reference(ref) do
+        handle_task_response(state, ref, response)
       end
 
       def handle_info(:unthrottle, %State{} = state) do
@@ -294,18 +314,27 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      defp handle_task_response({:seed_data_task, request}, response, %State{}) do
+      defp handle_task_response(%State{tasks: tasks} = state, ref, response) do
+        tasks
+        |> Map.fetch!(ref)
+        |> do_handle_task_response(response, state)
+
+        {:noreply, state}
+      end
+
+      defp do_handle_task_response({:seed_data_task, request}, response, %State{}) do
         :ok
       end
 
-      defp handle_task_response(
-             {from, request_data},
+      defp do_handle_task_response(
+             {{pid, ref} = from, request_data},
              response,
              %State{throttle_ms: throttle_ms} = state
-           ) do
+           )
+           when is_pid(pid) and is_reference(ref) do
         send(self(), {:save, {request_data, response}})
 
-        State.notify_listeners(state, {:end, response}, request_data)
+        State.notify_listeners(state, request_data, {:end, response})
 
         Process.send_after(self(), :unthrottle, throttle_ms)
 
@@ -332,9 +361,10 @@ defmodule BirdSong.Services.ThrottledCache do
 
       defp log_external_api_response(
              response,
-             request
+             request,
+             state
            ) do
-        case url(request) do
+        case url(state, request) do
           "http://localhost" <> _ -> :ok
           url -> do_log_external_api_response(url, response)
         end
@@ -363,6 +393,10 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       defp response_status({:ok, %HTTPoison.Response{status_code: 200}}), do: {:debug, "success"}
+
+      defp url(%State{base_url: "" <> base_url}, request_data) do
+        Path.join(base_url, endpoint(request_data))
+      end
 
       defp maybe_write_to_disk(
              {:ok, %HTTPoison.Response{status_code: 200}} = response,

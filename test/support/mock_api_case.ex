@@ -39,9 +39,8 @@ defmodule BirdSong.MockApiCase do
       end
 
       setup [:start_services]
-      setup [:listen_to_services]
-      setup [:setup_bypass]
       setup [:setup_route_mocks]
+      setup [:listen_to_services]
       setup [:clean_up_tmp_folder_on_exit]
 
       require Logger

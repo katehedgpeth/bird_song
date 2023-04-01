@@ -28,10 +28,9 @@ defmodule BirdSong.Services.EbirdTest do
   end
 
   @tag use_mock_routes?: false
-  test "url builds a full endpoint", %{bypass: bypass} do
-    assert Ebird.url({:recent_observations, @forsyth_county}) ===
-             TestHelpers.mock_url(bypass) <>
-               Path.join(["/v2/data/obs/", @forsyth_county, "recent"])
+  test "&endpoint/1 returns the correct endpoint", %{} do
+    assert Ebird.endpoint({:recent_observations, @forsyth_county}) ===
+             Path.join(["v2/data/obs/", @forsyth_county, "recent"])
   end
 
   describe "get_recent_observations" do
