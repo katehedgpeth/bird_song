@@ -1,16 +1,4 @@
-defmodule NoBirdsError do
-  defexception []
-
-  def message(%__MODULE__{}) do
-    """
-    No birds in database!
-    """
-  end
-end
-
-defmodule Mix.Tasks.CountBirdsMissingData do
-  use Mix.Task
-
+defmodule BirdSong.Data.Counts do
   defstruct missing_images: 0,
             missing_recordings: 0,
             total_birds: 0,
@@ -25,10 +13,11 @@ defmodule Mix.Tasks.CountBirdsMissingData do
     Services.DataFile
   }
 
-  @requirements ["app.config", "app.start"]
+  defmodule NoBirdsError do
+    defexception message: "No birds in database!"
+  end
 
-  def run(_args) do
-    services = Services.ensure_started()
+  def get(%Services{} = services) do
     {:ok, %File.Stat{size: data_folder_bytes}} = File.stat("data")
 
     case BirdSong.Repo.all(Bird) do
