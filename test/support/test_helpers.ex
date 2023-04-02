@@ -109,7 +109,7 @@ defmodule BirdSong.TestHelpers do
   def start_service_supervised(module, %{} = tags) do
     []
     |> get_base_url(tags)
-    |> get_data_folder_path_opt(tags)
+    |> get_data_folder_path_opt(tags, module)
     |> get_seed_data_opt(tags)
     |> get_service_name_opt(tags, module)
     |> start_cache(module)
@@ -137,11 +137,17 @@ defmodule BirdSong.TestHelpers do
     raise "Bypass must be initialized in order to use services in tests"
   end
 
-  defp get_data_folder_path_opt(opts, %{tmp_dir: "" <> tmp_dir}) do
-    Keyword.put(opts, :data_folder_path, tmp_dir)
+  defp get_data_folder_path_opt(opts, %{tmp_dir: "" <> tmp_dir}, module) do
+    subfolder = module |> Service.data_type() |> Atom.to_string()
+
+    Keyword.put(
+      opts,
+      :data_folder_path,
+      Path.join([tmp_dir, subfolder])
+    )
   end
 
-  defp get_data_folder_path_opt(opts, %{}) do
+  defp get_data_folder_path_opt(opts, %{}, _module) do
     opts
   end
 

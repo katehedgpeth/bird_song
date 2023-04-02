@@ -18,35 +18,32 @@ defmodule BirdSong.Data.Counts do
   end
 
   def get(%Services{} = services) do
-    {:ok, %File.Stat{size: data_folder_bytes}} = File.stat("data")
-
     case BirdSong.Repo.all(Bird) do
       [%Bird{} | _] = birds ->
-        birds
-        |> Enum.reduce(
+        Enum.reduce(
+          birds,
           %__MODULE__{
             total_birds: length(birds),
-            data_folder_bytes: data_folder_bytes
+            data_folder_bytes: calculate_data_folder_bytes(services)
           },
           &add_bird_counts(&1, &2, services)
         )
-        |> Map.from_struct()
-        |> Enum.map(&print/1)
-        |> Enum.into(%{})
 
       [] ->
         raise NoBirdsError
     end
   end
 
-  def print({:data_folder_bytes = key, val}) do
-    IO.inspect("#{val / 1000} KB", label: key)
-    {key, val}
+  defp calculate_data_folder_bytes(%Services{images: images, recordings: recordings}) do
+    Enum.reduce([images, recordings], 0, &(&2 + get_data_folder_bytes(&1)))
   end
 
-  def print({key, val}) do
-    IO.inspect(val, label: key)
-    {key, val}
+  def get_data_folder_bytes(%Service{} = service) do
+    service
+    |> Service.module()
+    |> apply(:data_folder_path, [service])
+    |> File.stat!()
+    |> Map.fetch!(:size)
   end
 
   defp add_bird_counts(%Bird{} = bird, %__MODULE__{} = counts, %Services{} = services) do

@@ -108,10 +108,13 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.call(pid, :data_folder_path)
       end
 
-      def data_folder_path(%Service{whereis: server} = service) do
-        case GenServer.whereis(server) do
-          nil -> {:error, {:not_alive, server}}
-          pid -> data_folder_path(%{service | whereis: pid})
+      def data_folder_path(%Service{module: module} = service) do
+        case GenServer.whereis(module) do
+          nil ->
+            raise Service.NotStartedError.exception(module: module)
+
+          pid ->
+            data_folder_path(%{service | whereis: pid})
         end
       end
 

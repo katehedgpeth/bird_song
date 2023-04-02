@@ -3,7 +3,7 @@ defmodule BirdSong.Services.Service.NotStartedError do
 
   def message(%__MODULE__{module: module}),
     do: """
-    #{module} service is not started!
+    #{inspect(module)} service is not started!
     """
 end
 
@@ -45,12 +45,13 @@ defmodule BirdSong.Services.Service do
     end
   end
 
-  def data_type(%__MODULE__{module: XenoCanto}), do: :recordings
-  def data_type(%__MODULE__{module: Ebird.Recordings}), do: :recordings
-  def data_type(%__MODULE__{module: Flickr}), do: :images
-  def data_type(%__MODULE__{module: Ebird}), do: :observations
+  def data_type(%__MODULE__{module: module}), do: data_type(module)
+  def data_type(XenoCanto), do: :recordings
+  def data_type(Ebird.Recordings), do: :recordings
+  def data_type(Flickr), do: :images
+  def data_type(Ebird), do: :observations
 
-  def data_type(%__MODULE__{module: module}) do
+  def data_type(module) do
     Helpers.log(%{message: "unknown_service", module: module}, __MODULE__, :warning)
     :misc
   end
