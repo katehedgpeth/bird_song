@@ -38,29 +38,23 @@ defmodule BirdSong.TestSetup do
     :ok
   end
 
-  def start_services(%{bypass: %Bypass{}}) do
-    raise "Do not call :setup_bypass and :start_services in the same setup pipeline"
-  end
-
   def start_services(%{} = tags) do
-    bypass = Bypass.open()
+    tags = Map.put_new(tags, :bypass, Bypass.open())
 
-    tags
-    |> Map.put(:bypass, bypass)
-    |> setup_route_mocks()
+    setup_route_mocks(tags)
 
     images_module = Map.get(tags, :images_service, Flickr)
     recordings_module = Map.get(tags, :recordings_module, Ebird.Recordings)
     observations_module = Map.get(tags, :observations_service, Ebird)
 
-    [{:ok, recordings_server}, {:ok, images_server}, {:ok, observations_server}] =
+    [recordings_service, images_service, observations_service] =
       Enum.map(
         [
           recordings_module,
           images_module,
           observations_module
         ],
-        &TestHelpers.start_service_supervised(&1, Map.put(tags, :bypass, bypass))
+        &TestHelpers.start_service_supervised(&1, tags)
       )
 
     bird =
@@ -71,12 +65,12 @@ defmodule BirdSong.TestSetup do
 
     {
       :ok,
-      bypass: bypass,
+      bypass: Map.fetch!(tags, :bypass),
       services: %Services{
         bird: bird,
-        images: %Service{module: images_module, whereis: images_server},
-        recordings: %Service{module: recordings_module, whereis: recordings_server},
-        observations: %Service{module: observations_module, whereis: observations_server},
+        images: images_service,
+        recordings: recordings_service,
+        observations: observations_service,
         timeout: Map.get(tags, :timeout, 1_000)
       }
     }

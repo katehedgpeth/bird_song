@@ -39,12 +39,13 @@ defmodule BirdSong.Services.ThrottledCacheTest do
 
   describe "ThrottledCache" do
     test "uses cache", %{bypass: bypass, cache: cache} do
-      assert :not_found = ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, cache)
+      assert :not_found =
+               ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, cache.whereis)
 
       assert {:ok, response} = ThrottledCacheUnderTest.get(@red_shouldered_hawk, cache)
 
       assert {:ok, ^response} =
-               ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, cache)
+               ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, cache.whereis)
 
       Bypass.down(bypass)
 
@@ -53,9 +54,9 @@ defmodule BirdSong.Services.ThrottledCacheTest do
 
     @tag expect: &__MODULE__.success_response/1
     test "throttles requests", %{cache: cache} do
-      ThrottledCacheUnderTest.register_request_listener(cache)
+      ThrottledCacheUnderTest.register_request_listener(cache.whereis)
       throttle_ms = Helpers.get_env(BirdSong.Services.ThrottledCache, :throttle_ms)
-      ThrottledCacheUnderTest.clear_cache(cache)
+      ThrottledCacheUnderTest.clear_cache(cache.whereis)
 
       Enum.map(
         [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird],
@@ -72,15 +73,17 @@ defmodule BirdSong.Services.ThrottledCacheTest do
 
   @tag expect_once: &__MODULE__.success_response/1
   test "&ThrottledCache.clear_cache/1", %{cache: cache} do
-    assert GenServer.cast(cache, :clear_cache) === :ok
+    assert %Service{whereis: whereis} = cache
+    assert GenServer.cast(whereis, :clear_cache) === :ok
 
     assert {:ok, response} = ThrottledCacheUnderTest.get(@red_shouldered_hawk, cache)
 
-    assert {:ok, ^response} = ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, cache)
+    assert {:ok, ^response} =
+             ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, whereis)
 
-    ThrottledCacheUnderTest.clear_cache(cache)
+    ThrottledCacheUnderTest.clear_cache(whereis)
 
-    assert ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, cache) === :not_found
+    assert ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, whereis) === :not_found
   end
 
   describe "&ThrottledCache.write_to_disk/3 writes a response to disk" do
@@ -97,10 +100,7 @@ defmodule BirdSong.Services.ThrottledCacheTest do
                %BirdSong.Services.ThrottledCache.State{
                  base_url: "",
                  data_folder_path: tmp_dir,
-                 service: %Service{
-                   module: ThrottledCacheUnderTest,
-                   whereis: cache
-                 }
+                 service: cache
                }
              ) === {:error, :not_alive}
     end
@@ -122,7 +122,7 @@ defmodule BirdSong.Services.ThrottledCacheTest do
                  base_url: "",
                  data_folder_path: tmp_dir,
                  data_file_instance: data_file_instance,
-                 service: %Service{module: ThrottledCacheUnderTest, whereis: cache}
+                 service: cache
                }
              ) === :ok
 
@@ -137,8 +137,7 @@ defmodule BirdSong.Services.ThrottledCacheTest do
   end
 
   defp start_cache(%{} = tags) do
-    {:ok, cache} = TestHelpers.start_service_supervised(ThrottledCacheUnderTest, tags)
-    {:ok, cache: cache}
+    {:ok, cache: TestHelpers.start_service_supervised(ThrottledCacheUnderTest, tags)}
   end
 
   defp mock_response(%{use_bypass?: false}) do

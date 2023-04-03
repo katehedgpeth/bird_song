@@ -17,7 +17,8 @@ defmodule BirdSong.Services.DataFileTest.FakeService do
 
   def start_link(opts) do
     {name, opts} = Keyword.pop!(opts, :name)
-    GenServer.start_link(__MODULE__, opts, name: name)
+    {:ok, pid} = GenServer.start_link(__MODULE__, opts, name: name)
+    pid
   end
 
   def init(opts) do
@@ -80,13 +81,11 @@ defmodule BirdSong.Services.DataFileTest do
 
   setup [:setup_bypass, :make_tmp_dir_path_relative]
 
-  setup %{test: test, tmp_dir: tmp_dir} = tags do
+  setup %{} = tags do
     prev_level = Logger.level()
     name = Map.get(tags, :instance_name)
-    use_correct_folder? = Map.get(tags, :use_correct_folder?, true)
     {:ok, instance} = DataFile.start_link(name: name)
-
-    service = Map.get(tags, :service, FakeService)
+    DataFile.register_listener(instance)
 
     bird =
       case tags do
@@ -97,34 +96,17 @@ defmodule BirdSong.Services.DataFileTest do
           @bird_without_existing_file
       end
 
-    {:ok, service_instance} =
-      case tags do
-        %{service: service} when is_atom(service) ->
-          TestHelpers.start_service_supervised(service, tags)
-
-        %{} ->
-          FakeService.start_link(
-            tmp_dir: tmp_dir,
-            name: test,
-            use_correct_folder?: use_correct_folder?
-          )
-      end
-
-    assert is_pid(service_instance)
-
-    DataFile.register_listener(instance)
-
-    data = %{
-      @good_data
-      | request: bird,
-        service: %Service{module: service, whereis: service_instance}
-    }
+    service =
+      tags
+      |> Map.put_new(:service, FakeService)
+      |> Map.put_new(:use_correct_folder?, true)
+      |> start_service()
 
     on_exit(fn ->
       Logger.configure(level: prev_level)
     end)
 
-    {:ok, instance: instance, data: data, tmp_dir: tmp_dir}
+    {:ok, data: %{@good_data | request: bird, service: service}, instance: instance}
   end
 
   describe "&write/1" do
@@ -283,7 +265,7 @@ defmodule BirdSong.Services.DataFileTest do
         |> Map.fetch!(:tmp_dir)
         |> Path.relative_to_cwd()
 
-      assert Path.join(tmp_dir, "US-NC-067.json") =~
+      assert Path.join([tmp_dir, "observations", "US-NC-067.json"]) =~
                DataFile.data_file_path(data)
 
       assert_works_for_service(tags)
@@ -336,5 +318,26 @@ defmodule BirdSong.Services.DataFileTest do
 
   def make_tmp_dir_path_relative(%{}) do
     :ok
+  end
+
+  def start_service(%{
+        service: FakeService,
+        tmp_dir: tmp_dir,
+        test: test,
+        use_correct_folder?: use_correct_folder?
+      }) do
+    %Service{
+      module: FakeService,
+      whereis:
+        FakeService.start_link(
+          tmp_dir: tmp_dir,
+          name: test,
+          use_correct_folder?: use_correct_folder?
+        )
+    }
+  end
+
+  def start_service(%{service: service} = tags) when is_atom(service) do
+    TestHelpers.start_service_supervised(service, tags)
   end
 end

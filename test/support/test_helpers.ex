@@ -1,6 +1,12 @@
 defmodule BirdSong.TestHelpers do
   require Logger
-  alias BirdSong.{Bird, Services, Services.Service}
+
+  alias BirdSong.{
+    Bird,
+    Services,
+    Services.Service
+  }
+
   alias Phoenix.LiveView.Socket
   import ExUnit.Assertions, only: [assert: 1, assert: 2]
 
@@ -107,12 +113,15 @@ defmodule BirdSong.TestHelpers do
   end
 
   def start_service_supervised(module, %{} = tags) do
-    []
-    |> get_base_url(tags)
-    |> get_data_folder_path_opt(tags, module)
-    |> get_seed_data_opt(tags)
-    |> get_service_name_opt(tags, module)
-    |> start_cache(module)
+    {:ok, pid} =
+      []
+      |> get_base_url(tags)
+      |> get_data_folder_path_opt(tags, module)
+      |> get_seed_data_opt(tags)
+      |> get_service_name_opt(tags, module)
+      |> start_cache(module)
+
+    %Service{module: module, whereis: pid}
   end
 
   def module_alias(module) do
