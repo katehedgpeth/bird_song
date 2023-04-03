@@ -24,7 +24,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
           ets_name: atom(),
           ets_opts: [:ets.table_type()],
           request_listeners: [pid()],
-          scraper: atom() | pid(),
+          scraper: atom() | {atom(), pid()},
           service: Service.t(),
           tasks: %{reference() => request_data()},
           throttled?: boolean(),

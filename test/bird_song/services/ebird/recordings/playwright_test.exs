@@ -5,11 +5,13 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
   alias BirdSong.{
     Bird,
-    Services.Ebird.Recordings
+    Services.Ebird.Recordings.Playwright,
+    Data.Scraper.TimeoutError,
+    Data.Scraper.BadResponseError
   }
 
-  alias Recordings.{Playwright, TimeoutError, BadResponseError}
-
+  @moduletag :capture_log
+  @moduletag :slow_test
   @throttle_ms 100
 
   setup_all do
@@ -28,11 +30,15 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
     {:ok, server} =
       Playwright.start_link(
-        bird: bird,
         listeners: [self()],
         throttle_ms: @throttle_ms,
         base_url: TestHelpers.mock_url(bypass)
       )
+
+    # on_exit(fn ->
+    #   Playwright.stop_instance(server)
+    #   #   true = GenServer.call(server, :shutdown_port)
+    # end)
 
     {:ok, bird: bird, bypass: bypass, server: server}
   end
@@ -66,7 +72,10 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     end
 
     test "opens a port and returns a response", %{bird: bird, server: server} do
-      response = Playwright.run(server)
+      response = Playwright.run(server, bird)
+
+      assert %{port: port} = GenServer.call(server, :state)
+      assert {:connected, _pid} = Port.info(port, :connected)
 
       assert {:ok, data} = response
       assert is_list(data)
@@ -121,8 +130,8 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
       end
     end
 
-    test "sends 3 throttled requests", %{server: server} do
-      Playwright.run(server)
+    test "sends 3 throttled requests", %{bird: bird, server: server} do
+      Playwright.run(server, bird)
 
       refute_receive {Playwright, %DateTime{}, {:request, %{current_request_number: 0}}}
       refute_receive {Playwright, %DateTime{}, {:request, %{current_request_number: 4}}}
@@ -154,8 +163,9 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
   describe "Ebird.Recordings.Playwright.run/1 - error responses" do
     test "returns an error response without crashing when HTML page returns a bad response", %{
-      server: server,
-      bypass: bypass
+      bird: bird,
+      bypass: bypass,
+      server: server
     } do
       body_404 = "<div>That page doesn't exist</div>"
       mock_response(bypass, :html, 404, body_404)
@@ -166,7 +176,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
                 response_body: ^body_404,
                 status: 404,
                 url: url
-              }} = Playwright.run(server)
+              }} = Playwright.run(server, bird)
 
       assert url === bypass |> TestHelpers.mock_url() |> Path.join("/catalog?view=list")
 
@@ -175,19 +185,23 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
         %DateTime{},
         {:request, %{current_request_number: 1, responses: []}}
       }
+
+      assert %{port: port} = GenServer.call(server, :state)
+      assert {:connected, _pid} = Port.info(port, :connected)
     end
 
     test "returns an error without crashing when .ResponseList is not found", %{
+      bird: bird,
       bypass: bypass,
       server: server
     } do
       mock_response(bypass, :html, 200, "<div>This is an unexpected document structure</div>")
       do_not_expect_api_response(bypass)
 
-      assert Playwright.run(server) ===
+      assert Playwright.run(server, bird) ===
                {:error,
                 %TimeoutError{
-                  js_message:
+                  timeout_message:
                     Enum.join(
                       [
                         "Timeout 3000ms exceeded.",
@@ -204,9 +218,13 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
         %DateTime{},
         {:request, %{current_request_number: 1, responses: []}}
       }
+
+      assert %{port: port} = GenServer.call(server, :state)
+      assert {:connected, _pid} = Port.info(port, :connected)
     end
 
     test "returns an error response without crashing when API request returns a bad response", %{
+      bird: bird,
       bypass: bypass,
       mock_html: mock_html,
       server: server
@@ -220,15 +238,18 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
         ~s({"error": "You are not authorized to perform this action"})
       )
 
-      assert Playwright.run(server) === {
+      assert Playwright.run(server, bird) === {
                :error,
-               %BirdSong.Services.Ebird.Recordings.BadResponseError{
+               %BadResponseError{
                  __exception__: true,
                  response_body: "{\"error\": \"You are not authorized to perform this action\"}",
                  status: 403,
                  url: bypass |> TestHelpers.mock_url() |> Path.join("/api/v2/search")
                }
              }
+
+      assert %{port: port} = GenServer.call(server, :state)
+      assert {:connected, _pid} = Port.info(port, :connected)
     end
   end
 end

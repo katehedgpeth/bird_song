@@ -1,27 +1,34 @@
 defmodule BirdSong.Services.FlickrTest do
-  use BirdSong.MockApiCase
+  use BirdSong.DataCase
+  use BirdSong.MockDataAttributes
+
+  import BirdSong.TestSetup, only: [setup_bypass: 1, setup_route_mocks: 1]
 
   alias BirdSong.{
-    Services,
     Services.DataFile,
     Services.Flickr,
-    Services.Service
+    Services.Service,
+    TestHelpers,
+    MockServer
   }
 
   @bird @carolina_wren
-
-  @moduletag services: [Flickr]
-
-  @service Map.fetch!(%Services{}, :images)
 
   setup_all do
     {:ok, images} =
       DataFile.read(%DataFile.Data{
         request: @bird,
-        service: Service.ensure_started(@service)
+        service: Service.ensure_started(%Service{module: Flickr}, raise?: true)
       })
 
     {:ok, images: images}
+  end
+
+  setup [:setup_bypass, :setup_route_mocks]
+
+  setup tags do
+    service = TestHelpers.start_service_supervised(Flickr, tags)
+    {:ok, service: service}
   end
 
   describe "&get_image/1" do
@@ -29,7 +36,7 @@ defmodule BirdSong.Services.FlickrTest do
     test "returns {:ok, %Flickr.Response{}} when request is successful", %{
       bypass: bypass,
       images: images,
-      services: %Services{images: %Service{whereis: whereis}}
+      service: %Service{whereis: whereis}
     } do
       Bypass.expect(bypass, &Plug.Conn.resp(&1, 200, images))
       assert {:ok, response} = Flickr.get_images(@bird, whereis)
@@ -43,7 +50,7 @@ defmodule BirdSong.Services.FlickrTest do
 
     @tag expect_once: &MockServer.not_found_response/1
     test "returns {:error, {:not_found, url}} when API returns 404", %{
-      services: %Services{images: %Service{whereis: whereis}},
+      service: %Service{whereis: whereis},
       bypass: bypass
     } do
       assert GenServer.call(whereis, {:get_from_cache, @bird}) === :not_found

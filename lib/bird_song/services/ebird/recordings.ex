@@ -13,11 +13,6 @@ defmodule BirdSong.Services.Ebird.Recordings do
     Services.Helpers
   }
 
-  alias __MODULE__.{
-    Response,
-    Playwright
-  }
-
   alias BirdSong.Services.ThrottledCache, as: TC
 
   def base_url() do
@@ -37,49 +32,28 @@ defmodule BirdSong.Services.Ebird.Recordings do
 
   def get_from_api(
         %Bird{} = bird,
-        %TC.State{} = state
-      ) do
-    [scraper: scraper_module, server: server] =
-      state
-      |> Map.fetch!(:scraper)
-      |> get_scraper_instance(bird, state)
-
-    response = scraper_module.run(server)
-    DynamicSupervisor.terminate_child(Services.GenServers, server)
-
-    case response do
+        %TC.State{scraper: {scraper_module, scraper_pid}}
+      )
+      when is_pid(scraper_pid) do
+    case scraper_module.run(scraper_pid, bird) do
       {:ok, [_ | _] = raw_recordings} -> {:ok, Response.parse(raw_recordings)}
       {:error, error} -> {:error, error}
     end
-  end
-
-  defp get_scraper_instance(Playwright, %Bird{} = bird, %TC.State{
-         base_url: base_url,
-         request_listeners: listeners
-       }) do
-    {:ok, server} =
-      DynamicSupervisor.start_child(
-        Services.GenServers,
-        {Playwright, base_url: base_url, bird: bird, listeners: [self() | listeners]}
-      )
-
-    [scraper: Playwright, server: server]
-  end
-
-  defp get_scraper_instance(pid, %Bird{}, %TC.State{}) when is_pid(pid) do
-    [scraper: GenServer.call(pid, :module), server: pid]
   end
 
   def handle_call(:state, _from, state) do
     {:reply, state, state}
   end
 
-  def handle_call(msg, from, state) do
-    super(msg, from, state)
+  def handle_call({:get_from_api, request}, from, %TC.State{scraper: scraper} = state) do
+    super({:get_from_api, request}, from, %{
+      state
+      | scraper: start_scraper_instance(scraper, state)
+    })
   end
 
-  def handle_info({:update_scraper_instance, pid}, state) do
-    {:noreply, Map.replace!(state, :scraper, pid)}
+  def handle_call(msg, from, state) do
+    super(msg, from, state)
   end
 
   def handle_info({ref, {:error, %BadResponseError{status: 404, url: url}}}, state)
@@ -93,5 +67,29 @@ defmodule BirdSong.Services.Ebird.Recordings do
 
   def handle_info(msg, state) do
     super(msg, state)
+  end
+
+  defp start_scraper_instance(nil, %TC.State{}) do
+    raise "Scraper instance is not set!"
+  end
+
+  defp start_scraper_instance(module, %TC.State{
+         base_url: base_url,
+         request_listeners: listeners,
+         throttle_ms: throttle_ms
+       })
+       when is_atom(module) and module !== nil do
+    {:ok, pid} =
+      module.start_link(
+        base_url: base_url,
+        listeners: listeners,
+        throttle_ms: throttle_ms
+      )
+
+    {module, pid}
+  end
+
+  defp start_scraper_instance({module, pid}, %TC.State{}) when is_pid(pid) do
+    {module, pid}
   end
 end

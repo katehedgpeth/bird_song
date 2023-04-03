@@ -3,8 +3,11 @@ defmodule BirdSong.TestHelpers do
 
   alias BirdSong.{
     Bird,
+    MockJsScraper,
     Services,
-    Services.Service
+    Services.Service,
+    Services.Ebird,
+    Services.Ebird.Recordings.BadResponseError
   }
 
   alias Phoenix.LiveView.Socket
@@ -118,6 +121,7 @@ defmodule BirdSong.TestHelpers do
       |> get_base_url(tags)
       |> get_data_folder_path_opt(tags, module)
       |> get_seed_data_opt(tags)
+      |> get_scraper_opt(tags, module)
       |> get_service_name_opt(tags, module)
       |> start_cache(module)
 
@@ -160,6 +164,26 @@ defmodule BirdSong.TestHelpers do
     opts
   end
 
+  defp get_scraper_opt(
+         opts,
+         %{inject_playwright?: true, playwright_response: maybe_response},
+         Ebird.Recordings
+       ) do
+    scraper_module = MockJsScraper
+    response = verify_playwright_response_format(maybe_response)
+    {:ok, pid} = ExUnit.Callbacks.start_supervised({scraper_module, response: response})
+    Keyword.put(opts, :scraper, {scraper_module, pid})
+  end
+
+  defp get_scraper_opt(opts, %{}, Ebird.Recordings) do
+    Logger.warning("using Ebird.Recordings.Playwright for scraper module")
+    opts
+  end
+
+  defp get_scraper_opt(opts, %{}, _) do
+    opts
+  end
+
   defp get_seed_data_opt(opts, %{seed_services?: seed?}) do
     Keyword.put(opts, :seed_data?, seed?)
   end
@@ -170,5 +194,23 @@ defmodule BirdSong.TestHelpers do
 
   defp get_service_name_opt(opts, %{test: test}, module) do
     Keyword.put(opts, :name, Module.concat(test, module_alias(module)))
+  end
+
+  defp verify_playwright_response_format(maybe_response) do
+    case maybe_response do
+      {:file, "" <> _} ->
+        maybe_response
+
+      {:ok, [%{} | _]} ->
+        maybe_response
+
+      {:error, %BadResponseError{}} ->
+        maybe_response
+
+      _ ->
+        raise """
+        Invalid playwright response format: #{inspect(maybe_response)}
+        """
+    end
   end
 end

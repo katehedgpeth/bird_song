@@ -5,14 +5,13 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
 
   alias BirdSong.{
     Bird,
-    Services,
     Services.Ebird.Recordings,
     Services.Service,
-    Services.ThrottledCache,
     TestHelpers
   }
 
   @moduletag :tmp_dir
+  @moduletag :capture_log
 
   setup_all do
     {:ok,
@@ -21,30 +20,48 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
   end
 
   setup [:seed_from_mock_taxonomy]
-  setup [:start_services]
-  setup [:listen_to_services]
+  # setup [:start_services]
+  # setup [:listen_to_services]
 
-  setup %{bypass: bypass, mock_data: mock_data, mock_html: mock_html} do
+  setup tags do
+    %{mock_data: mock_data, mock_html: mock_html} = tags
+
+    bypass = Bypass.open()
+
+    service =
+      TestHelpers.start_service_supervised(
+        Recordings,
+        Map.merge(tags, %{bypass: bypass, throttle_ms: 0})
+      )
+
+    Recordings.register_request_listener(service.whereis)
+
     Bypass.expect(bypass, "GET", "/catalog", &success_response(&1, mock_html))
     Bypass.expect(bypass, "GET", "/api/v2/search", &success_response(&1, mock_data))
     Bypass.stub(bypass, :any, :any, &Plug.Conn.resp(&1, 404, ""))
-    TestHelpers.update_env(ThrottledCache, :throttle_ms, 0)
 
-    :ok
+    {:ok, bypass: bypass, service: service}
   end
 
   def success_response(conn, "" <> mock_response) do
     Plug.Conn.resp(conn, 200, mock_response)
   end
 
-  @tag use_mock_routes?: false
   @tag recordings_module: Recordings
-  test "get_from_api/1", %{
-    services: %Services{recordings: service}
+  test "get/2", %{
+    service: %Service{} = service,
+    tmp_dir: tmp_dir
   } do
-    assert %Service{module: Recordings} = service
     bird = BirdSong.Repo.get_by(Bird, common_name: "Eastern Bluebird")
+    assert %{data_folder_path: folder} = GenServer.call(service.whereis, :state)
+    assert folder =~ tmp_dir
     assert {:ok, %Recordings.Response{recordings: recordings}} = Recordings.get(bird, service)
+
+    # does not shut down port after receiving response
+    state = GenServer.call(service.whereis, :state)
+    assert %{scraper: {Recordings.Playwright, scraper_pid}} = state
+    assert %{port: port} = GenServer.call(scraper_pid, :state)
+    assert {:connected, _} = Port.info(port, :connected)
 
     assert_receive {
       Recordings.Playwright,

@@ -10,17 +10,33 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   alias BirdSong.{
     Bird,
+    Data.Scraper.BadResponseError,
+    Data.Scraper.JsonParseError,
+    Data.Scraper.TimeoutError,
+    Data.Scraper.UnknownMessageError,
     Services.ThrottledCache,
     Services.Helpers
   }
 
-  @type response :: {:ok, [Map.t()]} | {:error, BadResponseError} | {:error, TimeoutError}
-
-  @callback run(pid()) :: response()
+  @behaviour BirdSong.Data.Scraper
 
   @throttle_ms :bird_song
                |> Application.compile_env!(ThrottledCache)
                |> Keyword.fetch!(:throttle_ms)
+
+  @runner_script :bird_song
+                 |> :code.priv_dir()
+                 |> Path.join("static/assets/playwright_runner.js")
+
+  @auth_json :bird_song
+             |> :code.priv_dir()
+             |> Path.join("static/assets/playwright_auth.json")
+
+  @node_path System.find_executable("node")
+
+  @max_requests 3
+
+  @enforce_keys [:base_url]
 
   defstruct [
     :base_url,
@@ -37,7 +53,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   @type t() :: %__MODULE__{
           base_url: String.t(),
-          bird: Bird.t(),
+          bird: Bird.t() | nil,
           current_request_number: integer(),
           error: {:error, any()} | nil,
           listeners: [pid()],
@@ -48,20 +64,9 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
           throttle_ms: integer()
         }
 
-  @runner_script :bird_song
-                 |> :code.priv_dir()
-                 |> Path.join("static/assets/playwright_runner.js")
-
-  @auth_json :bird_song
-             |> :code.priv_dir()
-             |> Path.join("static/assets/playwright_auth.json")
-
-  @node_path System.find_executable("node")
-
-  @max_requests 3
-
-  def run(whereis) do
-    GenServer.call(whereis, :run)
+  @spec run(GenServer.server(), BirdSong.Bird.t()) :: BirdSong.Data.Scraper.response()
+  def run(whereis, %Bird{} = bird) do
+    GenServer.call(whereis, {:run, bird})
   end
 
   #########################################################
@@ -79,6 +84,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   def init(%__MODULE__{} = state) do
+    Process.flag(:trap_exit, true)
     {:ok, open_port(state)}
   end
 
@@ -103,13 +109,21 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
-  def handle_call(:run, from, %__MODULE__{} = state) do
+  def handle_call(:shutdown_port, _from, %__MODULE__{} = state) do
+    {:reply, shutdown_port(state), state}
+  end
+
+  def handle_call({:run, bird}, from, %__MODULE__{bird: nil} = state) do
     send(self(), :send_request)
-    {:noreply, %{state | reply_to: from}}
+    {:noreply, %{state | bird: bird, reply_to: from}}
   end
 
   def handle_call(:state, _from, %__MODULE__{} = state) do
     {:reply, state, state}
+  end
+
+  def terminate(_reason, %__MODULE__{} = state) do
+    shutdown_port(state)
   end
 
   #########################################################
@@ -129,6 +143,9 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     )
   end
 
+  defp ensure_throttled_ms(nil), do: Helpers.get_env(ThrottledCache, :throttle_ms)
+  defp ensure_throttled_ms(throttled_ms) when is_integer(throttled_ms), do: throttled_ms
+
   defp get_initial_cursor_mark(%__MODULE__{current_request_number: 1}) do
     nil
   end
@@ -138,14 +155,13 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp init_state(opts) do
-    struct(
-      __MODULE__,
-      opts
-      |> Keyword.put_new(
-        :throttle_ms,
-        Helpers.get_env(ThrottledCache, :throttle_ms)
-      )
+    opts
+    |> Keyword.update!(:base_url, & &1)
+    |> Keyword.update!(
+      :throttle_ms,
+      &ensure_throttled_ms/1
     )
+    |> __struct__()
   end
 
   defp log_external_api_call(%__MODULE__{base_url: "http://localhost" <> _}) do
@@ -161,8 +177,6 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   def open_port(%__MODULE__{base_url: base_url} = state) do
-    log_external_api_call(state)
-
     port =
       Port.open({:spawn_executable, @node_path}, [
         :binary,
@@ -180,7 +194,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp parse_error_message(%{"error" => "timeout", "message" => js_message}) do
-    TimeoutError.exception(js_message: js_message)
+    TimeoutError.exception(timeout_message: js_message)
   end
 
   defp parse_error_message(%{
@@ -197,7 +211,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
          "input" => input,
          "message" => js_message
        }) do
-    JsonParseError.exception(input: input, js_message: js_message)
+    JsonParseError.exception(input: input, error_message: js_message)
   end
 
   @spec receive_message(String.t(), t()) :: t()
@@ -221,7 +235,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
       {:ok, [_ | _] = recordings} ->
         recordings
         |> add_recordings_to_state(state)
-        |> send_again_or_reply_and_close()
+        |> send_again_or_reply()
 
       {:error, _} ->
         receive_message(message, state)
@@ -237,7 +251,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   defp handle_error(error, %__MODULE__{} = state) do
     state
     |> Map.replace!(:error, {:error, error})
-    |> reply_and_close()
+    |> reply()
   end
 
   defp reply(%__MODULE__{error: {:error, _} = error} = state) do
@@ -251,21 +265,15 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   defp do_reply(%__MODULE__{reply_to: from} = state, reply) do
     GenServer.reply(from, reply)
 
-    %{state | reply_to: nil, responses: [], current_request_number: 0}
+    %{state | bird: nil, reply_to: nil, responses: [], current_request_number: 0}
   end
 
-  defp reply_and_close(%__MODULE__{} = state) do
-    true = shutdown_runner(state)
-
+  defp send_again_or_reply(%__MODULE__{current_request_number: count} = state)
+       when count === @max_requests do
     reply(state)
   end
 
-  defp send_again_or_reply_and_close(%__MODULE__{current_request_number: count} = state)
-       when count === @max_requests do
-    reply_and_close(state)
-  end
-
-  defp send_again_or_reply_and_close(%__MODULE__{throttle_ms: throttle_ms} = state) do
+  defp send_again_or_reply(%__MODULE__{throttle_ms: throttle_ms} = state) do
     Process.send_after(self(), :send_request, throttle_ms)
     state
   end
@@ -278,6 +286,8 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp do_send_request(%__MODULE__{port: port, current_request_number: count} = state) do
+    log_external_api_call(state)
+
     notify_listeners(
       state,
       {:request, Map.take(state, [:current_request_number, :bird, :responses])}
@@ -296,7 +306,8 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
      )}
   end
 
-  defp shutdown_runner(%__MODULE__{port: port}) do
+  defp shutdown_port(%__MODULE__{port: port}) do
+    Helpers.log([message: "shutting_down_port", port: port], __MODULE__, :warning)
     # JS script shuts itself down with process.exit()
     Port.command(port, "shutdown")
   end

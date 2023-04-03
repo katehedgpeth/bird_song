@@ -11,6 +11,7 @@ defmodule BirdSong.Data.CountsTest do
   }
 
   @moduletag use_mock_routes?: false
+  @moduletag :capture_log
 
   @expected_in_db 300
 

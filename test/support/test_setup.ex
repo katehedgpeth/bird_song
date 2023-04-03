@@ -2,11 +2,8 @@ defmodule BirdSong.TestSetup do
   require ExUnit.Assertions
   use BirdSong.MockDataAttributes
 
-  alias BirdSong.Services.Ebird.Recordings.BadResponseError
-
   alias BirdSong.{
     Bird,
-    MockJsScraper,
     Services,
     Services.Service,
     TestHelpers
@@ -92,38 +89,6 @@ defmodule BirdSong.TestSetup do
 
   defguard is_module_name(name)
            when is_atom(name) and name not in [:xeno_canto, :flickr, :ebird]
-
-  def inject_playwright(%{playwright_response: maybe_response, services: services}) do
-    response =
-      case maybe_response do
-        {:file, "" <> _} ->
-          maybe_response
-
-        {:ok, [%{} | _]} ->
-          maybe_response
-
-        {:error, %BadResponseError{}} ->
-          maybe_response
-
-        _ ->
-          raise """
-          Invalid playwright response format: #{inspect(maybe_response)}
-          """
-      end
-
-    scraper = ExUnit.Callbacks.start_supervised!({MockJsScraper, response: response})
-
-    services
-    |> Map.fetch!(:recordings)
-    |> Map.fetch!(:whereis)
-    |> send({:update_scraper_instance, scraper})
-
-    {:ok, scraper: scraper}
-  end
-
-  def inject_playwright(%{}) do
-    :ok
-  end
 
   def setup_bypass(%{use_bypass: false}) do
     :ok

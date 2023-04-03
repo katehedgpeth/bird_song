@@ -4,10 +4,8 @@ defmodule BirdSong.ServicesTest do
   alias Services.{Ebird, Flickr, XenoCanto, Service, DataFile}
 
   @moduletag services: [:flickr, :xeno_canto]
-  @moduletag :capture_log
+  @moduletag inject_playwright?: true
   @moduletag expect: &MockServer.success_response/1
-
-  setup [:inject_playwright]
 
   describe "&fetch_data_for_bird/1" do
     @tag bird: @eastern_bluebird
@@ -67,6 +65,7 @@ defmodule BirdSong.ServicesTest do
 
     @tag bird: @eastern_bluebird
     @tag use_mock_routes?: false
+    @tag playwright_response: {:ok, [%{}]}
     test "does not call service if file exists and overwrite? is false", %{
       bird: bird,
       services: services

@@ -36,8 +36,7 @@ const sendMessage = (data) => {
   }
 
   const sendErrorMessage = (message) => {
-    sendMessage(JSON.stringify(message))
-    return shutdown();
+    return sendMessage(JSON.stringify(message))
   }
 
   const continueIfGoodResponse = async (response, url, callback) =>

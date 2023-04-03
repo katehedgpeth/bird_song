@@ -1,14 +1,24 @@
 defmodule BirdSong.MockJsScraper do
   use GenServer
   alias BirdSong.Services.Ebird
-  alias Ebird.Recordings.Playwright
 
-  @behaviour Playwright
+  @behaviour BirdSong.Data.Scraper
 
   @type response_opt :: {:file, String.t()} | Playwright.response()
 
-  def run(server) do
+  def run(server, _) do
     GenServer.call(server, :response)
+  end
+
+  def start_instance(response: response) do
+    DynamicSupervisor.start_child(
+      Services.GenServers,
+      {__MODULE__, response: response}
+    )
+  end
+
+  def stop_instance(pid) do
+    DynamicSupervisor.terminate_child(Services.GenServers, pid)
   end
 
   @spec start_link(response: response_opt) :: GenServer.on_start()
