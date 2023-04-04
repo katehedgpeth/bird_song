@@ -31,7 +31,8 @@ defmodule BirdSong.Services.Ebird do
 
   def params({:recent_observations, _}), do: [{"back", 30}]
 
-  def headers({:recent_observations, _}), do: [{"x-ebirdapitoken", @token}]
+  def headers({:recent_observations, _region}),
+    do: [{"x-ebirdapitoken", @token} | user_agent()]
 
   def message_details({:recent_observations, region}), do: %{region: region}
 

@@ -29,6 +29,8 @@ defmodule BirdSong.Services.Flickr do
     Path.join(["services", "rest"])
   end
 
+  def headers(%Bird{}), do: []
+
   def params(%Bird{sci_name: sci_name}) do
     Map.put(@query, :text, sci_name)
   end

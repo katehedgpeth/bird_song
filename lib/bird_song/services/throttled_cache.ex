@@ -12,12 +12,6 @@ defmodule BirdSong.Services.ThrottledCache do
 
   @env Application.compile_env!(:bird_song, __MODULE__)
 
-  @admin_email Application.compile_env!(:bird_song, :admin_email)
-
-  def user_agent(headers) do
-    [{"User-Agent", "BirdSongBot (#{@admin_email})"} | headers]
-  end
-
   defmacro __using__(module_opts) do
     quote location: :keep,
           bind_quoted: [
@@ -39,6 +33,7 @@ defmodule BirdSong.Services.ThrottledCache do
 
       alias __MODULE__.Response
 
+      @admin_email Application.compile_env!(:bird_song, :admin_email)
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
       @module_opts module_opts
@@ -143,7 +138,8 @@ defmodule BirdSong.Services.ThrottledCache do
       defoverridable(get_from_api: 2)
 
       @spec headers(request_data()) :: HTTPoison.headers()
-      def headers(%Bird{}), do: []
+      def headers(%Bird{}), do: user_agent()
+      defoverridable(headers: 1)
 
       @spec params(request_data()) :: HTTPoison.params()
       def params(%Bird{}), do: []
