@@ -28,7 +28,15 @@ defmodule BirdSong.Services.ThrottledCache do
       require Logger
       use GenServer
       alias BirdSong.{Bird, Services}
-      alias Services.{Helpers, ThrottledCache, ThrottledCache.State, Service}
+
+      alias Services.{
+        Ebird,
+        Helpers,
+        ThrottledCache,
+        ThrottledCache.State,
+        Service
+      }
+
       alias __MODULE__.Response
 
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
@@ -78,20 +86,6 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, {:register_request_listener, self()})
       end
 
-      @spec get_from_api(request_data(), State.t()) :: {:ok, Response.t()} | Helpers.api_error()
-      def get_from_api(request, %State{} = state) do
-        state
-        |> url(request)
-        |> log_external_api_call()
-        |> HTTPoison.get(
-          request |> headers() |> ThrottledCache.user_agent(),
-          params: params(request)
-        )
-        |> log_external_api_response(request, state)
-        |> maybe_write_to_disk(request, state)
-        |> parse_response(request, state)
-      end
-
       def parse_response(response, request, state) do
         response
         |> Helpers.parse_api_response(url(state, request))
@@ -126,24 +120,46 @@ defmodule BirdSong.Services.ThrottledCache do
       #########################################################
 
       @spec endpoint(request_data()) :: String.t()
-      def endpoint(_),
-        do: raise("ThrottledCache module must define a &endpoint/1 method")
+      def endpoint(_) do
+        raise("ThrottledCache module must define a &endpoint/1 method")
+      end
+
+      defoverridable(endpoint: 1)
+
+      @spec get_from_api(request_data(), State.t()) :: {:ok, Response.t()} | Helpers.api_error()
+      def get_from_api(request, %State{} = state) do
+        state
+        |> url(request)
+        |> log_external_api_call()
+        |> HTTPoison.get(
+          headers(request),
+          params: params(request)
+        )
+        |> log_external_api_response(request, state)
+        |> maybe_write_to_disk(request, state)
+        |> parse_response(request, state)
+      end
+
+      defoverridable(get_from_api: 2)
 
       @spec headers(request_data()) :: HTTPoison.headers()
       def headers(%Bird{}), do: []
 
       @spec params(request_data()) :: HTTPoison.params()
       def params(%Bird{}), do: []
+      defoverridable(params: 1)
 
       @spec ets_key(any()) :: String.t()
       def ets_key(%Bird{sci_name: sci_name}), do: sci_name
+      defoverridable(ets_key: 1)
 
       @spec message_details(request_data()) :: Map.t()
       def message_details(%Bird{} = bird), do: %{bird: bird}
+      defoverridable(message_details: 1)
 
-      @spec write_to_disk(Helpers.api_response(), request_data(), State.t()) ::
+      @spec write_to_disk({:ok, HTTPoison.Response.t() | [Map.t()]}, request_data(), State.t()) ::
               :ok | {:error, any()}
-      def write_to_disk({:ok, %HTTPoison.Response{}} = response, request, %State{
+      def write_to_disk({:ok, _} = response, request, %State{
             data_file_instance: instance,
             service: service
           }) do
@@ -157,6 +173,8 @@ defmodule BirdSong.Services.ThrottledCache do
         )
       end
 
+      defoverridable(write_to_disk: 3)
+
       @spec data_file_name(request_data()) :: String.t()
       def data_file_name(%Bird{common_name: common_name}) do
         common_name
@@ -164,22 +182,17 @@ defmodule BirdSong.Services.ThrottledCache do
         |> String.replace("/", "\\")
       end
 
-      def data_file_name({:recent_observations, region}) do
-        region
-      end
+      def data_file_name({:recent_observations, region}), do: region
+      defoverridable(data_file_name: 1)
 
       def seed_ets_table(%State{} = state) do
         State.seed_ets_table(state)
       end
 
-      defoverridable(headers: 1)
-      defoverridable(params: 1)
-      defoverridable(ets_key: 1)
-      defoverridable(message_details: 1)
-      defoverridable(endpoint: 1)
-      defoverridable(write_to_disk: 3)
-      defoverridable(data_file_name: 1)
-      defoverridable(get_from_api: 2)
+      def successful_response?({:ok, %HTTPoison.Response{status_code: 200}}), do: true
+      def successful_response?({:ok, %HTTPoison.Response{}}), do: false
+      def successful_response?({:error, %HTTPoison.Error{}}), do: false
+      defoverridable(successful_response?: 1)
 
       #########################################################
       #########################################################
@@ -283,12 +296,23 @@ defmodule BirdSong.Services.ThrottledCache do
         handle_task_response(state, ref, response)
       end
 
+      def handle_info({ref, {:error, {:no_results, request}} = response}, %State{} = state)
+          when is_reference(ref) do
+        Helpers.log([error: :no_results, request: request], __MODULE__, :warning)
+        handle_task_response(state, ref, response)
+      end
+
       def handle_info({ref, {:error, {:not_found, _}} = response}, %State{} = state)
           when is_reference(ref) do
         handle_task_response(state, ref, response)
       end
 
       def handle_info({ref, {:error, {:bad_response, _}} = response}, %State{} = state)
+          when is_reference(ref) do
+        handle_task_response(state, ref, response)
+      end
+
+      def handle_info({ref, {:error, {:timeout, _}} = response}, %State{} = state)
           when is_reference(ref) do
         handle_task_response(state, ref, response)
       end
@@ -401,19 +425,18 @@ defmodule BirdSong.Services.ThrottledCache do
         Path.join(base_url, endpoint(request_data))
       end
 
-      defp maybe_write_to_disk(
-             {:ok, %HTTPoison.Response{status_code: 200}} = response,
-             request,
-             %State{} = state
-           ) do
-        if State.write_to_disk?(state) do
+      defp user_agent(), do: [{"User-Agent", "BirdSongBot (#{@admin_email})"}]
+
+      @spec maybe_write_to_disk(
+              response :: Ebird.Recordings.raw_response() | Helpers.api_response(Response.t()),
+              request :: any(),
+              state :: State.t()
+            ) :: Helpers.api_response(Response.t()) | Ebird.Recordings.raw_response()
+      defp maybe_write_to_disk(response, request, %State{} = state) do
+        if successful_response?(response) and State.write_to_disk?(state) do
           write_to_disk(response, request, state)
         end
 
-        response
-      end
-
-      defp maybe_write_to_disk(response, _request, %State{}) do
         response
       end
     end

@@ -28,10 +28,6 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
                  |> :code.priv_dir()
                  |> Path.join("static/assets/playwright_runner.js")
 
-  @auth_json :bird_song
-             |> :code.priv_dir()
-             |> Path.join("static/assets/playwright_auth.json")
-
   @node_path System.find_executable("node")
 
   @max_requests 3
@@ -66,7 +62,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   @spec run(GenServer.server(), BirdSong.Bird.t()) :: BirdSong.Data.Scraper.response()
   def run(whereis, %Bird{} = bird) do
-    GenServer.call(whereis, {:run, bird})
+    GenServer.call(whereis, {:run, bird}, :infinity)
   end
 
   #########################################################
@@ -109,8 +105,12 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
-  def handle_call(:shutdown_port, _from, %__MODULE__{} = state) do
-    {:reply, shutdown_port(state), state}
+  def handle_info({:EXIT, port, :normal}, state) when is_port(port) do
+    {:noreply, state}
+  end
+
+  def handle_cast(:shutdown_port, %__MODULE__{} = state) do
+    {:noreply, shutdown_port(state)}
   end
 
   def handle_call({:run, bird}, from, %__MODULE__{bird: nil} = state) do
@@ -169,7 +169,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   defp log_external_api_call(%__MODULE__{base_url: url}) do
-    Helpers.log(%{message: "external_api_call", url: url}, __MODULE__, :warning)
+    Helpers.log(%{message: "external_api_call", url: url}, __MODULE__, :info)
   end
 
   defp notify_listeners(%__MODULE__{listeners: listeners}, message) do
@@ -181,11 +181,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
       Port.open({:spawn_executable, @node_path}, [
         :binary,
         :stderr_to_stdout,
-        args: [
-          @runner_script,
-          base_url,
-          @auth_json
-        ]
+        args: [@runner_script, base_url]
       ])
 
     Port.monitor(port)
@@ -232,6 +228,9 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
         |> parse_error_message()
         |> handle_error(state)
 
+      {:ok, []} ->
+        reply(state)
+
       {:ok, [_ | _] = recordings} ->
         recordings
         |> add_recordings_to_state(state)
@@ -250,6 +249,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   defp handle_error(error, %__MODULE__{} = state) do
     state
+    |> shutdown_port()
     |> Map.replace!(:error, {:error, error})
     |> reply()
   end
@@ -258,7 +258,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     do_reply(state, error)
   end
 
-  defp reply(%__MODULE__{responses: [_ | _] = responses} = state) do
+  defp reply(%__MODULE__{responses: responses} = state) do
     do_reply(state, {:ok, Enum.reverse(responses)})
   end
 
@@ -306,9 +306,17 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
      )}
   end
 
-  defp shutdown_port(%__MODULE__{port: port}) do
-    Helpers.log([message: "shutting_down_port", port: port], __MODULE__, :warning)
-    # JS script shuts itself down with process.exit()
-    Port.command(port, "shutdown")
+  @spec shutdown_port(t()) :: t()
+  defp shutdown_port(%__MODULE__{port: port} = state) do
+    case Port.info(port) do
+      nil ->
+        state
+
+      _ ->
+        Helpers.log([message: "shutting_down_port", port: port], __MODULE__, :warning)
+        # JS script shuts itself down with process.exit()
+        Port.command(port, "shutdown")
+        %{state | port: nil, ready?: false}
+    end
   end
 end

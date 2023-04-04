@@ -38,7 +38,7 @@ defmodule BirdSong.Services.DataFile do
   @spec write(Data.t(), pid | atom) :: :ok | {:error, error()}
   def write(
         %Data{
-          response: {:ok, %HTTPoison.Response{status_code: 200}},
+          response: {:ok, _},
           service: %Service{}
         } = info,
         instance
@@ -150,6 +150,26 @@ defmodule BirdSong.Services.DataFile do
          } = data},
         %__MODULE__{} = state
       ) do
+    do_write(body, data, state)
+    {:noreply, state}
+  end
+
+  def handle_cast(
+        {:write, %Data{response: {:ok, [_ | _] = body}} = data},
+        %__MODULE__{} = state
+      ) do
+    body
+    |> Jason.encode!()
+    |> do_write(data, state)
+
+    {:noreply, state}
+  end
+
+  def handle_cast({:register_listener, listener}, state) do
+    {:noreply, %{state | listeners: [listener | state.listeners]}}
+  end
+
+  defp do_write(body, %Data{} = data, state) do
     path = data_file_path(data)
 
     path
@@ -162,11 +182,5 @@ defmodule BirdSong.Services.DataFile do
         %{written?: false, error: :write_error, reason: reason, path: path}
     end
     |> log_and_send_messages(data, state)
-
-    {:noreply, state}
-  end
-
-  def handle_cast({:register_listener, listener}, state) do
-    {:noreply, %{state | listeners: [listener | state.listeners]}}
   end
 end

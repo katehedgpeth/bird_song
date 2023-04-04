@@ -45,6 +45,10 @@ defmodule BirdSong.Services.Service do
     end
   end
 
+  def register_request_listener(%__MODULE__{module: module, whereis: whereis}) do
+    module.register_request_listener(whereis)
+  end
+
   def data_type(%__MODULE__{module: module}), do: data_type(module)
   def data_type(XenoCanto), do: :recordings
   def data_type(Ebird.Recordings), do: :recordings

@@ -6,7 +6,8 @@ defmodule BirdSong.Services.Ebird.Recordings do
     base_url: "https://search.macaulaylibrary.org",
     scraper: __MODULE__.Playwright
 
-  alias BirdSong.Services.Ebird.Recordings.BadResponseError
+  alias BirdSong.Data.Scraper.TimeoutError
+  alias BirdSong.Data.Scraper.BadResponseError
 
   alias BirdSong.{
     Bird,
@@ -14,6 +15,8 @@ defmodule BirdSong.Services.Ebird.Recordings do
   }
 
   alias BirdSong.Services.ThrottledCache, as: TC
+
+  @type raw_response() :: {:ok, [Map.t()]} | {:error, any()}
 
   def base_url() do
     Helpers.get_env(__MODULE__, :base_url)
@@ -32,17 +35,35 @@ defmodule BirdSong.Services.Ebird.Recordings do
 
   def get_from_api(
         %Bird{} = bird,
-        %TC.State{scraper: {scraper_module, scraper_pid}}
+        %TC.State{scraper: {scraper_module, scraper_pid}} = state
       )
       when is_pid(scraper_pid) do
-    case scraper_module.run(scraper_pid, bird) do
-      {:ok, [_ | _] = raw_recordings} -> {:ok, Response.parse(raw_recordings)}
-      {:error, error} -> {:error, error}
+    scraper_pid
+    |> scraper_module.run(bird)
+    |> maybe_write_to_disk(bird, state)
+    |> case do
+      {:ok, [_ | _] = raw_recordings} ->
+        {:ok, Response.parse(raw_recordings)}
+
+      {:ok, []} ->
+        {:error, {:no_results, bird}}
+
+      {:error, error} ->
+        {:error, error}
     end
   end
 
+  @spec successful_response?({:ok, [Map.t()]} | {:error, any()}) :: boolean()
+  def successful_response?({:ok, [%{} | _]}), do: true
+  def successful_response?({:ok, []}), do: false
+  def successful_response?({:error, _}), do: false
+
   def handle_call(:state, _from, state) do
     {:reply, state, state}
+  end
+
+  def handle_call(:scraper_info, _from, %TC.State{scraper: scraper} = state) do
+    {:reply, scraper, state}
   end
 
   def handle_call({:get_from_api, request}, from, %TC.State{scraper: scraper} = state) do
@@ -61,8 +82,13 @@ defmodule BirdSong.Services.Ebird.Recordings do
     super({ref, {:error, {:not_found, url}}}, state)
   end
 
-  def handle_info({ref, {:error, %BadResponseError{} = error}}, state) when is_reference(ref) do
+  def handle_info({ref, {:error, %BadResponseError{status: status} = error}}, state)
+      when is_reference(ref) and status in 500..599 do
     super({ref, {:error, {:bad_response, error}}}, state)
+  end
+
+  def handle_info({ref, {:error, %TimeoutError{} = error}}, state) do
+    super({ref, {:error, {:timeout, error}}}, state)
   end
 
   def handle_info(msg, state) do
