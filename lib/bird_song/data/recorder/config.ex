@@ -5,19 +5,19 @@ defmodule BirdSong.Data.Recorder.Config do
     services: nil,
     clear_db?: false,
     overwrite_files?: false,
-    seed_taxonomy?: true
+    seed_taxonomy?: false
   ]
 
   def parse(args, services) do
     Enum.reduce(args, %__MODULE__{services: services}, &do_parse(&1, &2, services))
   end
 
-  defp do_parse("--no-taxonomy", %__MODULE__{} = config, _services) do
-    %{config | seed_taxonomy?: false}
+  defp do_parse("--seed-taxonomy", %__MODULE__{} = config, _services) do
+    %{config | seed_taxonomy?: true}
   end
 
   defp do_parse("--taxonomy-file=" <> file, %__MODULE__{} = config, _services) do
-    %{config | taxonomy_file: file}
+    %{config | seed_taxonomy?: true, taxonomy_file: file}
   end
 
   defp do_parse("--overwrite", %__MODULE__{} = config, _services) do

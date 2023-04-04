@@ -3,15 +3,15 @@ defmodule BirdSong.Data.Recorder do
 
   @moduledoc "Fetches data for any birds that exist in the database but do not have recordings or images."
 
+  alias BirdSong.Services.Helpers
+
   alias BirdSong.{
     Bird,
     Family,
     Order,
     Services,
     Services.Ebird.Taxonomy,
-    Services.Service,
-    Services.XenoCanto,
-    Services.Flickr
+    Services.Service
   }
 
   alias __MODULE__.Config
@@ -71,31 +71,45 @@ defmodule BirdSong.Data.Recorder do
     %{config | birds: BirdSong.Repo.all(Bird)}
   end
 
+  defp elapsed_seconds(%DateTime{} = start_time) do
+    DateTime.diff(now(), start_time)
+  end
+
   defp fetch_data_for_birds(%Config{
          birds: birds,
          services: %Services{} = services
        }) do
     birds
     |> Enum.map(&%{services | bird: &1})
-    |> fetch_data_for_bird()
+    |> fetch_data_for_bird({now(), length(birds)})
   end
 
-  defp fetch_data_for_bird([]) do
+  defp fetch_data_for_bird([], _) do
     :ok
   end
 
-  defp fetch_data_for_bird([
-         %Services{bird: %Bird{} = bird, images: %Service{}, recordings: %Service{}} = current
-         | rest
-       ]) do
+  defp fetch_data_for_bird(
+         [
+           %Services{bird: %Bird{} = bird, images: %Service{}, recordings: %Service{}} = current
+           | rest
+         ],
+         {%DateTime{} = start_time, initial_count}
+       ) do
+    Helpers.log(
+      [
+        elapsed_seconds: elapsed_seconds(start_time),
+        collected: initial_count - (length(rest) + 1)
+      ],
+      __MODULE__,
+      :warning
+    )
+
     responses = Services.fetch_data_for_bird(current)
 
-    with {_,
-          [
-            images: {:ok, %Flickr.Response{}},
-            recordings: {:ok, %XenoCanto.Response{}}
-          ]} <-
-           {bird.common_name,
+    run_again = fn -> fetch_data_for_bird(rest, {start_time, initial_count}) end
+
+    try do
+      case {bird.common_name,
             Enum.map(
               [:images, :recordings],
               &{&1,
@@ -103,7 +117,33 @@ defmodule BirdSong.Data.Recorder do
                |> Map.fetch!(&1)
                |> Map.fetch!(:response)}
             )} do
-      fetch_data_for_bird(rest)
+        {_, [images: {:ok, %{}}, recordings: {:ok, %{}}]} ->
+          run_again.()
+
+        {_, [images: {:ok, %{}}, recordings: {:error, {:no_results, _}}]} ->
+          run_again.()
+
+        {_, [images: {:error, {:no_results, _}}, recordings: {:ok, %{}}]} ->
+          run_again.()
+      end
+    catch
+      error ->
+        {_, pid} = GenServer.call(current.recordings.whereis, :scraper_info)
+        GenServer.stop(pid)
+
+        Helpers.log(
+          [
+            message: "exited_before_finish",
+            last_bird: bird,
+            elapsed_seconds: elapsed_seconds(start_time)
+          ],
+          __MODULE__,
+          :warning
+        )
+
+        raise error
     end
   end
+
+  defp now(), do: DateTime.now!("Etc/UTC")
 end
