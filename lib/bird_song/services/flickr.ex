@@ -21,14 +21,15 @@ defmodule BirdSong.Services.Flickr do
     api_key: @api_key
   }
 
-  def get_images(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
-    get(bird, server)
-  end
-
   def endpoint(%Bird{}) do
     Path.join(["services", "rest"])
   end
 
+  def get_images(%Bird{} = bird, server) when is_pid(server) or is_atom(server) do
+    get(bird, server)
+  end
+
+  # do not send user agent headers to Flickr
   def headers(%Bird{}), do: []
 
   def params(%Bird{sci_name: sci_name}) do
