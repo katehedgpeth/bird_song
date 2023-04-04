@@ -13,26 +13,36 @@ defmodule BirdSong.Services.Ebird do
   alias BirdSong.Services.Helpers
   alias __MODULE__.Observation
 
+  @type request_data() :: {:recent_observations, String.t()}
+
   defmodule Response do
     alias BirdSong.Services.Ebird.Observation
 
-    defstruct observations: []
+    defstruct [:region, observations: []]
 
     @type t() :: %__MODULE__{
-            observations: [Observation.t()]
+            observations: [Observation.t()],
+            region: String.t()
           }
 
-    def parse(observations) when is_list(observations) do
+    def parse(observations, {:recent_observations, region}) when is_list(observations) do
       %__MODULE__{
-        observations: Enum.map(observations, &Observation.parse/1)
+        observations: Enum.map(observations, &Observation.parse/1),
+        region: region
       }
     end
   end
 
+  def token_header() do
+    [{"x-ebirdapitoken", @token}]
+  end
+
   def params({:recent_observations, _}), do: [{"back", 30}]
 
-  def headers({:recent_observations, _region}),
-    do: [{"x-ebirdapitoken", @token} | user_agent()]
+  def headers(),
+    do: Enum.concat(token_header(), user_agent())
+
+  def headers({:recent_observations, _region}), do: headers()
 
   def message_details({:recent_observations, region}), do: %{region: region}
 

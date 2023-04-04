@@ -1,17 +1,20 @@
 defmodule BirdSong.Services.Flickr.Response do
-  alias BirdSong.Services.Flickr.Photo
+  alias BirdSong.{Bird, Services.Flickr.Photo}
 
   defstruct [:num_pages, :page, :per_page, :total, images: []]
 
-  def parse(%{
-        "photos" => %{
-          "page" => page,
-          "pages" => num_pages,
-          "perpage" => per_page,
-          "total" => total,
-          "photo" => photos
-        }
-      }) do
+  def parse(
+        %{
+          "photos" => %{
+            "page" => page,
+            "pages" => num_pages,
+            "perpage" => per_page,
+            "total" => total,
+            "photo" => photos
+          }
+        },
+        %Bird{}
+      ) do
     %__MODULE__{
       page: page,
       num_pages: num_pages,

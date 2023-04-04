@@ -43,7 +43,7 @@ defmodule BirdSong.Services.Ebird.Recordings do
     |> maybe_write_to_disk(bird, state)
     |> case do
       {:ok, [_ | _] = raw_recordings} ->
-        {:ok, Response.parse(raw_recordings)}
+        {:ok, Response.parse(raw_recordings, bird)}
 
       {:ok, []} ->
         {:error, {:no_results, bird}}

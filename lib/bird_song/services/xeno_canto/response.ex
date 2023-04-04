@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.XenoCanto.Response do
-  alias BirdSong.Services.XenoCanto.Recording
+  alias BirdSong.{Bird, Services.XenoCanto.Recording}
 
   @used_keys ["numRecordings", "numSpecies", "page", "numPages", "recordings"]
 
@@ -13,7 +13,7 @@ defmodule BirdSong.Services.XenoCanto.Response do
           recordings: [Recording.t()]
         }
 
-  def parse(data) do
+  def parse(data, %Bird{}) do
     data
     |> Enum.reduce(%{}, &parse_key/2)
     |> __struct__()

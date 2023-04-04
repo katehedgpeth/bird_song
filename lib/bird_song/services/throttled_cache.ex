@@ -1,8 +1,10 @@
 defmodule BirdSong.Services.ThrottledCache do
+  alias BirdSong.Services.Ebird
   alias BirdSong.Services.DataFile
   alias BirdSong.Services.Helpers
 
-  @type request_data() :: Bird.t() | {:recent_observations, String.t()}
+  @type request_data() ::
+          Bird.t() | Ebird.request_data() | Ebird.RegionCodes.request_data()
 
   @callback endpoint(request_data()) :: String.t()
   @callback ets_key(request_data()) :: String.t()
@@ -23,10 +25,11 @@ defmodule BirdSong.Services.ThrottledCache do
       use GenServer
       alias BirdSong.{Bird, Services}
 
+      alias Services.ThrottledCache, as: TC
+
       alias Services.{
         Ebird,
         Helpers,
-        ThrottledCache,
         ThrottledCache.State,
         Service
       }
@@ -38,9 +41,7 @@ defmodule BirdSong.Services.ThrottledCache do
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
       @module_opts module_opts
 
-      @type request_data() :: Services.ThrottledCache.request_data()
-
-      @spec get(request_data(), Service.t() | GenServer.server()) ::
+      @spec get(TC.request_data(), Service.t() | GenServer.server()) ::
               Helpers.api_response(Response.t())
       def get(data, %Service{whereis: pid}) do
         get(data, pid)
@@ -56,7 +57,7 @@ defmodule BirdSong.Services.ThrottledCache do
         end
       end
 
-      @spec get_from_cache(request_data(), GenServer.server()) ::
+      @spec get_from_cache(TC.request_data(), GenServer.server()) ::
               {:ok, Response.t()} | :not_found
       def get_from_cache(_data, nil) do
         raise "SERVER CANNOT BE NIL!!!"
@@ -71,7 +72,7 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, :clear_cache)
       end
 
-      @spec has_data?(request_data(), GenServer.server()) :: boolean()
+      @spec has_data?(TC.request_data(), GenServer.server()) :: boolean()
       def has_data?(request_data, server) do
         GenServer.call(server, {:has_data?, request_data})
       end
@@ -86,7 +87,7 @@ defmodule BirdSong.Services.ThrottledCache do
         |> Helpers.parse_api_response(url(state, request))
         |> case do
           {:ok, raw} ->
-            {:ok, Response.parse(raw)}
+            {:ok, Response.parse(raw, request)}
 
           {:error, error} ->
             {:error, error}
@@ -114,14 +115,15 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      @spec endpoint(request_data()) :: String.t()
+      @spec endpoint(TC.request_data()) :: String.t()
       def endpoint(_) do
         raise("ThrottledCache module must define a &endpoint/1 method")
       end
 
       defoverridable(endpoint: 1)
 
-      @spec get_from_api(request_data(), State.t()) :: {:ok, Response.t()} | Helpers.api_error()
+      @spec get_from_api(TC.request_data(), State.t()) ::
+              {:ok, Response.t()} | Helpers.api_error()
       def get_from_api(request, %State{} = state) do
         state
         |> url(request)
@@ -137,11 +139,11 @@ defmodule BirdSong.Services.ThrottledCache do
 
       defoverridable(get_from_api: 2)
 
-      @spec headers(request_data()) :: HTTPoison.headers()
+      @spec headers(TC.request_data()) :: HTTPoison.headers()
       def headers(%Bird{}), do: user_agent()
       defoverridable(headers: 1)
 
-      @spec params(request_data()) :: HTTPoison.params()
+      @spec params(TC.request_data()) :: HTTPoison.params()
       def params(%Bird{}), do: []
       defoverridable(params: 1)
 
@@ -149,11 +151,11 @@ defmodule BirdSong.Services.ThrottledCache do
       def ets_key(%Bird{sci_name: sci_name}), do: sci_name
       defoverridable(ets_key: 1)
 
-      @spec message_details(request_data()) :: Map.t()
+      @spec message_details(TC.request_data()) :: Map.t()
       def message_details(%Bird{} = bird), do: %{bird: bird}
       defoverridable(message_details: 1)
 
-      @spec write_to_disk({:ok, HTTPoison.Response.t() | [Map.t()]}, request_data(), State.t()) ::
+      @spec write_to_disk({:ok, HTTPoison.Response.t() | [Map.t()]}, TC.request_data(), State.t()) ::
               :ok | {:error, any()}
       def write_to_disk({:ok, _} = response, request, %State{
             data_file_instance: instance,
@@ -171,7 +173,7 @@ defmodule BirdSong.Services.ThrottledCache do
 
       defoverridable(write_to_disk: 3)
 
-      @spec data_file_name(request_data()) :: String.t()
+      @spec data_file_name(TC.request_data()) :: String.t()
       def data_file_name(%Bird{common_name: common_name}) do
         common_name
         |> String.replace(" ", "_")

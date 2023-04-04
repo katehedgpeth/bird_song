@@ -54,7 +54,14 @@ defmodule BirdSong.Services.ThrottledCache.State do
   ]
 
   defguard is_known_service(service)
-           when service in [XenoCanto, Flickr, Ebird, ThrottledCacheUnderTest, Ebird.Recordings]
+           when service in [
+                  XenoCanto,
+                  Flickr,
+                  Ebird,
+                  ThrottledCacheUnderTest,
+                  Ebird.Recordings,
+                  Ebird.RegionCodes
+                ]
 
   def new(opts) do
     __MODULE__
