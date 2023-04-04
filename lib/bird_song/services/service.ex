@@ -21,6 +21,23 @@ defmodule BirdSong.Services.Service do
 
   @type response() :: XenoCanto.Response.t() | Flickr.Response.t() | Ebird.Response.t()
 
+  def data_folder_path(%__MODULE__{} = service) do
+    service
+    |> module()
+    |> apply(:data_folder_path, [service])
+  end
+
+  def data_type(%__MODULE__{module: module}), do: data_type(module)
+  def data_type(XenoCanto), do: :recordings
+  def data_type(Ebird.Recordings), do: :recordings
+  def data_type(Flickr), do: :images
+  def data_type(Ebird), do: :observations
+
+  def data_type(module) do
+    Helpers.log(%{message: "unknown_service", module: module}, __MODULE__, :warning)
+    :misc
+  end
+
   def ensure_started!(%__MODULE__{} = service) do
     ensure_started(service, raise?: true)
   end
@@ -45,26 +62,9 @@ defmodule BirdSong.Services.Service do
     end
   end
 
-  def register_request_listener(%__MODULE__{module: module, whereis: whereis}) do
-    module.register_request_listener(whereis)
-  end
-
-  def data_type(%__MODULE__{module: module}), do: data_type(module)
-  def data_type(XenoCanto), do: :recordings
-  def data_type(Ebird.Recordings), do: :recordings
-  def data_type(Flickr), do: :images
-  def data_type(Ebird), do: :observations
-
-  def data_type(module) do
-    Helpers.log(%{message: "unknown_service", module: module}, __MODULE__, :warning)
-    :misc
-  end
-
   def module(%__MODULE__{module: module}), do: module
 
-  def data_folder_path(%__MODULE__{} = service) do
-    service
-    |> module()
-    |> apply(:data_folder_path, [service])
+  def register_request_listener(%__MODULE__{module: module, whereis: whereis}) do
+    module.register_request_listener(whereis)
   end
 end
