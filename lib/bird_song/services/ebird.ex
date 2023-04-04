@@ -33,11 +33,25 @@ defmodule BirdSong.Services.Ebird do
     end
   end
 
-  def token_header() do
-    [{"x-ebirdapitoken", @token}]
+  def endpoint({:recent_observations, region}) do
+    Path.join(["v2/data/obs", region, "recent"])
   end
 
-  def params({:recent_observations, _}), do: [{"back", 30}]
+  def ets_key({:recent_observations, region}), do: region
+
+  @spec get_recent_observations(String.t(), GenServer.server()) ::
+          Helpers.api_response(Response.t())
+  def get_recent_observations("" <> region, server) do
+    get({:recent_observations, region}, server)
+  end
+
+  def handle_info(:seed_ets_table, state) do
+    {:noreply, state}
+  end
+
+  def handle_info(message, state) do
+    super(message, state)
+  end
 
   def headers(),
     do: Enum.concat(token_header(), user_agent())
@@ -46,23 +60,9 @@ defmodule BirdSong.Services.Ebird do
 
   def message_details({:recent_observations, region}), do: %{region: region}
 
-  def endpoint({:recent_observations, region}) do
-    Path.join(["v2/data/obs", region, "recent"])
-  end
+  def params({:recent_observations, _}), do: [{"back", 30}]
 
-  @spec get_recent_observations(String.t(), GenServer.server()) ::
-          Helpers.api_response(Response.t())
-  def get_recent_observations("" <> region, server) do
-    get({:recent_observations, region}, server)
-  end
-
-  def ets_key({:recent_observations, region}), do: region
-
-  def handle_info(:seed_ets_table, state) do
-    {:noreply, state}
-  end
-
-  def handle_info(message, state) do
-    super(message, state)
+  def token_header() do
+    [{"x-ebirdapitoken", @token}]
   end
 end
