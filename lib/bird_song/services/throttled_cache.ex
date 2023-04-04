@@ -41,6 +41,25 @@ defmodule BirdSong.Services.ThrottledCache do
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
       @module_opts module_opts
 
+      @spec clear_cache(atom | pid) :: :ok
+      def clear_cache(server) do
+        GenServer.cast(server, :clear_cache)
+      end
+
+      def data_folder_path(%Service{whereis: pid}) when is_pid(pid) do
+        GenServer.call(pid, :data_folder_path)
+      end
+
+      def data_folder_path(%Service{module: module} = service) do
+        case GenServer.whereis(module) do
+          nil ->
+            raise Service.NotStartedError.exception(module: module)
+
+          pid ->
+            data_folder_path(%{service | whereis: pid})
+        end
+      end
+
       @spec get(TC.request_data(), Service.t() | GenServer.server()) ::
               Helpers.api_response(Response.t())
       def get(data, %Service{whereis: pid}) do
@@ -67,19 +86,9 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.call(server, {:get_from_cache, data})
       end
 
-      @spec clear_cache(atom | pid) :: :ok
-      def clear_cache(server) do
-        GenServer.cast(server, :clear_cache)
-      end
-
       @spec has_data?(TC.request_data(), GenServer.server()) :: boolean()
       def has_data?(request_data, server) do
         GenServer.call(server, {:has_data?, request_data})
-      end
-
-      @spec register_request_listener(GenServer.server()) :: :ok
-      def register_request_listener(server) do
-        GenServer.cast(server, {:register_request_listener, self()})
       end
 
       def parse_response(response, request, state) do
@@ -94,18 +103,13 @@ defmodule BirdSong.Services.ThrottledCache do
         end
       end
 
-      def data_folder_path(%Service{whereis: pid}) when is_pid(pid) do
-        GenServer.call(pid, :data_folder_path)
+      @spec register_request_listener(GenServer.server()) :: :ok
+      def register_request_listener(server) do
+        GenServer.cast(server, {:register_request_listener, self()})
       end
 
-      def data_folder_path(%Service{module: module} = service) do
-        case GenServer.whereis(module) do
-          nil ->
-            raise Service.NotStartedError.exception(module: module)
-
-          pid ->
-            data_folder_path(%{service | whereis: pid})
-        end
+      def seed_ets_table(%State{} = state) do
+        State.seed_ets_table(state)
       end
 
       #########################################################
@@ -115,12 +119,23 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      @spec endpoint(TC.request_data()) :: String.t()
-      def endpoint(_) do
-        raise("ThrottledCache module must define a &endpoint/1 method")
+      @spec data_file_name(TC.request_data()) :: String.t()
+      def data_file_name(%Bird{common_name: common_name}) do
+        common_name
+        |> String.replace(" ", "_")
+        |> String.replace("/", "\\")
       end
 
+      def data_file_name({:recent_observations, region}), do: region
+      defoverridable(data_file_name: 1)
+
+      @spec endpoint(TC.request_data()) :: String.t()
+      def endpoint(_), do: raise("ThrottledCache module must define a &endpoint/1 method")
       defoverridable(endpoint: 1)
+
+      @spec ets_key(any()) :: String.t()
+      def ets_key(%Bird{sci_name: sci_name}), do: sci_name
+      defoverridable(ets_key: 1)
 
       @spec get_from_api(TC.request_data(), State.t()) ::
               {:ok, Response.t()} | Helpers.api_error()
@@ -143,17 +158,18 @@ defmodule BirdSong.Services.ThrottledCache do
       def headers(%Bird{}), do: user_agent()
       defoverridable(headers: 1)
 
+      @spec message_details(TC.request_data()) :: Map.t()
+      def message_details(%Bird{} = bird), do: %{bird: bird}
+      defoverridable(message_details: 1)
+
       @spec params(TC.request_data()) :: HTTPoison.params()
       def params(%Bird{}), do: []
       defoverridable(params: 1)
 
-      @spec ets_key(any()) :: String.t()
-      def ets_key(%Bird{sci_name: sci_name}), do: sci_name
-      defoverridable(ets_key: 1)
-
-      @spec message_details(TC.request_data()) :: Map.t()
-      def message_details(%Bird{} = bird), do: %{bird: bird}
-      defoverridable(message_details: 1)
+      def successful_response?({:ok, %HTTPoison.Response{status_code: 200}}), do: true
+      def successful_response?({:ok, %HTTPoison.Response{}}), do: false
+      def successful_response?({:error, %HTTPoison.Error{}}), do: false
+      defoverridable(successful_response?: 1)
 
       @spec write_to_disk({:ok, HTTPoison.Response.t() | [Map.t()]}, TC.request_data(), State.t()) ::
               :ok | {:error, any()}
@@ -172,25 +188,6 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       defoverridable(write_to_disk: 3)
-
-      @spec data_file_name(TC.request_data()) :: String.t()
-      def data_file_name(%Bird{common_name: common_name}) do
-        common_name
-        |> String.replace(" ", "_")
-        |> String.replace("/", "\\")
-      end
-
-      def data_file_name({:recent_observations, region}), do: region
-      defoverridable(data_file_name: 1)
-
-      def seed_ets_table(%State{} = state) do
-        State.seed_ets_table(state)
-      end
-
-      def successful_response?({:ok, %HTTPoison.Response{status_code: 200}}), do: true
-      def successful_response?({:ok, %HTTPoison.Response{}}), do: false
-      def successful_response?({:error, %HTTPoison.Error{}}), do: false
-      defoverridable(successful_response?: 1)
 
       #########################################################
       #########################################################
@@ -417,14 +414,6 @@ defmodule BirdSong.Services.ThrottledCache do
         |> Helpers.log(__MODULE__, level)
       end
 
-      defp response_status({:ok, %HTTPoison.Response{status_code: 200}}), do: {:debug, "success"}
-
-      defp url(%State{base_url: "" <> base_url}, request_data) do
-        Path.join(base_url, endpoint(request_data))
-      end
-
-      defp user_agent(), do: [{"User-Agent", "BirdSongBot (#{@admin_email})"}]
-
       @spec maybe_write_to_disk(
               response :: Ebird.Recordings.raw_response() | Helpers.api_response(Response.t()),
               request :: any(),
@@ -437,6 +426,12 @@ defmodule BirdSong.Services.ThrottledCache do
 
         response
       end
+
+      defp url(%State{base_url: "" <> base_url}, request_data) do
+        Path.join(base_url, endpoint(request_data))
+      end
+
+      defp user_agent(), do: [{"User-Agent", "BirdSongBot (#{@admin_email})"}]
     end
   end
 end
