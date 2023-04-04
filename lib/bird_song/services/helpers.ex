@@ -9,6 +9,30 @@ defmodule BirdSong.Services.Helpers do
   @type api_response(t) ::
           {:ok, t} | api_error()
 
+  def get_env(app, key, default \\ :fetch!) do
+    :bird_song
+    |> Application.get_env(app)
+    |> do_get_env(key, default)
+  end
+
+  defp do_get_env(env, key, :fetch!), do: Keyword.fetch!(env, key)
+  defp do_get_env(env, key, default), do: Keyword.get(env, key, default)
+
+  @spec log(Keyword.t() | Map.t(), atom(), atom()) :: :ok
+  def log(args, module, level \\ :debug) do
+    log_fn =
+      case level do
+        :debug -> &Logger.debug/1
+        :info -> &Logger.info/1
+        :warning -> &Logger.warning/1
+        :error -> &Logger.error/1
+      end
+
+    [inspect([module]) | parse_log_args(args)]
+    |> Enum.join(" ")
+    |> log_fn.()
+  end
+
   @spec parse_api_response({:ok, Response.t()} | {:error, Error.t()}, String.t()) ::
           api_response(Map.t())
   def parse_api_response(
@@ -40,31 +64,7 @@ defmodule BirdSong.Services.Helpers do
     {:error, error}
   end
 
-  @spec log(Keyword.t() | Map.t(), atom(), atom()) :: :ok
-  def log(args, module, level \\ :debug) do
-    log_fn =
-      case level do
-        :debug -> &Logger.debug/1
-        :info -> &Logger.info/1
-        :warning -> &Logger.warning/1
-        :error -> &Logger.error/1
-      end
-
-    [inspect([module]) | parse_log_args(args)]
-    |> Enum.join(" ")
-    |> log_fn.()
-  end
-
   defp parse_log_args(args) do
     Enum.map(args, fn {key, val} -> "#{key}=#{inspect(val)}" end)
   end
-
-  def get_env(app, key, default \\ :fetch!) do
-    :bird_song
-    |> Application.get_env(app)
-    |> do_get_env(key, default)
-  end
-
-  defp do_get_env(env, key, :fetch!), do: Keyword.fetch!(env, key)
-  defp do_get_env(env, key, default), do: Keyword.get(env, key, default)
 end
