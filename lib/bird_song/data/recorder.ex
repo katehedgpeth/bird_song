@@ -67,8 +67,16 @@ defmodule BirdSong.Data.Recorder do
     config
   end
 
-  defp get_birds_to_fetch(%Config{birds: []} = config) do
-    %{config | birds: BirdSong.Repo.all(Bird)}
+  defp get_birds_to_fetch(%Config{birds: [], region_codes: region_codes} = config) do
+    size = MapSet.size(region_codes)
+
+    %{
+      config
+      | birds:
+          Bird
+          |> BirdSong.Repo.all()
+          |> Enum.filter(&keep_bird?(size, region_codes, &1))
+    }
   end
 
   defp elapsed_seconds(%DateTime{} = start_time) do
@@ -144,6 +152,9 @@ defmodule BirdSong.Data.Recorder do
         raise error
     end
   end
+
+  defp keep_bird?(0, _codes, %Bird{}), do: true
+  defp keep_bird?(_, codes, %Bird{species_code: code}), do: MapSet.member?(codes, code)
 
   defp now(), do: DateTime.now!("Etc/UTC")
 end

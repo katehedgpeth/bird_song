@@ -1,8 +1,11 @@
 defmodule BirdSong.Data.Recorder.Config do
+  alias BirdSong.{Services, Services.Helpers, Services.Ebird.RegionCodes, Services.Service}
+
   defstruct [
+    :region_codes,
+    :services,
     :taxonomy_file,
     birds: [],
-    services: nil,
     clear_db?: false,
     overwrite_files?: false,
     seed_taxonomy?: false
@@ -30,7 +33,24 @@ defmodule BirdSong.Data.Recorder.Config do
     %{config | birds: [bird]}
   end
 
+  defp do_parse("--region=" <> region, %__MODULE__{} = config, %Services{
+         region_codes: service
+       }) do
+    %{config | region_codes: get_region_codes(region, service)}
+  end
+
   defp do_parse("" <> arg, %__MODULE__{}, _services) do
     raise "unexpected argument: " <> arg
+  end
+
+  defp get_region_codes(region, %Service{} = service) do
+    case RegionCodes.get({:region_codes, region}, service) do
+      {:ok, %RegionCodes.Response{codes: codes}} ->
+        MapSet.new(codes)
+
+      {:error, _} ->
+        Helpers.log([error: "unknown_region_code", region_code: region], __MODULE__, :warning)
+        MapSet.new([])
+    end
   end
 end

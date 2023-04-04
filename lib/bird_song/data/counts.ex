@@ -22,10 +22,11 @@ defmodule BirdSong.Data.Counts do
 
   def get(%Services{} = services, args) do
     region_codes = get_region_codes(args, Map.fetch!(services, :region_codes))
+    size = MapSet.size(region_codes)
 
     Bird
     |> BirdSong.Repo.all()
-    |> Enum.filter(&MapSet.member?(region_codes, &1.species_code))
+    |> Enum.filter(&keep_bird?(size, region_codes, &1))
     |> case do
       [%Bird{} | _] = birds ->
         Enum.reduce(
@@ -45,6 +46,9 @@ defmodule BirdSong.Data.Counts do
   defp calculate_data_folder_bytes(%Services{images: images, recordings: recordings}) do
     Enum.reduce([images, recordings], 0, &(&2 + get_data_folder_bytes(&1)))
   end
+
+  defp keep_bird?(0, _codes, %Bird{}), do: true
+  defp keep_bird?(_, codes, %Bird{species_code: code}), do: MapSet.member?(codes, code)
 
   def get_data_folder_bytes(%Service{} = service) do
     service

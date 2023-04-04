@@ -101,7 +101,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:noreply, send_request(state)}
   end
 
-  def handle_info({:DOWN, _, :port, port, :normal}, %__MODULE__{port: port} = state) do
+  def handle_info(
+        {:DOWN, _, :port, _port, :normal},
+        %__MODULE__{} = state
+      ) do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
