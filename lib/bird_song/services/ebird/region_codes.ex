@@ -15,7 +15,8 @@ defmodule BirdSong.Services.Ebird.RegionCodes do
 
   def ets_key({:region_codes, region}), do: region
 
-  def headers({:region_codes, "" <> _}), do: Ebird.headers()
+  def headers({:region_codes, "" <> _}),
+    do: [Ebird.token_header() | user_agent()]
 
   def params({:region_codes, "" <> _}), do: []
 

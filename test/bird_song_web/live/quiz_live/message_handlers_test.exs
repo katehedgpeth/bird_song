@@ -41,7 +41,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlersTest do
     } do
       assert_receive {:end_request,
                       %{
-                        module: Ebird,
+                        module: Ebird.Observations,
                         region: @region,
                         response: {:ok, %Ebird.Response{observations: [%Ebird.Observation{} | _]}}
                       }}
@@ -59,7 +59,12 @@ defmodule BirdSongWeb.QuizLive.MessageHandlersTest do
     test "handles a bad response from ebird", %{
       socket: %Socket{assigns: %{flash: flash, birds: birds}}
     } do
-      assert_receive {:end_request, %{module: Ebird, region: @region, response: {:error, error}}}
+      assert_receive {:end_request,
+                      %{
+                        module: Ebird.Observations,
+                        region: @region,
+                        response: {:error, error}
+                      }}
 
       assert {:bad_response, %HTTPoison.Response{}} = error
 
@@ -110,7 +115,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlersTest do
 
     assert {:noreply, %Socket{} = socket} = MessageHandlers.handle_info(message, socket)
 
-    assert_receive {:start_request, %{module: Ebird, region: @region}}
+    assert_receive {:start_request, %{module: Ebird.Observations, region: @region}}
     {:ok, socket: socket}
   end
 

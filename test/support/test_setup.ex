@@ -42,7 +42,7 @@ defmodule BirdSong.TestSetup do
 
     images_module = Map.get(tags, :images_service, Flickr)
     recordings_module = Map.get(tags, :recordings_module, Ebird.Recordings)
-    observations_module = Map.get(tags, :observations_service, Ebird)
+    observations_module = Map.get(tags, :observations_service, Ebird.Observations)
 
     [recordings_service, images_service, observations_service] =
       Enum.map(
@@ -84,11 +84,6 @@ defmodule BirdSong.TestSetup do
   end
 
   def clean_up_tmp_folder_on_exit(%{}), do: :ok
-
-  defguard is_configured_service(service_name) when service_name in [XenoCanto, Flickr, Ebird]
-
-  defguard is_module_name(name)
-           when is_atom(name) and name not in [:xeno_canto, :flickr, :ebird]
 
   def setup_bypass(%{use_bypass: false}) do
     :ok

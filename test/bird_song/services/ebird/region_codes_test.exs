@@ -9,16 +9,17 @@ defmodule BirdSong.Services.Ebird.RegionCodesTest do
     {:ok, raw_codes: File.read!("test/mock_data/region_codes/" <> @region <> ".json")}
   end
 
-  setup %{raw_codes: raw_codes} do
+  setup do
     bypass = Bypass.open()
     {:ok, service} = RegionCodes.start_link(base_url: TestHelpers.mock_url(bypass))
-    {:ok, service: service}
+    {:ok, bypass: bypass, service: service}
   end
 
   describe "&get/1" do
     test "returns a list of species codes when API returns a successful response", %{
-      service: service,
-      bypass: bypass
+      bypass: bypass,
+      raw_codes: raw_codes,
+      service: service
     } do
       Bypass.expect(bypass, &success_response(&1, raw_codes))
 

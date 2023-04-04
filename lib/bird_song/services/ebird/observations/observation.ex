@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.Ebird.Observation do
+defmodule BirdSong.Services.Ebird.Observations.Observation do
   @derive Jason.Encoder
 
   @used_keys [

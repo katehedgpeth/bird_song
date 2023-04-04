@@ -19,7 +19,8 @@ defmodule BirdSong.Services.Service do
           exit_reason: atom() | nil
         }
 
-  @type response() :: XenoCanto.Response.t() | Flickr.Response.t() | Ebird.Response.t()
+  @type response() ::
+          XenoCanto.Response.t() | Flickr.Response.t() | Ebird.Observations.Response.t()
 
   def data_folder_path(%__MODULE__{} = service) do
     service
@@ -31,7 +32,7 @@ defmodule BirdSong.Services.Service do
   def data_type(XenoCanto), do: :recordings
   def data_type(Ebird.Recordings), do: :recordings
   def data_type(Flickr), do: :images
-  def data_type(Ebird), do: :observations
+  def data_type(Ebird.Observations), do: :observations
 
   def data_type(module) do
     Helpers.log(%{message: "unknown_service", module: module}, __MODULE__, :warning)

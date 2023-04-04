@@ -57,8 +57,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
            when service in [
                   XenoCanto,
                   Flickr,
-                  Ebird,
                   ThrottledCacheUnderTest,
+                  Ebird.Observations,
                   Ebird.Recordings,
                   Ebird.RegionCodes
                 ]

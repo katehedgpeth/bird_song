@@ -33,7 +33,7 @@ defmodule BirdSong.MockDataAttributes do
       @xeno_canto_path BirdSong.MockDataAttributes.endpoint(XenoCanto)
       @flickr_path BirdSong.MockDataAttributes.endpoint(Flickr)
       @ebird_observations_path BirdSong.MockDataAttributes.endpoint(
-                                 Ebird,
+                                 Ebird.Observations,
                                  {:recent_observations, ":region"}
                                )
       @ebird_recordings_path BirdSong.MockDataAttributes.endpoint(Ebird.Recordings)

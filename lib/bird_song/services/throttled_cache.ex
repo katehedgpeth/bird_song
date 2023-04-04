@@ -4,7 +4,7 @@ defmodule BirdSong.Services.ThrottledCache do
   alias BirdSong.Services.Helpers
 
   @type request_data() ::
-          Bird.t() | Ebird.request_data() | Ebird.RegionCodes.request_data()
+          Bird.t() | Ebird.Observations.request_data() | Ebird.RegionCodes.request_data()
 
   @callback endpoint(request_data()) :: String.t()
   @callback ets_key(request_data()) :: String.t()

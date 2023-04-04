@@ -253,8 +253,8 @@ defmodule BirdSong.Services.DataFileTest do
       assert_works_for_service(tags)
     end
 
-    @tag service: Ebird
-    test "works for Ebird service", tags do
+    @tag service: Ebird.Observations
+    test "works for Ebird.Observations service", tags do
       tags =
         Map.update!(tags, :data, &Map.replace!(&1, :request, {:recent_observations, "US-NC-067"}))
 

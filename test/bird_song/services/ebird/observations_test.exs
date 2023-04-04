@@ -1,15 +1,15 @@
-defmodule BirdSong.Services.EbirdTest do
+defmodule BirdSong.Services.Ebird.ObservationsTest do
   use BirdSong.MockApiCase
   alias BirdSong.MockServer
 
   alias BirdSong.{
     Services,
-    Services.Ebird,
+    Services.Ebird.Observations,
     Services.Service,
     TestHelpers
   }
 
-  @moduletag services: [Ebird]
+  @moduletag services: [Observations]
   @moduletag :capture_log
 
   @forsyth_county "US-NC-067"
@@ -29,7 +29,7 @@ defmodule BirdSong.Services.EbirdTest do
 
   @tag use_mock_routes?: false
   test "&endpoint/1 returns the correct endpoint", %{} do
-    assert Ebird.endpoint({:recent_observations, @forsyth_county}) ===
+    assert Observations.endpoint({:recent_observations, @forsyth_county}) ===
              Path.join(["v2/data/obs/", @forsyth_county, "recent"])
   end
 
@@ -42,9 +42,9 @@ defmodule BirdSong.Services.EbirdTest do
       expected =
         recent_observations
         |> Jason.decode!()
-        |> Ebird.Response.parse()
+        |> Observations.Response.parse()
 
-      assert Ebird.get_recent_observations(@forsyth_county, instance) ===
+      assert Observations.get_recent_observations(@forsyth_county, instance) ===
                {:ok, expected}
     end
 
@@ -53,7 +53,7 @@ defmodule BirdSong.Services.EbirdTest do
       bypass: bypass,
       instance: instance
     } do
-      assert Ebird.get_recent_observations(@forsyth_county, instance) ==
+      assert Observations.get_recent_observations(@forsyth_county, instance) ==
                {:error,
                 {:not_found,
                  TestHelpers.mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent"}}
@@ -64,7 +64,7 @@ defmodule BirdSong.Services.EbirdTest do
       instance: instance
     } do
       assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
-               Ebird.get_recent_observations(@forsyth_county, instance)
+               Observations.get_recent_observations(@forsyth_county, instance)
     end
 
     @tag use_mock_routes?: false
@@ -75,7 +75,7 @@ defmodule BirdSong.Services.EbirdTest do
       Bypass.down(bypass)
 
       assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
-               Ebird.get_recent_observations(@forsyth_county, instance)
+               Observations.get_recent_observations(@forsyth_county, instance)
     end
   end
 end

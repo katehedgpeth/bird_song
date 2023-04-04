@@ -31,7 +31,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     task =
       Task.Supervisor.async(
         Services.Tasks,
-        Ebird,
+        Ebird.Observations,
         :get_recent_observations,
         [get_region(socket), get_server(socket, :observations)]
       )
@@ -134,7 +134,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   defp handle_task_response(
          {:ok, :recent_observations},
          socket,
-         {:ok, %Ebird.Response{observations: observations}}
+         {:ok, %Ebird.Observations.Response{observations: observations}}
        ) do
     observations
     |> Enum.map(& &1.sci_name)
