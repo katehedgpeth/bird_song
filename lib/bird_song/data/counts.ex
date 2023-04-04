@@ -6,6 +6,9 @@ defmodule BirdSong.Data.Counts do
             has_recordings: 0,
             data_folder_bytes: 0
 
+  alias BirdSong.Services.Helpers
+  alias BirdSong.Services.Ebird.RegionCodes
+
   alias BirdSong.{
     Bird,
     Services,
@@ -17,8 +20,13 @@ defmodule BirdSong.Data.Counts do
     defexception message: "No birds in database!"
   end
 
-  def get(%Services{} = services) do
-    case BirdSong.Repo.all(Bird) do
+  def get(%Services{} = services, args) do
+    region_codes = get_region_codes(args, Map.fetch!(services, :region_codes))
+
+    Bird
+    |> BirdSong.Repo.all()
+    |> Enum.filter(&MapSet.member?(region_codes, &1.species_code))
+    |> case do
       [%Bird{} | _] = birds ->
         Enum.reduce(
           birds,
@@ -45,6 +53,19 @@ defmodule BirdSong.Data.Counts do
     |> File.stat!()
     |> Map.fetch!(:size)
   end
+
+  defp get_region_codes(%{region: region}, %Service{module: RegionCodes} = service) do
+    case RegionCodes.get({:region_codes, region}, service) do
+      {:ok, %RegionCodes.Response{codes: codes}} ->
+        MapSet.new(codes)
+
+      {:error, _} ->
+        Helpers.log([error: "unknown_region_code", region_code: region], __MODULE__, :warning)
+        get_region_codes(%{}, service)
+    end
+  end
+
+  defp get_region_codes(%{}, %Service{}), do: MapSet.new([])
 
   defp add_bird_counts(%Bird{} = bird, %__MODULE__{} = counts, %Services{} = services) do
     Enum.reduce(
