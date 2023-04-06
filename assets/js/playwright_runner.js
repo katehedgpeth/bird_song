@@ -1,14 +1,15 @@
 const { chromium } = require("playwright");
-const [, , BASE_URL] = process.argv;
+const [, , BASE_URL, TIMEOUT] = process.argv;
 const USERNAME = process.env.EBIRD_USERNAME;
 const PASSWORD = process.env.EBIRD_PASSWORD;
+const TAKE_SCREENSHOTS = process.env.PLAYWRIGHT_TAKE_SCREENSHOTS
 
-if (!BASE_URL) {
-  console.log({argv: process.argv, error: "Received less arguments than expected"})
-  throw new Error()
+if (!BASE_URL || !TIMEOUT) {
+  console.log("message=" + JSON.stringify({argv: process.argv, error: "arguments"}))
+  throw new Error("received less arguments than expected")
 }
 
-const timeout = 3_000;
+const timeout = parseInt(TIMEOUT, 10);
 
 const sendMessage = (data) => {
   console.log("message=" + data)
@@ -19,6 +20,9 @@ const sendMessage = (data) => {
   const context = await browser.newContext();
   const page = await context.newPage();
 
+  const takeScreenshot = (fileName) =>
+    TAKE_SCREENSHOTS && page.screenshot({path: `./screenshots/${fileName}_${Date.now()}.png`});
+
   const shutdown = async () => {
     await page.close();
     await context.close();
@@ -27,9 +31,15 @@ const sendMessage = (data) => {
   }
 
   const sendErrorMessage = async (message) => {
-    await page.screenshot({path: "./screenshot.png"});
+    await takeScreenshot("on_send_error_message")
     return sendMessage(JSON.stringify(message));
   }
+
+  const catchTimeoutError = (error) =>
+    sendErrorMessage({
+      error: error.message.includes("Timeout") ? "timeout" : "unknown",
+      message: error.message
+    })
 
   const continueIfGoodResponse = async (response, url, callback) =>
     response.status() === 200
@@ -59,29 +69,29 @@ const sendMessage = (data) => {
   }
 
   const signIn = async () => {
-    await page.locator("a.Header-link").getByText("Sign in").click();
-    await page.type("#input-user-name", USERNAME);
-    await page.type("#input-password", PASSWORD);
-    await page.click("#form-submit");
-    await page.waitForLoadState("load")
+    await takeScreenshot("before_click_sign_in")
+    await page.locator("a.Header-link").getByText("Sign in").click({ timeout }).catch(catchTimeoutError);
+    await takeScreenshot("after_click_sign_in")
+    await page.type("#input-user-name", USERNAME, { timeout }).catch(catchTimeoutError);
+    await page.type("#input-password", PASSWORD, { timeout }).catch(catchTimeoutError);
+    await page.click("#form-submit", { timeout }).catch(catchTimeoutError);
+    await page.waitForLoadState("load", { timeout }).catch(catchTimeoutError)
+    await takeScreenshot("after_click_submit")
     return waitForResultsList();
   }
 
   const waitForResultsList = async () => {
-    await page.waitForLoadState("load");
+    await page.waitForLoadState("load").catch(catchTimeoutError);
     return locators.resultsList.waitFor({ timeout })
       .then(() => sendMessage("ready_for_requests"))
-      .catch((error) =>
-        sendErrorMessage({
-          error: error.message.startsWith("Timeout") ? "timeout" : "unknown",
-          message: error.message
-        }))
+      .catch(catchTimeoutError)
 
   }
 
   const connectToSite = async () => {
     const url = BASE_URL + "/catalog?view=list"
     const response = await page.goto(url);
+    await takeScreenshot("after_goto_list")
     return continueIfGoodResponse(response, url, signIn);
   }
 

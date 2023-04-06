@@ -1,6 +1,6 @@
 defmodule BirdSong.ServicesTest do
   use BirdSong.MockApiCase
-  alias BirdSong.{Bird, Services, MockServer}
+  alias BirdSong.{Bird, Data.Scraper, Services, MockServer}
   alias Services.{Ebird, Flickr, XenoCanto, Service, DataFile}
 
   @moduletag services: [:flickr, :xeno_canto]
@@ -41,7 +41,7 @@ defmodule BirdSong.ServicesTest do
     @tag :tmp_dir
     @tag use_route_mocks?: false
     @tag playwright_response:
-           {:error, Ebird.Recordings.BadResponseError.exception(status: 404, url: "$FAKED_URL")}
+           {:error, Scraper.BadResponseError.exception(status: 404, url: "$FAKED_URL")}
     test "populates data with {:error, _} when a service gives a bad response", %{
       bird: bird,
       services: services

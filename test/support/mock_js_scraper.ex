@@ -1,8 +1,8 @@
 defmodule BirdSong.MockJsScraper do
   use GenServer
-  alias BirdSong.Services.Ebird
+  alias BirdSong.Data.Scraper
 
-  @behaviour BirdSong.Data.Scraper
+  @behaviour Scraper
 
   @type response_opt :: {:file, String.t()} | Playwright.response()
 
@@ -40,7 +40,7 @@ defmodule BirdSong.MockJsScraper do
   end
 
   def init(response: {:error, %{__struct__: struct}} = error)
-      when struct in [Ebird.Recordings.BadResponseError] do
+      when struct in [Scraper.BadResponseError] do
     {:ok, response: error}
   end
 

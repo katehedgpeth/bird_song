@@ -42,7 +42,7 @@ defmodule BirdSong.Services.Ebird.ObservationsTest do
       expected =
         recent_observations
         |> Jason.decode!()
-        |> Observations.Response.parse()
+        |> Observations.Response.parse({:recent_observations, @forsyth_county})
 
       assert Observations.get_recent_observations(@forsyth_county, instance) ===
                {:ok, expected}

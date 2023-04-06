@@ -1,44 +1,35 @@
 defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   use BirdSong.DataCase
-  import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1]
-  alias BirdSong.TestHelpers
+  import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1, setup_bypass: 1]
 
   alias BirdSong.{
     Bird,
-    Services.Ebird.Recordings.Playwright,
     Data.Scraper.TimeoutError,
-    Data.Scraper.BadResponseError
+    Data.Scraper.BadResponseError,
+    MockEbirdServer,
+    Services.Ebird.Recordings.Playwright,
+    TestHelpers
   }
 
   @moduletag :capture_log
   @moduletag :slow_test
   @throttle_ms 100
+  @timeout_ms 500
 
-  setup_all do
-    {:ok,
-     mock_data: File.read!("test/mock_data/ebird_recordings.json"),
-     mock_html: File.read!("test/mock_data/ebird_recordings.html")}
-  end
+  setup [:seed_from_mock_taxonomy, :setup_bypass]
 
-  setup [:seed_from_mock_taxonomy]
-
-  setup do
-    bypass = Bypass.open()
-    Bypass.stub(bypass, :any, :any, &Plug.Conn.resp(&1, 500, ""))
+  setup %{bypass: bypass} = tags do
+    MockEbirdServer.setup(tags)
 
     {:ok, bird} = Bird.get_by_sci_name("Sialia sialis")
 
     {:ok, server} =
       Playwright.start_link(
+        base_url: TestHelpers.mock_url(bypass),
         listeners: [self()],
         throttle_ms: @throttle_ms,
-        base_url: TestHelpers.mock_url(bypass)
+        timeout: @timeout_ms
       )
-
-    # on_exit(fn ->
-    #   Playwright.stop_instance(server)
-    #   #   true = GenServer.call(server, :shutdown_port)
-    # end)
 
     {:ok, bird: bird, bypass: bypass, server: server}
   end
@@ -65,12 +56,6 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   end
 
   describe "Ebird.Recordings.Playwright.run/1 - success response" do
-    setup %{bypass: bypass, mock_html: mock_html, mock_data: mock_data} do
-      mock_response(bypass, :html, 200, mock_html)
-      mock_response(bypass, :api, 200, mock_data)
-      :ok
-    end
-
     test "opens a port and returns a response", %{bird: bird, server: server} do
       response = Playwright.run(server, bird)
 
@@ -162,18 +147,17 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   end
 
   describe "Ebird.Recordings.Playwright.run/1 - error responses" do
+    @tag expect_api_call?: false
+    @tag expect_login?: false
+    @tag list_html_response: &MockEbirdServer.not_found_response/1
     test "returns an error response without crashing when HTML page returns a bad response", %{
       bird: bird,
       bypass: bypass,
       server: server
     } do
-      body_404 = "<div>That page doesn't exist</div>"
-      mock_response(bypass, :html, 404, body_404)
-      do_not_expect_api_response(bypass)
-
       assert {:error,
               %BadResponseError{
-                response_body: ^body_404,
+                response_body: "That page does not exist",
                 status: 404,
                 url: url
               }} = Playwright.run(server, bird)
@@ -190,23 +174,22 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
       assert {:connected, _pid} = Port.info(port, :connected)
     end
 
-    test "returns an error without crashing when .ResponseList is not found", %{
+    @tag list_html_response: &MockEbirdServer.bad_structure_response/1
+    @tag expect_api_call?: false
+    @tag expect_login?: false
+    test "returns an error when sign in link is not found", %{
       bird: bird,
-      bypass: bypass,
       server: server
     } do
-      mock_response(bypass, :html, 200, "<div>This is an unexpected document structure</div>")
-      do_not_expect_api_response(bypass)
-
       assert Playwright.run(server, bird) ===
                {:error,
                 %TimeoutError{
                   timeout_message:
                     Enum.join(
                       [
-                        "Timeout 3000ms exceeded.",
+                        "Timeout #{@timeout_ms}ms exceeded.",
                         "=========================== logs ===========================",
-                        "waiting for locator('.ResultsList') to be visible",
+                        "waiting for locator('a.Header-link').getByText('Sign in')",
                         "============================================================"
                       ],
                       "\n"
@@ -223,22 +206,13 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
       assert {:connected, _pid} = Port.info(port, :connected)
     end
 
+    @tag recordings_response: &MockEbirdServer.not_authorized_response/1
     test "returns an error response without crashing when API request returns a bad response", %{
       bird: bird,
       bypass: bypass,
-      mock_html: mock_html,
       server: server
     } do
-      mock_response(bypass, :html, 200, mock_html)
-
-      mock_response(
-        bypass,
-        :api,
-        403,
-        ~s({"error": "You are not authorized to perform this action"})
-      )
-
-      assert Playwright.run(server, bird) === {
+      assert Playwright.run(server, bird, 3_000) === {
                :error,
                %BadResponseError{
                  __exception__: true,

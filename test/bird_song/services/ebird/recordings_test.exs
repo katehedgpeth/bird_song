@@ -3,6 +3,8 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
   import BirdSong.TestSetup
   alias BirdSong.{}
 
+  alias BirdSong.MockEbirdServer
+
   alias BirdSong.{
     Bird,
     Services.Ebird.Recordings,
@@ -19,28 +21,20 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
      mock_html: File.read!("test/mock_data/ebird_recordings.html")}
   end
 
-  setup [:seed_from_mock_taxonomy]
-  # setup [:start_services]
-  # setup [:listen_to_services]
+  setup [:seed_from_mock_taxonomy, :setup_bypass]
 
   setup tags do
-    %{mock_data: mock_data, mock_html: mock_html} = tags
-
-    bypass = Bypass.open()
+    MockEbirdServer.setup(tags)
 
     service =
       TestHelpers.start_service_supervised(
         Recordings,
-        Map.merge(tags, %{bypass: bypass, throttle_ms: 0})
+        Map.merge(tags, %{throttle_ms: 0})
       )
 
     Recordings.register_request_listener(service.whereis)
 
-    Bypass.expect(bypass, "GET", "/catalog", &success_response(&1, mock_html))
-    Bypass.expect(bypass, "GET", "/api/v2/search", &success_response(&1, mock_data))
-    Bypass.stub(bypass, :any, :any, &Plug.Conn.resp(&1, 404, ""))
-
-    {:ok, bypass: bypass, service: service}
+    {:ok, service: service}
   end
 
   def success_response(conn, "" <> mock_response) do
@@ -93,9 +87,5 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
                "subnational2Name"
              ]
     end
-
-    # File.write()
-    # assert Map.keys(recording) === []
-    # assert_receive :FAIL
   end
 end

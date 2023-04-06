@@ -1,13 +1,6 @@
 defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   use GenServer
 
-  alias BirdSong.Services.Ebird.Recordings.{
-    BadResponseError,
-    TimeoutError,
-    UnknownMessageError,
-    JsonParseError
-  }
-
   alias BirdSong.{
     Bird,
     Data.Scraper.BadResponseError,
@@ -23,6 +16,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   @throttle_ms :bird_song
                |> Application.compile_env!(ThrottledCache)
                |> Keyword.fetch!(:throttle_ms)
+
+  @default_timeout :bird_song
+                   |> Application.compile_env!(__MODULE__)
+                   |> Keyword.fetch!(:default_timeout)
 
   @runner_script :bird_song
                  |> :code.priv_dir()
@@ -44,7 +41,8 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     listeners: [],
     ready?: false,
     responses: [],
-    throttle_ms: @throttle_ms
+    throttle_ms: @throttle_ms,
+    timeout: @default_timeout
   ]
 
   @type t() :: %__MODULE__{
@@ -57,12 +55,13 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
           ready?: boolean(),
           reply_to: GenServer.from(),
           responses: [Map.t()],
-          throttle_ms: integer()
+          throttle_ms: integer(),
+          timeout: integer()
         }
 
   @spec run(GenServer.server(), BirdSong.Bird.t()) :: BirdSong.Data.Scraper.response()
-  def run(whereis, %Bird{} = bird) do
-    GenServer.call(whereis, {:run, bird}, :infinity)
+  def run(whereis, %Bird{} = bird, timeout \\ :infinity) do
+    GenServer.call(whereis, {:run, bird}, timeout)
   end
 
   #########################################################
@@ -102,14 +101,14 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   def handle_info(
-        {:DOWN, _, :port, _port, :normal},
-        %__MODULE__{} = state
+        {:DOWN, _, :port, port, :normal},
+        %__MODULE__{port: port} = state
       ) do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
-  def handle_info({:EXIT, port, :normal}, state) when is_port(port) do
-    {:noreply, state}
+  def handle_info({:EXIT, port, :normal}, %__MODULE__{port: port} = state) do
+    {:noreply, %{state | port: nil, ready?: false}}
   end
 
   def handle_cast(:shutdown_port, %__MODULE__{} = state) do
@@ -179,12 +178,12 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     Enum.each(listeners, &send(&1, {__MODULE__, DateTime.now!("Etc/UTC"), message}))
   end
 
-  def open_port(%__MODULE__{base_url: base_url} = state) do
+  def open_port(%__MODULE__{base_url: base_url, timeout: timeout} = state) do
     port =
       Port.open({:spawn_executable, @node_path}, [
         :binary,
         :stderr_to_stdout,
-        args: [@runner_script, base_url]
+        args: [@runner_script, base_url, to_string(timeout)]
       ])
 
     Port.monitor(port)
@@ -252,7 +251,6 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   defp handle_error(error, %__MODULE__{} = state) do
     state
-    |> shutdown_port()
     |> Map.replace!(:error, {:error, error})
     |> reply()
   end
@@ -313,13 +311,14 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   defp shutdown_port(%__MODULE__{port: port} = state) do
     case Port.info(port) do
       nil ->
-        state
+        :ok
 
       _ ->
         Helpers.log([message: "shutting_down_port", port: port], __MODULE__, :warning)
         # JS script shuts itself down with process.exit()
         Port.command(port, "shutdown")
-        %{state | port: nil, ready?: false}
     end
+
+    state
   end
 end

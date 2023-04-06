@@ -3,11 +3,11 @@ defmodule BirdSong.TestHelpers do
 
   alias BirdSong.{
     Bird,
+    Data.Scraper.BadResponseError,
     MockJsScraper,
     Services,
     Services.Service,
-    Services.Ebird,
-    Services.Ebird.Recordings.BadResponseError
+    Services.Ebird
   }
 
   alias Phoenix.LiveView.Socket

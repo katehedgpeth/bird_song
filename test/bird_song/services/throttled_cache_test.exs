@@ -4,7 +4,7 @@ defmodule ThrottledCacheUnderTest do
   defmodule Response do
     defstruct [:id]
 
-    def parse(%{"id" => id}) do
+    def parse(%{"id" => id}, _request) do
       %__MODULE__{id: id}
     end
   end

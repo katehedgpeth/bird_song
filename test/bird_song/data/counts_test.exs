@@ -17,7 +17,7 @@ defmodule BirdSong.Data.CountsTest do
 
   test "&get/1 raises if the database is empty" do
     assert BirdSong.Repo.all(Bird) === []
-    assert_raise Counts.NoBirdsError, fn -> Counts.get(%Services{}) end
+    assert_raise Counts.NoBirdsError, fn -> Counts.get(%Services{}, %{}) end
   end
 
   describe "&get/1" do
@@ -28,7 +28,7 @@ defmodule BirdSong.Data.CountsTest do
     test "returns a correct count of birds in DB when there is no data", %{services: services} do
       assert Bird |> BirdSong.Repo.all() |> length() === @expected_in_db
 
-      assert Counts.get(services) === %Counts{
+      assert Counts.get(services, %{}) === %Counts{
                data_folder_bytes: 128,
                has_images: 0,
                has_recordings: 0,
@@ -47,7 +47,7 @@ defmodule BirdSong.Data.CountsTest do
 
       add_fake_files(recordings)
 
-      assert Counts.get(services) === %Counts{
+      assert Counts.get(services, %{}) === %Counts{
                data_folder_bytes: 224,
                has_images: 0,
                has_recordings: 3,
@@ -62,13 +62,35 @@ defmodule BirdSong.Data.CountsTest do
       |> Map.fetch!(:images)
       |> add_fake_files()
 
-      assert Counts.get(services) === %Counts{
+      assert Counts.get(services, %{}) === %Counts{
                data_folder_bytes: 224,
                has_images: 3,
                has_recordings: 0,
                missing_images: @expected_in_db - 3,
                missing_recordings: @expected_in_db,
                total_birds: @expected_in_db
+             }
+    end
+
+    test "filters by region when provided as an argument", %{services: services, bypass: bypass} do
+      species_codes =
+        "test/mock_data/region_codes/US-NC-067.json"
+        |> File.read!()
+        |> Jason.decode!()
+        |> Enum.take(10)
+        |> Jason.encode!()
+
+      Bypass.expect(bypass, fn conn ->
+        Plug.Conn.resp(conn, 200, species_codes)
+      end)
+
+      assert Counts.get(services, %{region: "US-NC-067"}) === %Counts{
+               data_folder_bytes: 128,
+               has_images: 0,
+               has_recordings: 0,
+               missing_images: 10,
+               missing_recordings: 10,
+               total_birds: 10
              }
     end
   end
