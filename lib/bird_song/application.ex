@@ -17,7 +17,8 @@ defmodule BirdSong.Application do
       {DynamicSupervisor, name: BirdSong.Services.GenServers},
       # Start service caches
       BirdSong.Services.Ebird.Observations,
-      BirdSong.Services.XenoCanto,
+      BirdSong.Services.Ebird.Recordings,
+      BirdSong.Services.Ebird.RegionCodes,
       BirdSong.Services.Flickr,
       # Start the PubSub system
       {Phoenix.PubSub, name: BirdSong.PubSub},

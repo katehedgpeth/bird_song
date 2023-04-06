@@ -31,7 +31,7 @@ defmodule BirdSong.MockApiCase do
     quote location: :keep, bind_quoted: [opts: opts] do
       import BirdSong.TestSetup
 
-      @moduletag seed_services?: Keyword.get(opts, :seed_services?, true)
+      @moduletag seed_services?: Keyword.get(opts, :seed_services?, false)
 
       if Keyword.get(opts, :use_data_case, true) do
         use BirdSong.DataCase

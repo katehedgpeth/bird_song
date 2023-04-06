@@ -1,31 +1,55 @@
 defmodule BirdSong.Services.XenoCantoTest do
-  use BirdSong.MockApiCase
-  alias BirdSong.Services
+  use BirdSong.DataCase
+  use BirdSong.MockDataAttributes
+  import BirdSong.TestSetup
 
-  alias Services.{
-    Service,
-    XenoCanto,
-    XenoCanto.Response,
-    XenoCanto.Recording
+  alias BirdSong.{
+    Bird,
+    Services.Ebird,
+    Services.Service,
+    Services.XenoCanto.Response,
+    Services.XenoCanto.Recording,
+    TestHelpers
   }
 
-  @moduletag services: [:xeno_canto]
-  @moduletag recordings_module: XenoCanto
   @moduletag bird: @eastern_bluebird
+  @moduletag :tmp_dir
+  @moduletag seed_services?: false
+
+  setup [:setup_bypass]
 
   setup %{
-    services: %Services{
-      recordings: %Service{module: XenoCanto, whereis: whereis}
-    }
-  } do
+          bypass: bypass
+        } = tags do
+    Ebird.Taxonomy.seed([
+      %{
+        "sciName" => "Sialia sialis",
+        "comName" => "Eastern Bluebird",
+        "speciesCode" => "easblu",
+        "category" => "species",
+        "taxonOrder" => 27535.0,
+        "bandingCodes" => [
+          "EABL"
+        ],
+        "comNameCodes" => [],
+        "sciNameCodes" => [
+          "SISI"
+        ],
+        "order" => "Passeriformes",
+        "familyCode" => "turdid1",
+        "familyComName" => "Thrushes and Allies",
+        "familySciName" => "Turdidae"
+      }
+    ])
+
+    %Service{whereis: whereis} = TestHelpers.start_service_supervised(XenoCanto, tags)
+    Bypass.expect(bypass, "GET", "/api/2/recordings", &success_response/1)
     {:ok, whereis: whereis}
   end
 
   describe "&get/1" do
-    @describetag stub: {"GET", "/api/2/recordings", &MockServer.success_response/1}
-
     test "returns a response object when request is successful", %{
-      bird: bird,
+      bird: %Bird{} = bird,
       whereis: whereis
     } do
       assert XenoCanto.get_from_cache(bird, whereis) === :not_found
@@ -47,5 +71,9 @@ defmodule BirdSong.Services.XenoCantoTest do
                ]
              } = Enum.filter(recordings, &(length(&1.also) > 2)) |> Enum.at(5)
     end
+  end
+
+  def success_response(%Plug.Conn{path_info: ["api", "2", "recordings"]} = conn) do
+    Plug.Conn.resp(conn, 200, File.read!("data/recordings/xeno_canto/Eastern_Bluebird.json"))
   end
 end

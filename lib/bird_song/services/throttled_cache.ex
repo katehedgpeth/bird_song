@@ -108,10 +108,6 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, {:register_request_listener, self()})
       end
 
-      def seed_ets_table(%State{} = state) do
-        State.seed_ets_table(state)
-      end
-
       #########################################################
       #########################################################
       ##
@@ -208,6 +204,7 @@ defmodule BirdSong.Services.ThrottledCache do
 
       def init(opts) do
         send(self(), :create_data_folder)
+        send(self(), :seed_ets_table)
 
         {:ok,
          opts
@@ -258,7 +255,7 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       def handle_info(:seed_ets_table, state) do
-        {:noreply, seed_ets_table(state)}
+        {:noreply, State.seed_ets_table(state)}
       end
 
       def handle_info(:create_data_folder, state) do
@@ -310,6 +307,14 @@ defmodule BirdSong.Services.ThrottledCache do
       def handle_info({ref, {:error, {:timeout, _}} = response}, %State{} = state)
           when is_reference(ref) do
         handle_task_response(state, ref, response)
+      end
+
+      def handle_info({ref, {:ok, {:data_seeded, "" <> _bird_name}}}, %State{} = state) do
+        {:noreply, state}
+      end
+
+      def handle_info({ref, {:error, {:data_not_seeded, "" <> _bird_name}}}, %State{} = state) do
+        {:noreply, state}
       end
 
       def handle_info({ref, {:error, %HTTPoison.Error{}} = response}, %State{} = state)

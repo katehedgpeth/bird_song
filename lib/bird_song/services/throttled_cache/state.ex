@@ -25,6 +25,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
           ets_opts: [:ets.table_type()],
           request_listeners: [pid()],
           scraper: atom() | {atom(), pid()},
+          seed_data?: boolean,
           service: Service.t(),
           tasks: %{reference() => request_data()},
           throttled?: boolean(),
@@ -44,6 +45,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
     backlog: [],
     data_file_instance: DataFile,
     request_listeners: [],
+    seed_data?: false,
     tasks: %{},
     throttled?: false,
     throttle_ms:
@@ -155,7 +157,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
   end
 
   def save_response(
-        %__MODULE__{service: %Service{module: module}} = state,
+        %__MODULE__{service: %Service{module: module}, request_listeners: listeners} = state,
         {request_data, {:ok, response}}
       ) do
     response_module = Module.concat(module, :Response)
@@ -165,7 +167,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
     |> Map.fetch!(:ets_table)
     |> :ets.insert({ets_key(state, request_data), response})
     |> case do
-      true -> :ok
+      true ->
+        Enum.each(listeners, &send(&1, {:response_saved_to_ets, request_data}))
     end
   end
 
@@ -231,17 +234,26 @@ defmodule BirdSong.Services.ThrottledCache.State do
     data_folder_path
   end
 
-  def seed_ets_table(%__MODULE__{} = state) do
+  def seed_ets_table(%__MODULE__{seed_data?: true} = state) do
     Bird
     |> BirdSong.Repo.all()
-    |> List.first()
-    |> List.wrap()
+    # |> List.first()
+    # |> List.wrap()
     |> Enum.reduce(state, &start_ets_seed_task/2)
+  end
+
+  def seed_ets_table(%__MODULE__{seed_data?: false} = state) do
+    state
   end
 
   def start_ets_seed_task(%Bird{} = bird, %__MODULE__{} = state) do
     %Task{ref: ref} =
-      Task.Supervisor.async(Services.Tasks, __MODULE__, :add_data_file_to_ets, [bird, state])
+      Task.Supervisor.async(
+        Services.Tasks,
+        __MODULE__,
+        :add_data_file_to_ets,
+        [bird, state]
+      )
 
     Map.update!(state, :tasks, &Map.put(&1, ref, {:seed_data_task, bird.common_name}))
   end
@@ -250,36 +262,37 @@ defmodule BirdSong.Services.ThrottledCache.State do
         %Bird{} = bird,
         %__MODULE__{} = state
       ) do
-    service_module =
-      state
-      |> service()
-      |> Service.module()
-
+    service = service(state)
+    service_module = Service.module(service)
     response_module = Module.concat(service_module, :Response)
 
-    case DataFile.read(%DataFile.Data{request: bird, service: service(state)}) do
+    case DataFile.read(%DataFile.Data{request: bird, service: service}) do
       {:ok, str} ->
         data =
           str
           |> Jason.decode!()
-          |> response_module.parse()
+          |> response_module.parse(bird)
 
-        state
-        |> service()
+        service
         |> Map.fetch!(:whereis)
         |> send({:save, {bird, {:ok, data}}})
+
+        {:ok, {:data_seeded, bird.common_name}}
 
       {:error, {error, path}} ->
         Helpers.log(
           [
-            error: "data_file_read_error",
+            error: "data_not_seeded",
             reason: error,
             bird: bird.common_name,
-            path: path
+            path: path,
+            ets_name: state.ets_name
           ],
           service_module,
           :error
         )
+
+        {:error, {:data_not_seeded, bird.common_name}}
     end
   end
 

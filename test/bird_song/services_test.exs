@@ -1,7 +1,7 @@
 defmodule BirdSong.ServicesTest do
   use BirdSong.MockApiCase
   alias BirdSong.{Bird, Data.Scraper, Services, MockServer}
-  alias Services.{Ebird, Flickr, XenoCanto, Service, DataFile}
+  alias Services.{Ebird, Flickr, Service, DataFile}
 
   @moduletag services: [:flickr, :xeno_canto]
   @moduletag inject_playwright?: true
@@ -78,7 +78,7 @@ defmodule BirdSong.ServicesTest do
                overwrite?: false
              } = Services.fetch_data_for_bird(services)
 
-      for module <- [Flickr, XenoCanto] do
+      for module <- [Flickr, Ebird.Recordings] do
         for status <- [:start_request, :end_request] do
           refute_receive {^status, %{module: ^module}}
         end

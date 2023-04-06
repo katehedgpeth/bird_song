@@ -78,6 +78,7 @@ defmodule BirdSong.Services.DataFileTest do
 
   @moduletag :tmp_dir
   @moduletag capture_log: true
+  @moduletag seed_services?: false
 
   setup [:setup_bypass, :make_tmp_dir_path_relative]
 
@@ -273,7 +274,7 @@ defmodule BirdSong.Services.DataFileTest do
   end
 
   describe "&read/1" do
-    @tag service: XenoCanto
+    @tag service: Ebird.Recordings
     @tag use_existing_file?: true
     @tag tmp_dir: false
     test "returns {:ok, string} when read is successful", %{
@@ -283,7 +284,7 @@ defmodule BirdSong.Services.DataFileTest do
         } = data
     } do
       file = DataFile.data_file_path(data)
-      assert file === "data/recordings/xeno_canto/Eastern_Bluebird.json"
+      assert file === "data/recordings/ebird/Eastern_Bluebird.json"
       assert File.exists?(file)
       assert {:ok, "" <> _} = DataFile.read(data)
     end

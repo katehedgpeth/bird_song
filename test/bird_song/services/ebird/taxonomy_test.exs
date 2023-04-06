@@ -4,11 +4,10 @@ defmodule BirdSong.Services.Ebird.TaxonomyTest do
   alias BirdSong.{
     Order,
     Services.Ebird.Taxonomy,
-    Services.Flickr,
-    Services.XenoCanto
+    Services.Flickr
   }
 
-  @moduletag service: [XenoCanto, Flickr]
+  @moduletag service: [Flickr]
   @moduletag use_mock_routes?: false
   @moduletag :capture_log
   @moduletag seed_data?: false

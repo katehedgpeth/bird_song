@@ -4,7 +4,8 @@ defmodule BirdSong.Services.Ebird.Recordings do
     ets_opts: [],
     ets_name: :ebird_recordings,
     base_url: "https://search.macaulaylibrary.org",
-    scraper: __MODULE__.Playwright
+    scraper: __MODULE__.Playwright,
+    seed_data?: true
 
   alias BirdSong.Data.Scraper.TimeoutError
   alias BirdSong.Data.Scraper.BadResponseError
