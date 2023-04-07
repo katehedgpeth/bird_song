@@ -67,15 +67,15 @@ defmodule BirdSong.Data.Recorder do
     config
   end
 
-  defp get_birds_to_fetch(%Config{birds: [], region_codes: region_codes} = config) do
-    size = MapSet.size(region_codes)
+  defp get_birds_to_fetch(%Config{birds: [], region_species_codes: region_species_codes} = config) do
+    size = MapSet.size(region_species_codes)
 
     %{
       config
       | birds:
           Bird
           |> BirdSong.Repo.all()
-          |> Enum.filter(&keep_bird?(size, region_codes, &1))
+          |> Enum.filter(&keep_bird?(size, region_species_codes, &1))
     }
   end
 

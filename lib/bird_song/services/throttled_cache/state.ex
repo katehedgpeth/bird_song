@@ -72,7 +72,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
                   ThrottledCacheUnderTest,
                   Ebird.Observations,
                   Ebird.Recordings,
-                  Ebird.RegionCodes
+                  Ebird.RegionSpeciesCodes
                 ]
 
   def new(opts) do

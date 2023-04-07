@@ -1,29 +1,34 @@
-defmodule BirdSong.Services.Ebird.RegionCodes do
+defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
   use BirdSong.Services.ThrottledCache,
     base_url: "https://api.ebird.org",
     data_folder_path: "",
     ets_opts: [],
-    ets_name: :ebird_region_codes
+    ets_name: :ebird_region_species_codes
 
   alias BirdSong.Services.Ebird
 
-  @type request_data() :: {:region_codes, String.t()}
+  @type request_data() :: {:region_species_codes, String.t()}
 
-  def endpoint({:region_codes, region}) do
+  def get_codes("" <> region, server) do
+    get({:region_species_codes, region}, server)
+  end
+
+  def endpoint({:region_species_codes, region}) do
     Path.join(["v2", "product", "spplist", region])
   end
 
-  def ets_key({:region_codes, region}), do: region
+  def ets_key({:region_species_codes, region}), do: region
 
-  def headers({:region_codes, "" <> _}),
+  def headers({:region_species_codes, "" <> _}),
     do: [Ebird.token_header() | user_agent()]
 
-  def params({:region_codes, "" <> _}), do: []
+  def params({:region_species_codes, "" <> _}), do: []
 
-  def parse_from_disk({:region_codes, "" <> _region}, _server),
+  def parse_from_disk({:region_species_codes, "" <> _region}, _server),
     do: :not_found
 
-  def read_from_disk({:region_codes, "" <> region}, _server), do: {:error, {:enoent, region}}
+  def read_from_disk({:region_species_codes, "" <> region}, _server),
+    do: {:error, {:enoent, region}}
 
   def handle_call(msg, from, state) do
     super(msg, from, state)

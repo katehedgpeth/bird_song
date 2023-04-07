@@ -1,17 +1,20 @@
-defmodule BirdSong.Services.Ebird.RegionCodesTest do
+defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
   use ExUnit.Case
 
   alias BirdSong.TestHelpers
-  alias BirdSong.Services.Ebird.RegionCodes
+  alias BirdSong.Services.Ebird.RegionSpeciesCodes
   @region "US-NC-067"
 
   setup_all do
-    {:ok, raw_codes: File.read!("test/mock_data/region_codes/" <> @region <> ".json")}
+    {:ok, raw_codes: File.read!("test/mock_data/region_species_codes/" <> @region <> ".json")}
   end
 
   setup %{test: test} do
     bypass = Bypass.open()
-    {:ok, service} = RegionCodes.start_link(base_url: TestHelpers.mock_url(bypass), name: test)
+
+    {:ok, service} =
+      RegionSpeciesCodes.start_link(base_url: TestHelpers.mock_url(bypass), name: test)
+
     {:ok, bypass: bypass, service: service}
   end
 
@@ -23,8 +26,8 @@ defmodule BirdSong.Services.Ebird.RegionCodesTest do
     } do
       Bypass.expect(bypass, &success_response(&1, raw_codes))
 
-      assert {:ok, %RegionCodes.Response{region: @region, codes: ["bbwduc" | _]}} =
-               RegionCodes.get({:region_codes, @region}, service)
+      assert {:ok, %RegionSpeciesCodes.Response{region: @region, codes: ["bbwduc" | _]}} =
+               RegionSpeciesCodes.get({:region_species_codes, @region}, service)
     end
   end
 

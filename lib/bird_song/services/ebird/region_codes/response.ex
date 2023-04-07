@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.Ebird.RegionCodes.Response do
+defmodule BirdSong.Services.Ebird.RegionSpeciesCodes.Response do
   defstruct [:region, codes: []]
 
   @type t() :: %__MODULE__{
@@ -6,7 +6,7 @@ defmodule BirdSong.Services.Ebird.RegionCodes.Response do
           region: String.t()
         }
 
-  def parse(codes, {:region_codes, region}) when is_list(codes) do
+  def parse(codes, {:region_species_codes, region}) when is_list(codes) do
     %__MODULE__{codes: codes, region: region}
   end
 end

@@ -49,7 +49,9 @@ defmodule BirdSong.TestSetup do
     images_module = Map.get(tags, :images_service, Flickr)
     recordings_module = Map.get(tags, :recordings_module, Ebird.Recordings)
     observations_module = Map.get(tags, :observations_service, Ebird.Observations)
-    region_species_codes_module = Map.get(tags, :region_species_code_module, Ebird.RegionCodes)
+
+    region_species_codes_module =
+      Map.get(tags, :region_species_code_module, Ebird.RegionSpeciesCodes)
 
     [recordings_service, images_service, observations_service, region_species_code_service] =
       Enum.map(
@@ -76,7 +78,7 @@ defmodule BirdSong.TestSetup do
         images: images_service,
         recordings: recordings_service,
         observations: observations_service,
-        region_codes: region_species_code_service,
+        region_species_codes: region_species_code_service,
         timeout: Map.get(tags, :timeout, 1_000)
       }
     }

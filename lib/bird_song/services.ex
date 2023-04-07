@@ -7,7 +7,11 @@ defmodule BirdSong.Services do
   @images Keyword.fetch!(@env, :images)
   @recordings Keyword.fetch!(@env, :recordings)
   @observations Keyword.fetch!(@env, :observations)
-  @region_codes Keyword.get(@env, :region_codes, BirdSong.Services.Ebird.RegionCodes)
+  @region_species_codes Keyword.get(
+                          @env,
+                          :region_species_codes,
+                          BirdSong.Services.Ebird.RegionSpeciesCodes
+                        )
   @timeout Keyword.fetch!(@env, :stream_timeout_ms)
 
   defstruct [
@@ -23,8 +27,8 @@ defmodule BirdSong.Services do
       module: @observations
     },
     overwrite?: false,
-    region_codes: %Service{
-      module: @region_codes
+    region_species_codes: %Service{
+      module: @region_species_codes
     },
     timeout: @timeout,
     __tasks: []
@@ -58,7 +62,7 @@ defmodule BirdSong.Services do
 
   def ensure_started() do
     Enum.reduce(
-      [:images, :recordings, :observations, :region_codes],
+      [:images, :recordings, :observations, :region_species_codes],
       %__MODULE__{},
       fn key, state -> Map.update!(state, key, &Service.ensure_started/1) end
     )

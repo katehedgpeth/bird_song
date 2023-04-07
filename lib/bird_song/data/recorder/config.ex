@@ -1,8 +1,8 @@
 defmodule BirdSong.Data.Recorder.Config do
-  alias BirdSong.{Services, Services.Helpers, Services.Ebird.RegionCodes, Services.Service}
+  alias BirdSong.{Services, Services.Helpers, Services.Ebird.RegionSpeciesCodes, Services.Service}
 
   defstruct [
-    :region_codes,
+    :region_species_codes,
     :services,
     :taxonomy_file,
     birds: [],
@@ -34,18 +34,18 @@ defmodule BirdSong.Data.Recorder.Config do
   end
 
   defp do_parse("--region=" <> region, %__MODULE__{} = config, %Services{
-         region_codes: service
+         region_species_codes: service
        }) do
-    %{config | region_codes: get_region_codes(region, service)}
+    %{config | region_species_codes: get_region_species_codes(region, service)}
   end
 
   defp do_parse("" <> arg, %__MODULE__{}, _services) do
     raise "unexpected argument: " <> arg
   end
 
-  defp get_region_codes(region, %Service{} = service) do
-    case RegionCodes.get({:region_codes, region}, service) do
-      {:ok, %RegionCodes.Response{codes: codes}} ->
+  defp get_region_species_codes(region, %Service{} = service) do
+    case RegionSpeciesCodes.get({:region_species_codes, region}, service) do
+      {:ok, %RegionSpeciesCodes.Response{codes: codes}} ->
         MapSet.new(codes)
 
       {:error, _} ->

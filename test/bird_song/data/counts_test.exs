@@ -74,7 +74,7 @@ defmodule BirdSong.Data.CountsTest do
 
     test "filters by region when provided as an argument", %{services: services, bypass: bypass} do
       species_codes =
-        "test/mock_data/region_codes/US-NC-067.json"
+        "test/mock_data/region_species_codes/US-NC-067.json"
         |> File.read!()
         |> Jason.decode!()
         |> Enum.take(10)

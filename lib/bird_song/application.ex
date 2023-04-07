@@ -18,7 +18,7 @@ defmodule BirdSong.Application do
       # Start service caches
       BirdSong.Services.Ebird.Observations,
       BirdSong.Services.Ebird.Recordings,
-      BirdSong.Services.Ebird.RegionCodes,
+      BirdSong.Services.Ebird.RegionSpeciesCodes,
       BirdSong.Services.Flickr,
       # Start the PubSub system
       {Phoenix.PubSub, name: BirdSong.PubSub},

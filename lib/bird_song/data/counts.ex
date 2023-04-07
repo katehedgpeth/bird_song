@@ -7,7 +7,7 @@ defmodule BirdSong.Data.Counts do
             data_folder_bytes: 0
 
   alias BirdSong.Services.Helpers
-  alias BirdSong.Services.Ebird.RegionCodes
+  alias BirdSong.Services.Ebird.RegionSpeciesCodes
 
   alias BirdSong.{
     Bird,
@@ -21,12 +21,14 @@ defmodule BirdSong.Data.Counts do
   end
 
   def get(%Services{} = services, args) do
-    region_codes = get_region_codes(args, Map.fetch!(services, :region_codes))
-    size = MapSet.size(region_codes)
+    region_species_codes =
+      get_region_species_codes(args, Map.fetch!(services, :region_species_codes))
+
+    size = MapSet.size(region_species_codes)
 
     Bird
     |> BirdSong.Repo.all()
-    |> Enum.filter(&keep_bird?(size, region_codes, &1))
+    |> Enum.filter(&keep_bird?(size, region_species_codes, &1))
     |> case do
       [%Bird{} | _] = birds ->
         Enum.reduce(
@@ -58,18 +60,18 @@ defmodule BirdSong.Data.Counts do
     |> Map.fetch!(:size)
   end
 
-  defp get_region_codes(%{region: region}, %Service{module: RegionCodes} = service) do
-    case RegionCodes.get({:region_codes, region}, service) do
-      {:ok, %RegionCodes.Response{codes: codes}} ->
+  defp get_region_species_codes(%{region: region}, %Service{module: RegionSpeciesCodes} = service) do
+    case RegionSpeciesCodes.get({:region_species_codes, region}, service) do
+      {:ok, %RegionSpeciesCodes.Response{codes: codes}} ->
         MapSet.new(codes)
 
       {:error, _} ->
         Helpers.log([error: "unknown_region_code", region_code: region], __MODULE__, :warning)
-        get_region_codes(%{}, service)
+        get_region_species_codes(%{}, service)
     end
   end
 
-  defp get_region_codes(%{}, %Service{}), do: MapSet.new([])
+  defp get_region_species_codes(%{}, %Service{}), do: MapSet.new([])
 
   defp add_bird_counts(%Bird{} = bird, %__MODULE__{} = counts, %Services{} = services) do
     Enum.reduce(
