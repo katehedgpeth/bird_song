@@ -32,8 +32,8 @@ defmodule Mix.Tasks.RecordDataTest do
       assert_receive {:end_request, %{module: XenoCanto}}
       assert_receive {:end_request, %{module: Flickr}}
 
-      assert {:ok, _} = DataFile.read(%DataFile.Data{service: services.recordings, request: bird})
-      assert {:ok, _} = DataFile.read(%DataFile.Data{service: services.images, request: bird})
+      assert {:ok, _} = Service.read_from_disk(services.recordings, bird)
+      assert {:ok, _} = Service.read_from_disk(services.images, bird)
     end
   end
 

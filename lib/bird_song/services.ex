@@ -1,6 +1,5 @@
 defmodule BirdSong.Services do
   use GenServer
-  alias BirdSong.Services.DataFile
   alias BirdSong.Bird
   alias __MODULE__.Service
 
@@ -91,33 +90,19 @@ defmodule BirdSong.Services do
 
   def maybe_start_task(key, %__MODULE__{bird: bird, overwrite?: false} = state) do
     service = Map.fetch!(state, key)
+    response_module = Service.response_module(service)
 
-    case DataFile.read(%DataFile.Data{
-           service: service,
-           request: bird
-         }) do
-      {:ok, saved_response} ->
+    state
+    |> Map.fetch!(key)
+    |> Service.parse_from_disk(bird)
+    |> case do
+      :not_found ->
+        start_task(key, state)
+
+      {:ok, %{__struct__: ^response_module} = response} ->
         # overwrite? is false and a data file exists for this bird,
         # so do not call the service.
-        Map.update!(
-          state,
-          key,
-          &Map.replace!(
-            &1,
-            :response,
-            # at this point in development, we do not need to preserve response headers;
-            # this may change in the future.
-            GenServer.call(
-              service.whereis,
-              {:parse_response,
-               request: bird,
-               response: {:ok, %HTTPoison.Response{status_code: 200, body: saved_response}}}
-            )
-          )
-        )
-
-      {:error, {:enoent, _path}} ->
-        start_task(key, state)
+        Map.update!(state, key, &Map.replace!(&1, :response, {:ok, response}))
     end
   end
 

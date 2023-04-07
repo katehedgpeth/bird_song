@@ -4,8 +4,7 @@ defmodule BirdSong.Services.Ebird.Recordings do
     ets_opts: [],
     ets_name: :ebird_recordings,
     base_url: "https://search.macaulaylibrary.org",
-    scraper: __MODULE__.Playwright,
-    seed_data?: true
+    scraper: __MODULE__.Playwright
 
   alias BirdSong.Data.Scraper.TimeoutError
   alias BirdSong.Data.Scraper.BadResponseError
@@ -102,7 +101,7 @@ defmodule BirdSong.Services.Ebird.Recordings do
 
   defp start_scraper_instance(module, %TC.State{
          base_url: base_url,
-         request_listeners: listeners,
+         listeners: listeners,
          throttle_ms: throttle_ms
        })
        when is_atom(module) and module !== nil do

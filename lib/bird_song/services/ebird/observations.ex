@@ -22,6 +22,10 @@ defmodule BirdSong.Services.Ebird.Observations do
     get({:recent_observations, region}, server)
   end
 
+  def handle_info(:create_data_folder, state) do
+    {:noreply, state}
+  end
+
   def handle_info(:seed_ets_table, state) do
     {:noreply, state}
   end
@@ -38,4 +42,10 @@ defmodule BirdSong.Services.Ebird.Observations do
   def message_details({:recent_observations, region}), do: %{region: region}
 
   def params({:recent_observations, _}), do: [{"back", 30}]
+
+  def parse_from_disk({:recent_observations, _region}, _server),
+    do: :not_found
+
+  def read_from_disk({:recent_observations, region}, _server),
+    do: {:error, {:enoent, region}}
 end

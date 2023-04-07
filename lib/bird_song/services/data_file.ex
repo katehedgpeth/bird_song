@@ -4,6 +4,7 @@ defmodule BirdSong.Services.DataFile.Data do
     Services.ThrottledCache
   }
 
+  @enforce_keys [:request, :service]
   defstruct [:response, :request, :service]
 
   @type t() :: %__MODULE__{
@@ -17,49 +18,31 @@ defmodule BirdSong.Services.DataFile do
   require Logger
   use GenServer
 
+  alias BirdSong.Services.ThrottledCache
   alias BirdSong.Services.{Helpers, Service}
 
   alias __MODULE__.Data
 
-  defstruct overwrite?: false, listeners: []
+  @enforce_keys [:data_folder_path]
+  defstruct [
+    :data_folder_path,
+    data_file_name_fn: &ThrottledCache.data_file_name/1,
+    overwrite?: false,
+    listeners: []
+  ]
 
   @type error() :: :not_alive | :file.posix() | :bad_response | :forbidden_service
 
-  @spec read(Data.t()) :: {:ok, String.t()} | {:error, {:file.posix(), String.t()}}
-  def read(%Data{} = data) do
-    path = data_file_path(data)
-
-    case File.read(path) do
-      {:error, error} -> {:error, {error, path}}
-      result -> result
-    end
+  @spec read(Data.t(), pid()) :: {:ok, String.t()} | {:error, {:file.posix(), String.t()}}
+  def read(%Data{} = data, instance) when is_pid(instance) do
+    GenServer.call(instance, {:read, data})
   end
 
   @spec write(Data.t(), pid | atom) :: :ok | {:error, error()}
-  def write(
-        %Data{
-          response: {:ok, _},
-          service: %Service{}
-        } = info,
-        instance
-      )
-      when is_pid(instance) or is_atom(instance) do
-    case whereis(instance) do
-      {:ok, pid} ->
-        GenServer.cast(pid, {:write, info})
-
-      {:error, :not_alive} = error ->
-        Helpers.log(
-          %{
-            write: false,
-            error: "data_file_instance_not_alive",
-            instance: instance
-          },
-          __MODULE__,
-          :warning
-        )
-
-        error
+  def write(%Data{} = data, instance) when is_pid(instance) do
+    case Process.alive?(instance) do
+      true -> GenServer.cast(instance, {:write, data})
+      false -> {:error, {:not_alive, instance}}
     end
   end
 
@@ -67,31 +50,12 @@ defmodule BirdSong.Services.DataFile do
     GenServer.cast(instance, {:register_listener, self()})
   end
 
-  defp whereis(instance) when is_pid(instance) do
-    case Process.alive?(instance) do
-      true -> {:ok, instance}
-      false -> {:error, :not_alive}
-    end
-  end
-
-  defp whereis(instance) do
-    case GenServer.whereis(instance) do
-      nil -> {:error, :not_alive}
-      pid_or_tuple -> {:ok, pid_or_tuple}
-    end
-  end
-
-  defp data_file_name(%Data{service: %Service{module: service_module}, request: request}) do
-    service_module
-    |> apply(:data_file_name, [request])
-    |> Kernel.<>(".json")
-  end
-
-  def data_file_path(%Data{service: service} = data) do
-    service
-    |> Service.module()
-    |> apply(:data_folder_path, [service])
-    |> Path.join(data_file_name(data))
+  defp data_file_path(%Data{request: request}, %__MODULE__{
+         data_file_name_fn: data_file_name_fn,
+         data_folder_path: path
+       }) do
+    path
+    |> Path.join(data_file_name_fn.(request) <> ".json")
     |> Path.relative_to_cwd()
   end
 
@@ -140,7 +104,23 @@ defmodule BirdSong.Services.DataFile do
   end
 
   def init(opts) do
-    {:ok, struct(%__MODULE__{}, opts)}
+    {:ok, __struct__(opts)}
+  end
+
+  def handle_call({:read, %Data{} = data}, _from, %__MODULE__{} = state) do
+    path = data_file_path(data, state)
+
+    result =
+      case File.read(path) do
+        {:error, error} -> {:error, {error, path}}
+        result -> result
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:data_file_path, %Data{} = data}, _from, %__MODULE__{} = state) do
+    {:reply, data_file_path(data, state), state}
   end
 
   def handle_cast(
@@ -165,12 +145,18 @@ defmodule BirdSong.Services.DataFile do
     {:noreply, state}
   end
 
+  def handle_cast({:write, %Data{} = data}, %__MODULE__{} = state) do
+    path = data_file_path(data, state)
+    log_and_send_messages(%{written?: false, error: :bad_response, path: path}, data, state)
+    {:noreply, state}
+  end
+
   def handle_cast({:register_listener, listener}, state) do
     {:noreply, %{state | listeners: [listener | state.listeners]}}
   end
 
   defp do_write(body, %Data{} = data, state) do
-    path = data_file_path(data)
+    path = data_file_path(data, state)
 
     path
     |> File.write(body)

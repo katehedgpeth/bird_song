@@ -20,6 +20,15 @@ defmodule BirdSong.Services.Ebird.RegionCodes do
 
   def params({:region_codes, "" <> _}), do: []
 
+  def parse_from_disk({:region_codes, "" <> _region}, _server),
+    do: :not_found
+
+  def read_from_disk({:region_codes, "" <> region}, _server), do: {:error, {:enoent, region}}
+
+  def handle_call(msg, from, state) do
+    super(msg, from, state)
+  end
+
   def handle_info(:create_data_folder, state) do
     # region codes will never be written to disk
     {:noreply, state}

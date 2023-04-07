@@ -7,9 +7,7 @@ defmodule BirdSong.TestHelpers do
     MockJsScraper,
     Services,
     Services.Service,
-    Services.Flickr,
-    Services.Ebird,
-    Services.XenoCanto
+    Services.Ebird
   }
 
   alias Phoenix.LiveView.Socket
@@ -122,7 +120,6 @@ defmodule BirdSong.TestHelpers do
       []
       |> get_base_url(tags)
       |> get_data_folder_path_opt(tags, module)
-      |> get_seed_data_opt(tags, module)
       |> get_scraper_opt(tags, module)
       |> get_service_name_opt(tags, module)
       |> start_cache(module)
@@ -183,15 +180,6 @@ defmodule BirdSong.TestHelpers do
   end
 
   defp get_scraper_opt(opts, %{}, _) do
-    opts
-  end
-
-  defp get_seed_data_opt(opts, tags, module)
-       when module in [Ebird.Recordings, Flickr, XenoCanto] do
-    Keyword.put(opts, :seed_data?, Map.get(tags, :seed_services?, false))
-  end
-
-  defp get_seed_data_opt(opts, %{}, module) when is_atom(module) do
     opts
   end
 

@@ -1,7 +1,10 @@
 defmodule BirdSong.Services.ThrottledCache do
-  alias BirdSong.Services.Ebird
-  alias BirdSong.Services.DataFile
-  alias BirdSong.Services.Helpers
+  alias BirdSong.{
+    Bird,
+    Services.Ebird,
+    Services.DataFile,
+    Services.Helpers
+  }
 
   @type request_data() ::
           Bird.t() | Ebird.Observations.request_data() | Ebird.RegionCodes.request_data()
@@ -13,6 +16,12 @@ defmodule BirdSong.Services.ThrottledCache do
   @callback message_details(request_data()) :: Map.t()
 
   @env Application.compile_env!(:bird_song, __MODULE__)
+
+  def data_file_name(%Bird{common_name: common_name}) do
+    common_name
+    |> String.replace(" ", "_")
+    |> String.replace("/", "\\")
+  end
 
   defmacro __using__(module_opts) do
     quote location: :keep,
@@ -46,6 +55,10 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, :clear_cache)
       end
 
+      def data_file_instance(%Service{whereis: pid}) do
+        GenServer.call(pid, :data_file_instance)
+      end
+
       def data_folder_path(%Service{whereis: pid}) when is_pid(pid) do
         GenServer.call(pid, :data_folder_path)
       end
@@ -67,12 +80,9 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       def get(data, server) when is_pid(server) or is_atom(server) do
-        case get_from_cache(data, server) do
-          {:ok, data} ->
-            {:ok, data}
-
-          :not_found ->
-            GenServer.call(server, {:get_from_api, data}, :infinity)
+        with :not_found <- get_from_cache(data, server),
+             :not_found <- parse_from_disk(data, server) do
+          GenServer.call(server, {:get_from_api, data}, :infinity)
         end
       end
 
@@ -116,10 +126,8 @@ defmodule BirdSong.Services.ThrottledCache do
       #########################################################
 
       @spec data_file_name(TC.request_data()) :: String.t()
-      def data_file_name(%Bird{common_name: common_name}) do
-        common_name
-        |> String.replace(" ", "_")
-        |> String.replace("/", "\\")
+      def data_file_name(%Bird{} = bird) do
+        TC.data_file_name(bird)
       end
 
       def data_file_name({:recent_observations, region}), do: region
@@ -162,6 +170,16 @@ defmodule BirdSong.Services.ThrottledCache do
       def params(%Bird{}), do: []
       defoverridable(params: 1)
 
+      @spec read_from_disk(TC.request_data(), GenServer.server()) ::
+              {:ok, String.t()} | {:error, {:enoent, String.t()}}
+      def read_from_disk(data, server), do: GenServer.call(server, {:read_from_disk, data})
+      defoverridable(read_from_disk: 2)
+
+      @spec parse_from_disk(TC.request_data(), GenServer.server()) ::
+              {:ok, Response.t()} | :not_found
+      def parse_from_disk(data, server), do: GenServer.call(server, {:parse_from_disk, data})
+      defoverridable(parse_from_disk: 2)
+
       def successful_response?({:ok, %HTTPoison.Response{status_code: 200}}), do: true
       def successful_response?({:ok, %HTTPoison.Response{}}), do: false
       def successful_response?({:error, %HTTPoison.Error{}}), do: false
@@ -172,7 +190,8 @@ defmodule BirdSong.Services.ThrottledCache do
       def write_to_disk({:ok, _} = response, request, %State{
             data_file_instance: instance,
             service: service
-          }) do
+          })
+          when is_pid(instance) do
         DataFile.write(
           %DataFile.Data{
             request: request,
@@ -181,6 +200,14 @@ defmodule BirdSong.Services.ThrottledCache do
           },
           instance
         )
+      end
+
+      def write_to_disk(_, _, %State{data_file_instance: instance}) when is_pid(instance) do
+        {:error, :bad_response}
+      end
+
+      def write_to_disk(_, _, %State{data_file_instance: instance}) do
+        {:error, {:not_alive, instance}}
       end
 
       defoverridable(write_to_disk: 3)
@@ -204,7 +231,6 @@ defmodule BirdSong.Services.ThrottledCache do
 
       def init(opts) do
         send(self(), :create_data_folder)
-        send(self(), :seed_ets_table)
 
         {:ok,
          opts
@@ -234,12 +260,28 @@ defmodule BirdSong.Services.ThrottledCache do
         {:reply, State.data_folder_path(state), state}
       end
 
+      def handle_call(:data_file_instance, _from, %State{} = state) do
+        {:reply, state.data_file_instance, state}
+      end
+
       def handle_call(
             {:parse_response, request: request, response: response},
             _from,
             %State{} = state
           ) do
         {:reply, parse_response(response, request, state), state}
+      end
+
+      def handle_call({:read_from_disk, request}, _from, %State{} = state) do
+        {:reply, State.read_from_disk(state, request), state}
+      end
+
+      def handle_call({:parse_from_disk, request}, _from, %State{} = state) do
+        {:reply, State.parse_from_disk(state, request), state}
+      end
+
+      def handle_call(:state, _from, state) do
+        {:reply, state, state}
       end
 
       def handle_cast({:update_write_config, write_to_disk?}, %State{} = state) do
@@ -252,10 +294,6 @@ defmodule BirdSong.Services.ThrottledCache do
 
       def handle_cast({:register_request_listener, pid}, state) do
         {:noreply, State.register_request_listener(state, pid)}
-      end
-
-      def handle_info(:seed_ets_table, state) do
-        {:noreply, State.seed_ets_table(state)}
       end
 
       def handle_info(:create_data_folder, state) do
@@ -309,14 +347,6 @@ defmodule BirdSong.Services.ThrottledCache do
         handle_task_response(state, ref, response)
       end
 
-      def handle_info({ref, {:ok, {:data_seeded, "" <> _bird_name}}}, %State{} = state) do
-        {:noreply, state}
-      end
-
-      def handle_info({ref, {:error, {:data_not_seeded, "" <> _bird_name}}}, %State{} = state) do
-        {:noreply, state}
-      end
-
       def handle_info({ref, {:error, %HTTPoison.Error{}} = response}, %State{} = state)
           when is_reference(ref) do
         handle_task_response(state, ref, response)
@@ -347,10 +377,6 @@ defmodule BirdSong.Services.ThrottledCache do
         |> do_handle_task_response(response, state)
 
         {:noreply, state}
-      end
-
-      defp do_handle_task_response({:seed_data_task, request}, response, %State{}) do
-        :ok
       end
 
       defp do_handle_task_response(

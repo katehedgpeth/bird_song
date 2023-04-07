@@ -103,11 +103,9 @@ defmodule BirdSong.Data.CountsTest do
   end
 
   defp add_fake_file(%Bird{} = bird, %Service{} = service) do
-    %DataFile.Data{
-      request: bird,
-      service: service
-    }
-    |> DataFile.data_file_path()
+    service
+    |> service.module.data_file_instance()
+    |> GenServer.call({:data_file_path, %DataFile.Data{request: bird, service: service}})
     |> File.touch!()
   end
 end

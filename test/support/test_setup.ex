@@ -23,11 +23,17 @@ defmodule BirdSong.TestSetup do
     :ok
   end
 
-  def seed_from_mock_taxonomy(%{}) do
+  def seed_from_mock_taxonomy(%{} = tags) do
+    tags
+    |> Map.put_new(:taxonomy_file, TestHelpers.mock_file_path("mock_taxonomy"))
+    |> seed_from_taxonomy()
+  end
+
+  def seed_from_taxonomy(%{} = tags) do
     ExUnit.Assertions.assert(
       {:ok, [%Bird{} | _]} =
-        "mock_taxonomy"
-        |> TestHelpers.mock_file_path()
+        tags
+        |> Map.fetch!(:taxonomy_file)
         |> Ebird.Taxonomy.read_data_file()
         |> Ebird.Taxonomy.seed()
     )

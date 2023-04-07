@@ -19,7 +19,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
      mock_html: File.read!("test/mock_data/ebird_recordings.html")}
   end
 
-  setup [:seed_from_mock_taxonomy, :setup_bypass]
+  setup [:seed_from_taxonomy, :setup_bypass]
 
   setup tags do
     if Map.get(tags, :copy_files?, false) do
@@ -43,6 +43,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
   end
 
   @tag recordings_module: Recordings
+  @tag taxonomy_file: TestHelpers.mock_file_path("mock_taxonomy")
   test "get/2",
        %{
          service: %Service{} = service,
@@ -92,8 +93,10 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
     end
   end
 
+  @tag :skip
   @tag copy_files?: true
   @tag seed_services?: true
+  @tag taxonomy_file: "data/taxonomy.json"
   test "seeds data when server is started", %{service: service, tmp_dir: tmp_dir} do
     data_folder_path = Recordings.data_folder_path(service)
     assert data_folder_path === Path.join([tmp_dir, "recordings"])

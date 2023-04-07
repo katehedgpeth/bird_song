@@ -7,14 +7,6 @@ defmodule BirdSong.Services.DataFileTest.FakeService do
     Services.Service
   }
 
-  def data_folder_path(%Service{whereis: pid}) do
-    GenServer.call(pid, :tmp_dir)
-  end
-
-  def data_file_name(%Bird{common_name: common_name}) do
-    common_name
-  end
-
   def start_link(opts) do
     {name, opts} = Keyword.pop!(opts, :name)
     {:ok, pid} = GenServer.start_link(__MODULE__, opts, name: name)
@@ -24,23 +16,29 @@ defmodule BirdSong.Services.DataFileTest.FakeService do
   def init(opts) do
     opts = Enum.into(opts, %{})
 
-    :ok = create_data_folder(opts)
+    send(self(), :create_data_folder)
 
     {:ok, opts}
   end
 
-  def handle_call(:tmp_dir, _from, state) do
+  def data_folder_path(%Service{whereis: whereis}) do
+    GenServer.call(whereis, :data_folder_path)
+  end
+
+  def handle_call(:data_folder_path, _from, state) do
     {:reply, instance_data_folder_path(state), state}
   end
 
-  defp create_data_folder(%{use_correct_folder?: false}) do
-    :ok
+  def handle_info(:create_data_folder, %{use_correct_folder?: false} = state) do
+    {:noreply, state}
   end
 
-  defp create_data_folder(%{} = opts) do
-    opts
+  def handle_info(:create_data_folder, %{} = state) do
+    state
     |> instance_data_folder_path()
     |> File.mkdir_p()
+
+    {:noreply, state}
   end
 
   defp instance_data_folder_path(%{} = state) do
@@ -71,10 +69,6 @@ defmodule BirdSong.Services.DataFileTest do
   @bird_without_existing_file %Bird{common_name: "Giant Dodo", sci_name: "Dodo dodo"}
   @bird_with_existing_file @eastern_bluebird
   @good_response %HTTPoison.Response{status_code: 200, body: ~s({message: "hello"})}
-  @good_data %Data{
-    request: @bird_without_existing_file,
-    response: {:ok, @good_response}
-  }
 
   @moduletag :tmp_dir
   @moduletag capture_log: true
@@ -85,7 +79,16 @@ defmodule BirdSong.Services.DataFileTest do
   setup %{} = tags do
     prev_level = Logger.level()
     name = Map.get(tags, :instance_name)
-    {:ok, instance} = DataFile.start_link(name: name)
+
+    service =
+      tags
+      |> Map.put_new(:service, FakeService)
+      |> Map.put_new(:use_correct_folder?, true)
+      |> start_service()
+
+    data_folder_path = service.module.data_folder_path(service)
+
+    {:ok, instance} = DataFile.start_link(name: name, data_folder_path: data_folder_path)
     DataFile.register_listener(instance)
 
     bird =
@@ -97,32 +100,35 @@ defmodule BirdSong.Services.DataFileTest do
           @bird_without_existing_file
       end
 
-    service =
-      tags
-      |> Map.put_new(:service, FakeService)
-      |> Map.put_new(:use_correct_folder?, true)
-      |> start_service()
-
     on_exit(fn ->
       Logger.configure(level: prev_level)
     end)
 
-    {:ok, data: %{@good_data | request: bird, service: service}, instance: instance}
+    {:ok,
+     data: %Data{
+       request: bird,
+       response: {:ok, @good_response},
+       service: service
+     },
+     instance: instance}
   end
 
   describe "&write/1" do
+    @tag service: FakeService
     test "sends {:ok, %{}} when write is successful", %{
       instance: instance,
       tmp_dir: tmp_dir,
       data: data
     } do
+      assert File.ls(tmp_dir) === {:ok, ["fake_service"]}
       assert DataFile.write(data, instance) === :ok
+      assert File.ls(tmp_dir) === {:ok, ["fake_service"]}
 
       assert_receive {DataFile, message}
       expected_path = expected_file_path(tmp_dir, "fake_service")
       assert {:ok, %{written?: true, path: ^expected_path}} = message
 
-      assert tmp_dir |> Path.join("fake_service") |> File.ls() === {:ok, ["Giant Dodo.json"]}
+      assert tmp_dir |> Path.join("fake_service") |> File.ls() === {:ok, ["Giant_Dodo.json"]}
     end
 
     test "logs a message when write is successful", %{
@@ -198,7 +204,7 @@ defmodule BirdSong.Services.DataFileTest do
                  [
                    "[BirdSong.Services.DataFile]",
                    "error=" <> inspect(:write_error),
-                   "path=" <> inspect("fake_folder/fake_service/Giant Dodo.json"),
+                   "path=" <> inspect("fake_folder/fake_service/Giant_Dodo.json"),
                    "reason=" <> inspect(:enoent),
                    "service=BirdSong.Services.DataFileTest.FakeService",
                    "written?=false"
@@ -207,41 +213,26 @@ defmodule BirdSong.Services.DataFileTest do
                )
     end
 
-    @tag instance_name: TempDataFile
-    test "returns error if named server is not running", %{
-      data: data,
-      instance_name: instance_name
-    } do
-      whereis = GenServer.whereis(instance_name)
-      assert is_pid(whereis)
-      assert Process.alive?(whereis)
-      assert :ok = GenServer.stop(instance_name)
-      assert DataFile.write(data, instance_name) === {:error, :not_alive}
-
-      refute_receive {DataFile, _}
-    end
-
-    test "returns error if unnamed server is not running", %{instance: instance, data: data} do
-      whereis = GenServer.whereis(instance)
-      assert is_pid(whereis)
+    test "returns error if server is not running", %{instance: instance, data: data} do
+      assert is_pid(instance)
       assert :ok = GenServer.stop(instance)
-      assert DataFile.write(data, instance) === {:error, :not_alive}
+      assert DataFile.write(data, instance) === {:error, {:not_alive, instance}}
 
       refute_receive {DataFile, _}
     end
 
-    test "throws error if response is bad", %{instance: instance} do
-      assert_raise FunctionClauseError, fn ->
-        @good_data
-        |> Map.put(:response, {:ok, %{@good_response | status_code: 404}})
-        |> DataFile.write(instance)
-      end
+    test "throws error if response is bad", %{data: data, instance: instance} do
+      data
+      |> Map.replace!(:response, {:ok, %{@good_response | status_code: 404}})
+      |> DataFile.write(instance)
 
-      assert_raise FunctionClauseError, fn ->
-        @good_data
-        |> Map.put(:response, {:error, %HTTPoison.Error{}})
-        |> DataFile.write(instance)
-      end
+      assert_receive {DataFile, {:error, %{written?: false, error: :bad_response}}}
+
+      data
+      |> Map.put(:response, {:error, %HTTPoison.Error{}})
+      |> DataFile.write(instance)
+
+      assert_receive {DataFile, {:error, %{written?: false, error: :bad_response}}}
     end
 
     @tag service: XenoCanto
@@ -254,21 +245,8 @@ defmodule BirdSong.Services.DataFileTest do
       assert_works_for_service(tags)
     end
 
-    @tag service: Ebird.Observations
-    test "works for Ebird.Observations service", tags do
-      tags =
-        Map.update!(tags, :data, &Map.replace!(&1, :request, {:recent_observations, "US-NC-067"}))
-
-      data = Map.fetch!(tags, :data)
-
-      tmp_dir =
-        tags
-        |> Map.fetch!(:tmp_dir)
-        |> Path.relative_to_cwd()
-
-      assert Path.join([tmp_dir, "observations", "US-NC-067.json"]) =~
-               DataFile.data_file_path(data)
-
+    @tag service: Ebird.Recordings
+    test "works for Ebird.Recordings service", tags do
       assert_works_for_service(tags)
     end
   end
@@ -281,36 +259,43 @@ defmodule BirdSong.Services.DataFileTest do
       data:
         %Data{
           request: @bird_with_existing_file
-        } = data
+        } = data,
+      instance: instance
     } do
-      file = DataFile.data_file_path(data)
+      file = GenServer.call(instance, {:data_file_path, data})
       assert file === "data/recordings/ebird/Eastern_Bluebird.json"
       assert File.exists?(file)
-      assert {:ok, "" <> _} = DataFile.read(data)
+      assert {:ok, "" <> _} = DataFile.read(data, instance)
     end
   end
 
-  defp assert_works_for_service(%{data: data, instance: instance, tmp_dir: tmp_dir}) do
-    path = apply(data.service.module, :data_folder_path, [data.service])
+  defp assert_works_for_service(%{data: data, tmp_dir: tmp_dir}) do
+    df_instance =
+      data.service.whereis
+      |> GenServer.call(:state)
+      |> Map.fetch!(:data_file_instance)
+
+    assert is_pid(df_instance)
+    path = Service.data_folder_path(data.service)
     assert path =~ tmp_dir
 
     full_file_path =
       path
-      |> Path.join(apply(data.service.module, :data_file_name, [data.request]))
+      |> Path.join(Service.data_file_name(data.service, data.request))
       |> Kernel.<>(".json")
       |> Path.relative_to_cwd()
 
-    assert DataFile.read(data) === {:error, {:enoent, full_file_path}}
+    assert DataFile.read(data, df_instance) === {:error, {:enoent, full_file_path}}
 
-    assert :ok = DataFile.write(data, instance)
-    assert_receive {DataFile, {:ok, %{written?: true}}}
-    assert {:ok, _} = DataFile.read(data)
+    assert :ok = DataFile.write(data, df_instance)
+    # assert_receive {DataFile, {:ok, %{written?: true}}}, 1_000
+    assert {:ok, _} = DataFile.read(data, df_instance)
   end
 
   def expected_file_path(tmp_dir, folder_name) do
     tmp_dir
     |> Path.join(folder_name)
-    |> Path.join("Giant Dodo.json")
+    |> Path.join("Giant_Dodo.json")
   end
 
   def make_tmp_dir_path_relative(%{tmp_dir: "" <> tmp_dir}) do

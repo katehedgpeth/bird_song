@@ -22,6 +22,10 @@ defmodule BirdSong.Services.Service do
   @type response() ::
           XenoCanto.Response.t() | Flickr.Response.t() | Ebird.Observations.Response.t()
 
+  def data_file_name(%__MODULE__{module: module}, request) do
+    apply(module, :data_file_name, [request])
+  end
+
   def data_folder_path(%__MODULE__{} = service) do
     service
     |> module()
@@ -65,6 +69,18 @@ defmodule BirdSong.Services.Service do
   end
 
   def module(%__MODULE__{module: module}), do: module
+
+  def parse_from_disk(%__MODULE__{module: module, whereis: whereis}, request_data) do
+    module.parse_from_disk(request_data, whereis)
+  end
+
+  def read_from_disk(%__MODULE__{module: module, whereis: whereis}, request_data) do
+    module.read_from_disk(request_data, whereis)
+  end
+
+  def response_module(%__MODULE__{module: module}) do
+    Module.concat(module, :Response)
+  end
 
   def register_request_listener(%__MODULE__{module: module, whereis: whereis}) do
     module.register_request_listener(whereis)

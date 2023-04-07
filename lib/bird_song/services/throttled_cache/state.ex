@@ -1,3 +1,11 @@
+defmodule BirdSong.Services.ThrottledCache.State.Supervisors do
+  defstruct [:ets]
+
+  @type t() :: %__MODULE__{
+          ets: GenServer.server()
+        }
+end
+
 defmodule BirdSong.Services.ThrottledCache.State do
   require Logger
 
@@ -5,6 +13,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Bird,
     Services,
     Services.ThrottledCache,
+    Services.ThrottledCache.State.Supervisors,
+    Services.ThrottledCache.ETS,
     Services.DataFile,
     Services.XenoCanto,
     Services.Flickr,
@@ -23,10 +33,10 @@ defmodule BirdSong.Services.ThrottledCache.State do
           ets_table: :ets.table(),
           ets_name: atom(),
           ets_opts: [:ets.table_type()],
-          request_listeners: [pid()],
+          listeners: [pid()],
           scraper: atom() | {atom(), pid()},
-          seed_data?: boolean,
           service: Service.t(),
+          supervisors: Supervisors.t(),
           tasks: %{reference() => request_data()},
           throttled?: boolean(),
           throttle_ms: integer(),
@@ -44,8 +54,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
     ets_opts: [],
     backlog: [],
     data_file_instance: DataFile,
-    request_listeners: [],
-    seed_data?: false,
+    listeners: [],
+    supervisors: %__MODULE__.Supervisors{},
     tasks: %{},
     throttled?: false,
     throttle_ms:
@@ -68,32 +78,20 @@ defmodule BirdSong.Services.ThrottledCache.State do
   def new(opts) do
     __MODULE__
     |> struct(opts)
+    |> ensure_data_file_started()
     |> verify_state()
-    |> start_table()
+    |> start_ets()
   end
 
-  def start_table({:ok, %__MODULE__{} = state}), do: start_table(state)
+  @spec clear_cache(t()) :: t()
+  def clear_cache(%__MODULE__{supervisors: %Supervisors{ets: ets}} = state) do
+    ETS.clear_cache(ets)
 
-  def start_table(%__MODULE__{ets_name: ets_name, ets_opts: ets_opts} = state) do
-    Map.replace!(state, :ets_table, :ets.new(ets_name, ets_opts))
-  end
-
-  def clear_cache(%__MODULE__{} = state) do
     state
-    |> Map.fetch!(:ets_table)
-    |> :ets.delete()
-
-    start_table(state)
   end
 
-  def lookup(%__MODULE__{} = state, data) do
-    state
-    |> ets_table()
-    |> :ets.lookup(ets_key(state, data))
-    |> case do
-      [{_, response}] -> {:ok, response}
-      [] -> :not_found
-    end
+  def lookup(%__MODULE__{supervisors: %Supervisors{ets: pid}}, data) do
+    ETS.lookup(data, pid)
   end
 
   @spec should_send_request?(t()) :: boolean
@@ -156,25 +154,8 @@ defmodule BirdSong.Services.ThrottledCache.State do
     {:error, :backlog_empty}
   end
 
-  def save_response(
-        %__MODULE__{service: %Service{module: module}, request_listeners: listeners} = state,
-        {request_data, {:ok, response}}
-      ) do
-    response_module = Module.concat(module, :Response)
-    %{__struct__: ^response_module} = response
-
-    state
-    |> Map.fetch!(:ets_table)
-    |> :ets.insert({ets_key(state, request_data), response})
-    |> case do
-      true ->
-        Enum.each(listeners, &send(&1, {:response_saved_to_ets, request_data}))
-    end
-  end
-
-  def save_response(%__MODULE__{}, {_request_info, {:error, _error}}) do
-    # don't save error responses
-    {:error, :bad_response}
+  def save_response(%__MODULE__{supervisors: %Supervisors{ets: pid}}, {request_data, response}) do
+    ETS.save_response({request_data, response}, pid)
   end
 
   def add_request_to_backlog(%__MODULE__{} = state, from, request_data) do
@@ -200,11 +181,11 @@ defmodule BirdSong.Services.ThrottledCache.State do
   end
 
   def register_request_listener(%__MODULE__{} = state, pid) do
-    Map.update!(state, :request_listeners, &[pid | &1])
+    Map.update!(state, :listeners, &[pid | &1])
   end
 
   def notify_listeners(
-        %__MODULE__{request_listeners: listeners, service: service},
+        %__MODULE__{listeners: listeners, service: service},
         request,
         start_or_end
       ) do
@@ -215,6 +196,17 @@ defmodule BirdSong.Services.ThrottledCache.State do
         build_request_message(start_or_end, request, service)
       )
     )
+  end
+
+  def read_from_disk(%__MODULE__{supervisors: %Supervisors{ets: ets}}, request) do
+    ETS.read_from_disk(request, ets)
+  end
+
+  def parse_from_disk(%__MODULE__{supervisors: %Supervisors{ets: ets}}, request) do
+    case ETS.parse_from_disk(request, ets) do
+      {:error, {:enoent, _}} -> :not_found
+      result -> result
+    end
   end
 
   def update_write_config(%__MODULE__{} = state, write_to_disk?) do
@@ -234,82 +226,23 @@ defmodule BirdSong.Services.ThrottledCache.State do
     data_folder_path
   end
 
-  def seed_ets_table(%__MODULE__{seed_data?: true} = state) do
-    Bird
-    |> BirdSong.Repo.all()
-    # |> List.first()
-    # |> List.wrap()
-    |> Enum.reduce(state, &start_ets_seed_task/2)
-  end
-
-  def seed_ets_table(%__MODULE__{seed_data?: false} = state) do
+  defp ensure_data_file_started(%__MODULE__{data_file_instance: pid} = state) when is_pid(pid) do
     state
   end
 
-  def start_ets_seed_task(%Bird{} = bird, %__MODULE__{} = state) do
-    %Task{ref: ref} =
-      Task.Supervisor.async(
-        Services.Tasks,
-        __MODULE__,
-        :add_data_file_to_ets,
-        [bird, state]
-      )
-
-    Map.update!(state, :tasks, &Map.put(&1, ref, {:seed_data_task, bird.common_name}))
-  end
-
-  def add_data_file_to_ets(
-        %Bird{} = bird,
-        %__MODULE__{} = state
-      ) do
-    service = service(state)
-    service_module = Service.module(service)
-    response_module = Module.concat(service_module, :Response)
-
-    case DataFile.read(%DataFile.Data{request: bird, service: service}) do
-      {:ok, str} ->
-        data =
-          str
-          |> Jason.decode!()
-          |> response_module.parse(bird)
-
-        service
-        |> Map.fetch!(:whereis)
-        |> send({:save, {bird, {:ok, data}}})
-
-        {:ok, {:data_seeded, bird.common_name}}
-
-      {:error, {error, path}} ->
-        Helpers.log(
-          [
-            error: "data_not_seeded",
-            reason: error,
-            bird: bird.common_name,
-            path: path,
-            ets_name: state.ets_name
-          ],
-          service_module,
-          :error
-        )
-
-        {:error, {:data_not_seeded, bird.common_name}}
-    end
-  end
-
-  defp ensure_data_file_started(%__MODULE__{} = state) do
+  defp ensure_data_file_started(%__MODULE__{data_file_instance: module, service: service} = state)
+       when is_atom(module) do
     pid =
-      case GenServer.start(state.data_file_instance, []) do
+      case GenServer.start(module,
+             data_folder_path: state.data_folder_path,
+             data_file_name_fn: &Service.data_file_name(service, &1)
+           ) do
         {:ok, pid} -> pid
         {:error, {:already_started, pid}} -> pid
       end
 
     Map.replace!(state, :data_file_instance, pid)
   end
-
-  defp ets_table(%__MODULE__{ets_table: ets_table}), do: ets_table
-
-  defp ets_key(%__MODULE__{service: %Service{module: module}}, request_data),
-    do: apply(module, :ets_key, [request_data])
 
   @spec service(t()) :: Service.t()
   def service(%__MODULE__{service: %Service{} = service}), do: service
@@ -376,6 +309,31 @@ defmodule BirdSong.Services.ThrottledCache.State do
     log
   end
 
+  @spec start_ets(t()) :: map
+  defp start_ets(%__MODULE__{} = state) do
+    Map.update!(state, :supervisors, &do_start_ets(&1, state))
+  end
+
+  @spec do_start_ets(Supervisors.t(), t()) :: Supervisors.t()
+  defp do_start_ets(%Supervisors{} = supervisors, %__MODULE__{
+         ets_name: ets_name,
+         ets_opts: ets_opts,
+         data_file_instance: data_file_instance,
+         listeners: listeners,
+         service: service
+       }) do
+    {:ok, pid} =
+      ETS.start_link(
+        ets_name: ets_name,
+        ets_opts: ets_opts,
+        data_file_instance: data_file_instance,
+        listeners: listeners,
+        service: service
+      )
+
+    %{supervisors | ets: pid}
+  end
+
   defp verify_state(
          %__MODULE__{
            base_url: "" <> _,
@@ -384,5 +342,5 @@ defmodule BirdSong.Services.ThrottledCache.State do
          } = state
        )
        when is_known_service(service_module) and is_pid(service_pid) and ets_name !== nil,
-       do: {:ok, state}
+       do: state
 end

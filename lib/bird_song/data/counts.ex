@@ -82,8 +82,10 @@ defmodule BirdSong.Data.Counts do
   end
 
   defp add_service_count(%Service{} = service, %Bird{} = bird, %__MODULE__{} = counts, type) do
-    %DataFile.Data{request: bird, service: service}
-    |> DataFile.data_file_path()
+    service.whereis
+    |> GenServer.call(:state)
+    |> Map.fetch!(:data_file_instance)
+    |> GenServer.call({:data_file_path, %DataFile.Data{request: bird, service: service}})
     |> File.stat()
     |> case do
       {:ok, %File.Stat{type: :regular}} -> :has

@@ -7,7 +7,6 @@ defmodule BirdSong.MockServer do
 
   alias BirdSong.{
     Bird,
-    Services.DataFile,
     Services.Service
   }
 
@@ -123,9 +122,7 @@ defmodule BirdSong.MockServer do
   def error_response(conn), do: Plug.Conn.resp(conn, 500, "there was an error")
 
   defp service_response(%Conn{} = conn, %Bird{} = bird, %Service{} = service) do
-    %DataFile.Data{request: bird, service: service}
-    |> DataFile.read()
-    |> case do
+    case Service.read_from_disk(service, bird) do
       {:ok, "" <> body} ->
         Helpers.log(
           %{

@@ -1,7 +1,7 @@
 defmodule BirdSong.ServicesTest do
   use BirdSong.MockApiCase
   alias BirdSong.{Bird, Data.Scraper, Services, MockServer}
-  alias Services.{Ebird, Flickr, Service, DataFile}
+  alias Services.{Ebird, Flickr, Service}
 
   @moduletag services: [:flickr, :xeno_canto]
   @moduletag inject_playwright?: true
@@ -92,14 +92,12 @@ defmodule BirdSong.ServicesTest do
   end
 
   def assert_file_not_exist(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do
-    data = %DataFile.Data{service: flickr, request: bird}
-    assert {:error, {:enoent, "" <> _}} = DataFile.read(data)
-    assert {:error, {:enoent, "" <> _}} = DataFile.read(%{data | service: xeno_canto})
+    assert {:error, {:enoent, _}} = Service.read_from_disk(flickr, bird)
+    assert {:error, {:enoent, _}} = Service.read_from_disk(xeno_canto, bird)
   end
 
   def assert_file_exists(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do
-    data = %DataFile.Data{service: flickr, request: bird}
-    assert {:ok, "" <> _} = DataFile.read(data)
-    assert {:ok, "" <> _} = DataFile.read(%{data | service: xeno_canto})
+    assert {:ok, "" <> _} = Service.read_from_disk(flickr, bird)
+    assert {:ok, "" <> _} = Service.read_from_disk(xeno_canto, bird)
   end
 end

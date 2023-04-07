@@ -102,7 +102,7 @@ defmodule BirdSong.Services.ThrottledCacheTest do
                  data_folder_path: tmp_dir,
                  service: cache
                }
-             ) === {:error, :not_alive}
+             ) === {:error, {:not_alive, BirdSong.Services.DataFile}}
     end
 
     test "writes to disk if data file instance is running", %{
@@ -111,7 +111,9 @@ defmodule BirdSong.Services.ThrottledCacheTest do
       cache: cache
     } do
       assert {:ok, data_file_instance} =
-               start_supervised({DataFile, name: Module.concat(test, DataFile)})
+               start_supervised(
+                 {DataFile, name: Module.concat(test, DataFile), data_folder_path: tmp_dir}
+               )
 
       DataFile.register_listener(data_file_instance)
 
