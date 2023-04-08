@@ -14,6 +14,7 @@ defmodule BirdSong.Application do
       BirdSongWeb.Telemetry,
       # Start the supervisors for external API requests
       {Task.Supervisor, name: BirdSong.Services.Tasks},
+      {Task.Supervisor, name: BirdSong.Services.RequestThrottler.TaskSupervisor},
       {DynamicSupervisor, name: BirdSong.Services.GenServers},
       # Start service caches
       BirdSong.Services.Ebird.Observations,
