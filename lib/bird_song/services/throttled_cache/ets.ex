@@ -44,12 +44,12 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     GenServer.call(pid, {:lookup, data})
   end
 
-  def parse_from_disk(%Bird{} = bird, pid) when is_pid(pid) do
-    GenServer.call(pid, {:parse_from_disk, bird})
+  def parse_from_disk(request, pid) when is_pid(pid) do
+    GenServer.call(pid, {:parse_from_disk, request})
   end
 
-  def read_from_disk(%Bird{} = bird, pid) when is_pid(pid) do
-    GenServer.call(pid, {:read_from_disk, bird})
+  def read_from_disk(request, pid) when is_pid(pid) do
+    GenServer.call(pid, {:read_from_disk, request})
   end
 
   def save_response({request_data, {:ok, response}}, pid) do
@@ -69,7 +69,7 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
   #########################################################
 
   def do_parse_from_disk(
-        %Bird{} = bird,
+        request,
         %__MODULE__{service: service} = state,
         # using parent instead of self() here to enable this to be called from a task
         parent
@@ -80,14 +80,14 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
       |> Service.module()
       |> Module.concat(:Response)
 
-    case do_read_from_disk(bird, state) do
+    case do_read_from_disk(request, state) do
       {:ok, str} ->
         data =
           str
           |> Jason.decode!()
-          |> response_module.parse(bird)
+          |> response_module.parse(request)
 
-        send(parent, {:save, {bird, {:ok, data}}})
+        send(parent, {:save, {request, {:ok, data}}})
 
         {:ok, data}
 
@@ -198,11 +198,11 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     end
   end
 
-  defp do_read_from_disk(%Bird{} = bird, %__MODULE__{
+  defp do_read_from_disk(request, %__MODULE__{
          data_file_instance: df_instance,
          service: service
        }) do
-    DataFile.read(%DataFile.Data{request: bird, service: service}, df_instance)
+    DataFile.read(%DataFile.Data{request: request, service: service}, df_instance)
   end
 
   defp ets_key(%__MODULE__{service: %Service{module: module}}, request_data) do

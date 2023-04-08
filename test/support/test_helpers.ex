@@ -122,6 +122,7 @@ defmodule BirdSong.TestHelpers do
       |> get_data_folder_path_opt(tags, module)
       |> get_scraper_opt(tags, module)
       |> get_service_name_opt(tags, module)
+      |> get_throttle_ms_opt(tags)
       |> start_cache(module)
 
     %Service{module: module, whereis: pid}
@@ -186,6 +187,12 @@ defmodule BirdSong.TestHelpers do
   defp get_service_name_opt(opts, %{test: test}, module) do
     Keyword.put(opts, :name, Module.concat(test, module_alias(module)))
   end
+
+  def get_throttle_ms_opt(opts, %{throttle_ms: throttle_ms}) do
+    Keyword.put(opts, :throttle_ms, throttle_ms)
+  end
+
+  def get_throttle_ms_opt(opts, %{}), do: opts
 
   defp verify_playwright_response_format(maybe_response) do
     case maybe_response do

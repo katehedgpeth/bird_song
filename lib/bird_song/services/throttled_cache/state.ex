@@ -72,6 +72,7 @@ defmodule BirdSong.Services.ThrottledCache.State do
                   ThrottledCacheUnderTest,
                   Ebird.Observations,
                   Ebird.Recordings,
+                  Ebird.Regions,
                   Ebird.RegionSpeciesCodes
                 ]
 

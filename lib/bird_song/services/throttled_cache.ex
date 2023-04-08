@@ -7,7 +7,8 @@ defmodule BirdSong.Services.ThrottledCache do
   }
 
   @type request_data() ::
-          Bird.t() | Ebird.Observations.request_data() | Ebird.RegionSpeciesCodes.request_data()
+          Bird.t()
+          | Ebird.request_data()
 
   @callback endpoint(request_data()) :: String.t()
   @callback ets_key(request_data()) :: String.t()
@@ -125,6 +126,10 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
+      @doc """
+      Name of the file that will be saved to disk. Name should NOT include
+      a .json extension.
+      """
       @spec data_file_name(TC.request_data()) :: String.t()
       def data_file_name(%Bird{} = bird) do
         TC.data_file_name(bird)
