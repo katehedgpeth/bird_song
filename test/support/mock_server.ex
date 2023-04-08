@@ -45,6 +45,14 @@ defmodule BirdSong.MockServer do
     do_success_response(conn, Flickr, sci_name)
   end
 
+  def success_response(
+        %Conn{
+          path_info: ["v2", "product", "spplist", _]
+        } = conn
+      ) do
+    Conn.resp(conn, 200, File.read!("test/mock_data/region_species_codes/US-NC-067.json"))
+  end
+
   def success_response(%Conn{request_path: "/" <> @ebird_recordings_path} = conn) do
     {:ok, body} = File.read("test/mock_data/ebird_recordings.html")
     Conn.resp(conn, 200, body)

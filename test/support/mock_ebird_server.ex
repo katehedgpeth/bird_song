@@ -1,6 +1,5 @@
 defmodule BirdSong.MockEbirdServer do
   alias Plug.Conn
-  alias BirdSong.{Bird, Services.Ebird.Recordings}
 
   @ebird_login_html File.read!("test/mock_data/ebird_login.html")
   @ebird_list_html File.read!("test/mock_data/ebird_recordings.html")
@@ -14,7 +13,7 @@ defmodule BirdSong.MockEbirdServer do
     expect_api_call? = Map.get(tags, :expect_api_call?, true)
     expect_login? = Map.get(tags, :expect_login?, true)
 
-    Bypass.expect(bypass, "GET", Recordings.endpoint(%Bird{}), list_html_response)
+    Bypass.expect(bypass, "GET", "/catalog", list_html_response)
 
     if expect_api_call? do
       Bypass.expect(bypass, "GET", "/api/v2/search", recordings_response)

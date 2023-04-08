@@ -1,38 +1,38 @@
 defmodule BirdSongWeb.QuizLive.Current do
   require Logger
   use BirdSongWeb.QuizLive.Assign
-  alias BirdSong.Services.Flickr.Photo
-  alias BirdSong.Services.XenoCanto.Recording
-  alias BirdSong.{Bird, Services}
+  alias Phoenix.LiveView.Socket
 
-  alias Services.{
-    XenoCanto,
-    Flickr,
-    Service
+  alias BirdSong.{
+    Bird,
+    Services.Flickr,
+    Services.Flickr.Photo,
+    Services.Ebird.Recordings.Recording,
+    Services.Service
   }
+
+  alias BirdSongWeb.QuizLive
 
   defstruct [:bird, :recording, :image]
 
   @type t() :: %__MODULE__{
           bird: Bird.t(),
           image: Flickr.Photo.t(),
-          recording: XenoCanto.Recording.t()
+          recording: Ebird.Recordings.Recording.t()
         }
 
   def reset(%Socket{} = socket) do
     assign(socket, :current, %__MODULE__{})
   end
 
-  def assign_current(
-        %Socket{
-          assigns: %{
-            current: %__MODULE__{bird: nil},
-            birds: [%Bird{} = bird | rest]
-          }
-        } = socket
-      ) do
+  def assign_current(%Socket{} = socket) do
+    %__MODULE__{bird: nil} = get_current(socket)
+    birds = QuizLive.Assign.get_assign(socket, :birds)
+    [%Bird{} = bird | _] = birds
+
     socket
     |> assign(:current, %__MODULE__{bird: bird})
+    |> assign(:birds, Enum.shuffle(birds))
     |> update_resource(:recording)
     |> update_resource(:image)
     |> case do
@@ -46,14 +46,6 @@ defmodule BirdSongWeb.QuizLive.Current do
         }
       } = socket ->
         socket
-
-      %Socket{} ->
-        socket
-        |> reset()
-        # drop bird with missing data from list,
-        # so we don't try to render it again this session
-        |> assign(:birds, rest)
-        |> assign_current()
     end
   end
 
@@ -94,10 +86,6 @@ defmodule BirdSongWeb.QuizLive.Current do
           saved_response
           |> Map.fetch!(plural)
           |> Enum.random()
-
-        {:error, _} ->
-          warn_no_data(bird, plural)
-          {:error, :no_data}
       end
 
     assign(
@@ -117,16 +105,5 @@ defmodule BirdSongWeb.QuizLive.Current do
     socket
     |> get_current()
     |> Map.fetch!(key)
-  end
-
-  defp warn_no_data(%Bird{common_name: common_name}, missing_data) do
-    [
-      inspect([__MODULE__]),
-      "error=missing_data",
-      "bird=" <> common_name,
-      "missing=#{missing_data}"
-    ]
-    |> Enum.join(" ")
-    |> Logger.warn()
   end
 end

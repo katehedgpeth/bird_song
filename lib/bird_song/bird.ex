@@ -63,6 +63,13 @@ defmodule BirdSong.Bird do
     )
   end
 
+  def get_many_by_species_code(["" <> _ | _] = species_codes) do
+    BirdSong.Repo.all(
+      from b in __MODULE__,
+        where: b.species_code in ^species_codes
+    )
+  end
+
   def update(%__MODULE__{} = bird, attrs) do
     bird
     |> changeset(Enum.into(attrs, %{}))

@@ -22,6 +22,8 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
   def headers({:region_species_codes, "" <> _}),
     do: [Ebird.token_header() | user_agent()]
 
+  def message_details({:region_species_codes, region}), do: %{region: region}
+
   def params({:region_species_codes, "" <> _}), do: []
 
   def parse_from_disk({:region_species_codes, "" <> _region}, _server),

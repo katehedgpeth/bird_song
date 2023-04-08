@@ -16,51 +16,8 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
     QuizLive.EtsTables
   }
 
-  def handle_info(:get_recent_observations, socket) do
-    send(self(), {:get_recent_observations, tries: 0})
-    {:noreply, socket}
-  end
-
-  def handle_info(
-        {:get_recent_observations, tries: number_of_tries} = msg,
-        %Socket{
-          assigns: %{max_api_tries: max}
-        } = socket
-      )
-      when number_of_tries < max do
-    task =
-      Task.Supervisor.async(
-        Services.Tasks,
-        Ebird.Observations,
-        :get_recent_observations,
-        [get_region(socket), get_server(socket, :observations)]
-      )
-
-    socket = EtsTables.Tasks.remember_task(socket, task, msg)
-
-    timeout = get_assign(socket, :task_timeout)
-
-    case Task.yield(task, timeout) || Task.shutdown(task, :brutal_kill) do
-      nil ->
-        send(self(), {:get_recent_observations, tries: number_of_tries + 1})
-
-        {:noreply,
-         socket
-         |> EtsTables.Tasks.forget_task(task)
-         |> Phoenix.LiveView.put_flash(
-           :warning,
-           "Getting birds is taking longer than expected..."
-         )}
-
-      {:ok, response} ->
-        handle_task_response({:ok, :recent_observations}, socket, response)
-
-      {:exit, reason} ->
-        send(self(), {:exit, {:recent_observations, reason}})
-
-        Logger.warn("task died: #{reason}")
-        {:noreply, EtsTables.Tasks.forget_task(socket, task)}
-    end
+  def handle_info(:get_region_species_codes, socket) do
+    {:noreply, QuizLive.Services.get_region_species_codes(socket)}
   end
 
   def handle_info(
@@ -211,14 +168,5 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
       :quiz,
       Quiz.add_bird(quiz, sci_name)
     )
-  end
-
-  defp get_region(%Socket{assigns: %{quiz: %Quiz{region: region}}}), do: region
-
-  defp get_server(%Socket{assigns: %{services: %Services{} = services}}, service_name)
-       when is_atom(service_name) do
-    services
-    |> Map.fetch!(service_name)
-    |> Map.fetch!(:whereis)
   end
 end

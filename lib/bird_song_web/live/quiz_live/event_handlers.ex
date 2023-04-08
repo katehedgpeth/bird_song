@@ -11,7 +11,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
       ) do
     case Quiz.changeset(quiz, changes) do
       %Changeset{errors: [], data: data} ->
-        Process.send(self(), :get_recent_observations, [])
+        Process.send(self(), :get_region_species_codes, [])
         {:noreply, assign(socket, :quiz, data)}
 
       %Changeset{} = changeset ->
@@ -20,7 +20,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   end
 
   def handle_event("start", %{}, %Socket{} = socket) do
-    Process.send(self(), :get_recent_observations, [])
+    Process.send(self(), :get_region_species_codes, [])
 
     {:noreply,
      assign(
