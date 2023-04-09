@@ -122,6 +122,7 @@ defmodule BirdSong.TestHelpers do
       |> get_data_folder_path_opt(tags, module)
       |> get_scraper_opt(tags, module)
       |> get_service_name_opt(tags, module)
+      |> get_throttler_opt(tags)
       |> get_throttle_ms_opt(tags)
       |> start_cache(module)
 
@@ -175,6 +176,10 @@ defmodule BirdSong.TestHelpers do
     Keyword.put(opts, :scraper, {scraper_module, pid})
   end
 
+  defp get_scraper_opt(opts, %{scraper: scraper}, Ebird.Recordings) do
+    Keyword.put(opts, :scraper, scraper)
+  end
+
   defp get_scraper_opt(opts, %{}, Ebird.Recordings) do
     Logger.warning("using Ebird.Recordings.Playwright for scraper module")
     opts
@@ -186,6 +191,14 @@ defmodule BirdSong.TestHelpers do
 
   defp get_service_name_opt(opts, %{test: test}, module) do
     Keyword.put(opts, :name, Module.concat(test, module_alias(module)))
+  end
+
+  defp get_throttler_opt(opts, tags) do
+    Keyword.put(
+      opts,
+      :throttler,
+      Map.get(tags, :throttler, :throttler_not_set)
+    )
   end
 
   def get_throttle_ms_opt(opts, %{throttle_ms: throttle_ms}) do

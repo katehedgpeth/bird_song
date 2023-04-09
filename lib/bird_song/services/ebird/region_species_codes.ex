@@ -3,7 +3,8 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
     base_url: "https://api.ebird.org",
     data_folder_path: "",
     ets_opts: [],
-    ets_name: :ebird_region_species_codes
+    ets_name: :ebird_region_species_codes,
+    throttler: BirdSong.Services.RequestThrottler.EbirdAPI
 
   alias BirdSong.Services.Ebird
 

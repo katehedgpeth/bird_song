@@ -1,7 +1,11 @@
 defmodule BirdSong.Services.RequestThrottlerTest do
   use ExUnit.Case, async: true
-  alias BirdSong.TestHelpers
-  alias BirdSong.Services.RequestThrottler
+
+  alias BirdSong.{
+    Services.RequestThrottler,
+    Services.RequestThrottler.Response,
+    TestHelpers
+  }
 
   @throttle_ms 200
 
@@ -23,7 +27,10 @@ defmodule BirdSong.Services.RequestThrottlerTest do
       request = %HTTPoison.Request{url: "/success/1"}
 
       assert RequestThrottler.add_to_queue(request, pid) === :ok
-      assert_receive {:"$gen_cast", {:response, response, timers}}, @throttle_ms
+
+      assert_receive {:"$gen_cast", %Response{response: response, timers: timers}},
+                     @throttle_ms + 20
+
       assert response === {:ok, %{"message" => "success", "request" => 1}}
       assert %{queued: %NaiveDateTime{}, responded: %NaiveDateTime{}} = timers
     end
@@ -33,18 +40,24 @@ defmodule BirdSong.Services.RequestThrottlerTest do
       |> Enum.map(&%HTTPoison.Request{url: "/success/#{&1}"})
       |> Enum.map(&RequestThrottler.add_to_queue(&1, pid))
 
-      assert_receive {:"$gen_cast", {:response, {:ok, %{"request" => 1}}, timers_1}}, 200
-
-      assert_receive {:"$gen_cast", {:response, {:ok, %{"request" => 2}}, timers_2}},
+      assert_receive {:"$gen_cast",
+                      %Response{response: {:ok, %{"request" => 1}}, timers: timers_1}},
                      @throttle_ms + 100
 
-      assert_receive {:"$gen_cast", {:response, {:ok, %{"request" => 3}}, timers_3}},
+      assert_receive {:"$gen_cast",
+                      %Response{response: {:ok, %{"request" => 2}}, timers: timers_2}},
                      @throttle_ms + 100
 
-      assert_receive {:"$gen_cast", {:response, {:ok, %{"request" => 4}}, timers_4}},
+      assert_receive {:"$gen_cast",
+                      %Response{response: {:ok, %{"request" => 3}}, timers: timers_3}},
                      @throttle_ms + 100
 
-      assert_receive {:"$gen_cast", {:response, {:ok, %{"request" => 5}}, timers_5}},
+      assert_receive {:"$gen_cast",
+                      %Response{response: {:ok, %{"request" => 4}}, timers: timers_4}},
+                     @throttle_ms + 100
+
+      assert_receive {:"$gen_cast",
+                      %Response{response: {:ok, %{"request" => 5}}, timers: timers_5}},
                      @throttle_ms + 100
 
       assert NaiveDateTime.diff(timers_1[:sent], timers_1[:queued], :millisecond) < @throttle_ms

@@ -2,10 +2,12 @@ defmodule BirdSong.Services.Helpers do
   require Logger
   alias HTTPoison.{Response, Error}
 
+  @type jason_decoded() :: %{String.t() => any()} | [String.t() | %{String.t() => any()}]
   @type api_error() ::
           {:error, {:not_found, String.t()}}
           | {:error, {:bad_response, Response.t()}}
           | {:error, Error.t()}
+  @type api_response() :: api_response(jason_decoded())
   @type api_response(t) ::
           {:ok, t} | api_error()
 

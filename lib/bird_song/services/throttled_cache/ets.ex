@@ -2,10 +2,11 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
   require Logger
   use GenServer
 
+  alias BirdSong.Services.ThrottledCache
+
   alias BirdSong.{
     Bird,
     Services.DataFile,
-    Services.Helpers,
     Services.Service
   }
 
@@ -52,6 +53,7 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     GenServer.call(pid, {:read_from_disk, request})
   end
 
+  @spec save_response({ThrottledCache.request_data(), response :: any()}, pid()) :: :ok
   def save_response({request_data, {:ok, response}}, pid) do
     GenServer.call(pid, {:save_response, request_data, response})
   end
@@ -131,24 +133,6 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, :normal}, %__MODULE__{} = state) do
-    state =
-      Map.update!(state, :tasks, fn tasks ->
-        {tasks, _} = Map.pop(tasks, ref)
-        tasks
-      end)
-
-    if Kernel.map_size(state.tasks) === 0 do
-      Helpers.log(
-        [message: "seeding_finished", time: DateTime.now!("Etc/UTC")],
-        __MODULE__,
-        :warning
-      )
-    end
-
-    {:noreply, state}
-  end
-
   def init(opts) do
     {:ok,
      opts
@@ -177,6 +161,11 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     end
   end
 
+  @spec do_save_response(
+          any,
+          %{__struct__: response_struct :: atom()},
+          BirdSong.Services.ThrottledCache.ETS.t()
+        ) :: :ok
   def do_save_response(
         request_data,
         response,

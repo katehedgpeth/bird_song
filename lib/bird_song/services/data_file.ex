@@ -1,4 +1,6 @@
 defmodule BirdSong.Services.DataFile.Data do
+  alias BirdSong.Services.Helpers
+
   alias BirdSong.{
     Services.Service,
     Services.ThrottledCache
@@ -9,7 +11,7 @@ defmodule BirdSong.Services.DataFile.Data do
 
   @type t() :: %__MODULE__{
           request: ThrottledCache.request_data(),
-          response: {:ok, HTTPoison.Response.t()} | nil,
+          response: {:ok, Helpers.jason_decoded()} | nil,
           service: Service.t()
         }
 end
@@ -126,16 +128,8 @@ defmodule BirdSong.Services.DataFile do
   def handle_cast(
         {:write,
          %Data{
-           response: {:ok, %HTTPoison.Response{status_code: 200, body: body}}
+           response: {:ok, body}
          } = data},
-        %__MODULE__{} = state
-      ) do
-    do_write(body, data, state)
-    {:noreply, state}
-  end
-
-  def handle_cast(
-        {:write, %Data{response: {:ok, [_ | _] = body}} = data},
         %__MODULE__{} = state
       ) do
     body

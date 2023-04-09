@@ -3,7 +3,8 @@ defmodule BirdSong.Services.XenoCanto do
     base_url: "https://xeno-canto.org",
     data_folder_path: "data/recordings/xeno_canto",
     ets_opts: [:bag],
-    ets_name: :xeno_canto
+    ets_name: :xeno_canto,
+    throttler: BirdSong.Services.RequestThrottler.XenoCanto
 
   alias __MODULE__.Response
   alias BirdSong.Bird

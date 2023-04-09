@@ -16,7 +16,7 @@ defmodule BirdSong.Services.XenoCantoTest do
   @moduletag :tmp_dir
   @moduletag seed_services?: false
 
-  setup [:setup_bypass]
+  setup [:setup_bypass, :start_throttler]
 
   setup %{
           bypass: bypass

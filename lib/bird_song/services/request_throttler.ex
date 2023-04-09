@@ -1,26 +1,18 @@
-defmodule BirdSong.Services.RequestThrottler.UrlError do
-  defexception [:url]
-
-  def message(%__MODULE__{url: url}) do
-    """
-    Expected url to be a path starting with "/", but got: #{url}
-    """
-  end
-end
-
 defmodule BirdSong.Services.RequestThrottler do
   use GenServer
   alias BirdSong.Services.Helpers
-  alias HTTPoison.Request
-  alias __MODULE__.UrlError
+  alias __MODULE__.{UrlError, Response}
 
   @enforce_keys [:base_url]
   defstruct [
     :base_url,
     :current_request,
     :unthrottle_ref,
+    # used by MacaulayLibrary
+    :scraper,
     queue: [],
     queue_size: 0,
+    request_fn: {__MODULE__, :call_httpoison},
     throttled?: false,
     throttle_ms: :timer.seconds(1)
   ]
@@ -40,6 +32,8 @@ defmodule BirdSong.Services.RequestThrottler do
           current_request: current_request_info() | nil,
           queue: :queue.queue(queue_item()),
           queue_size: integer(),
+          scraper: atom() | {atom(), pid()} | nil,
+          request_fn: {atom(), atom()},
           throttled?: boolean(),
           throttle_ms: integer(),
           unthrottle_ref: reference() | nil
@@ -52,7 +46,18 @@ defmodule BirdSong.Services.RequestThrottler do
   ##
   #########################################################
 
-  def add_to_queue(%Request{url: "/" <> _} = request, server) do
+  @doc """
+  Add a request to the queue. The response will be sent back to the
+  caller using &GenServer.cast/2.
+
+  response: %RequestThrottler.Response{
+    response: {:ok, %{"raw" => "decoded_json"}} | {:error, _},
+    timers: %{queued: NaiveDateTime, sent: NaiveDateTime, responded: NaiveDateTime},
+    request: %HTTPoison.Request{}
+  }
+  """
+  @callback add_to_queue(Request.t(), GenServer.server()) :: :ok
+  def add_to_queue(%HTTPoison.Request{url: "/" <> _} = request, server) do
     GenServer.cast(
       server,
       {:add_to_queue,
@@ -64,8 +69,59 @@ defmodule BirdSong.Services.RequestThrottler do
     )
   end
 
-  def add_to_queue(%Request{url: url}, _server) do
+  def add_to_queue(%HTTPoison.Request{url: url}, _server) do
     raise UrlError.exception(url: url)
+  end
+
+  @callback base_url(GenServer.server()) :: String.t()
+  def base_url(server) do
+    GenServer.call(server, :base_url)
+  end
+
+  def build_state(opts) do
+    opts
+    |> Keyword.update!(:base_url, &URI.new!/1)
+    |> Keyword.put_new(:queue, :queue.new())
+    |> __struct__()
+  end
+
+  def get_current_request_url(
+        %__MODULE__{
+          current_request: {%Task{}, {request, _from, _timers}}
+        } = state
+      ) do
+    state
+    |> update_request_url(request)
+    |> Map.fetch!(:url)
+  end
+
+  @callback parse_response(any(), t()) :: Helpers.api_response()
+  def parse_response(response, state),
+    do: Helpers.parse_api_response(response, get_current_request_url(state))
+
+  def handle_response(
+        response,
+        ref,
+        %__MODULE__{current_request: {%Task{ref: ref}, request_tuple}} = state
+      ) do
+    {%HTTPoison.Request{} = request, from, timers} = request_tuple
+    timers = Map.replace!(timers, :responded, NaiveDateTime.utc_now())
+
+    GenServer.cast(
+      from,
+      %Response{
+        base_url: URI.to_string(state.base_url),
+        request: request,
+        response: response,
+        timers: timers
+      }
+    )
+
+    {
+      :noreply,
+      %{state | current_request: nil},
+      {:continue, {:schedule_next_send, state.throttle_ms}}
+    }
   end
 
   #########################################################
@@ -76,17 +132,25 @@ defmodule BirdSong.Services.RequestThrottler do
   #########################################################
 
   @impl GenServer
+  def handle_call(:base_url, _from, %__MODULE__{base_url: %URI{} = uri} = state) do
+    {:reply, URI.to_string(uri), state}
+  end
+
+  def handle_call(:state, _from, state) do
+    {:reply, state, state}
+  end
+
+  @impl GenServer
   def handle_cast(
         {:add_to_queue,
          {
-           %Request{} = request,
+           %HTTPoison.Request{},
            parent,
-           %{queued: %NaiveDateTime{}, responded: nil} = timers
-         }},
+           %{queued: %NaiveDateTime{}, responded: nil}
+         } = item},
         %__MODULE__{} = state
       )
       when is_pid(parent) do
-    item = {update_request_url(state, request), parent, timers}
     {:noreply, do_add_to_queue(state, item)}
   end
 
@@ -133,21 +197,12 @@ defmodule BirdSong.Services.RequestThrottler do
 
   def handle_info(
         {ref, response},
-        %__MODULE__{current_request: {%Task{ref: ref}, {request, from, timers}}} = state
+        %__MODULE__{} = state
       ) do
     # this is the response to the request that is being awaited
-    timers = Map.replace!(timers, :responded, NaiveDateTime.utc_now())
-
-    GenServer.cast(
-      from,
-      {:response, Helpers.parse_api_response(response, request.url), timers}
-    )
-
-    {
-      :noreply,
-      %{state | current_request: nil},
-      {:continue, {:schedule_next_send, state.throttle_ms}}
-    }
+    response
+    |> parse_response(state)
+    |> handle_response(ref, state)
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, :normal}, state) do
@@ -156,11 +211,28 @@ defmodule BirdSong.Services.RequestThrottler do
 
   @impl GenServer
   def init(opts) do
+    do_init(opts)
+  end
+
+  @callback do_init(Keyword.t()) :: {:ok, t(), {:continue, {:schedule_next_send, 0}}}
+  def do_init(opts) do
     {:ok, build_state(opts), {:continue, {:schedule_next_send, 0}}}
   end
 
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts)
+    {name, opts} = Keyword.pop(opts, :name)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
+  #########################################################
+  #########################################################
+  ##
+  ##  TASK METHOD
+  ##
+  #########################################################
+
+  def call_httpoison(request, %__MODULE__{}) do
+    HTTPoison.request(request)
   end
 
   #########################################################
@@ -169,13 +241,6 @@ defmodule BirdSong.Services.RequestThrottler do
   ##  PRIVATE METHODS
   ##
   #########################################################
-
-  defp build_state(opts) do
-    opts
-    |> Keyword.update!(:base_url, &URI.new!/1)
-    |> Keyword.put_new(:queue, :queue.new())
-    |> __struct__()
-  end
 
   @spec cancel_unthrottle_msg(t()) :: t()
   defp cancel_unthrottle_msg(%__MODULE__{unthrottle_ref: nil} = state), do: state
@@ -205,7 +270,28 @@ defmodule BirdSong.Services.RequestThrottler do
     |> URI.to_string()
   end
 
-  defp update_request_url(%__MODULE__{base_url: base_url}, %Request{} = request) do
+  @spec log_external_api_call(HTTPoison.Request.t(), timers()) :: :ok
+  defp log_external_api_call(%HTTPoison.Request{url: "http://localhost" <> _}, %{}) do
+    :ok
+  end
+
+  defp log_external_api_call(%HTTPoison.Request{} = request, %{queued: queued, sent: sent}) do
+    Helpers.log(
+      [
+        event: "external_api_call",
+        request: request,
+        status: "sent",
+        waiting_for: NaiveDateTime.diff(sent, queued, :millisecond)
+      ],
+      __MODULE__,
+      case Mix.env() do
+        :test -> :warning
+        _ -> :info
+      end
+    )
+  end
+
+  defp update_request_url(%__MODULE__{base_url: base_url}, %HTTPoison.Request{} = request) do
     Map.update!(request, :url, &do_update_request_url(&1, base_url))
   end
 
@@ -217,21 +303,24 @@ defmodule BirdSong.Services.RequestThrottler do
   end
 
   @spec send_request(t()) :: t()
-  defp send_request(%__MODULE__{} = state) do
+  defp send_request(%__MODULE__{request_fn: {mod, func}} = state) do
     {item, state} = take_from_queue(state)
-    {%Request{} = request, from, timers} = item
+    {%HTTPoison.Request{} = request, from, timers} = item
+
+    timers = Map.put(timers, :sent, NaiveDateTime.utc_now())
+
+    with_updated_url = update_request_url(state, request)
+    log_external_api_call(with_updated_url, timers)
 
     task =
       Task.Supervisor.async_nolink(
         __MODULE__.TaskSupervisor,
-        HTTPoison,
-        :request,
-        [request]
+        mod,
+        func,
+        [with_updated_url, state]
       )
 
-    item = {request, from, Map.put(timers, :sent, NaiveDateTime.utc_now())}
-
-    %{state | current_request: {task, item}}
+    %{state | current_request: {task, {request, from, timers}}}
   end
 
   @spec take_from_queue(t()) :: {queue_item(), t()}

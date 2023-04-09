@@ -11,11 +11,13 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
   @moduletag :tmp_dir
   @moduletag throttle_ms: 3_000
 
-  setup [:setup_bypass]
+  setup [:start_throttler]
 
   setup %{bypass: bypass} = tags do
     Bypass.expect(bypass, &success_response/1)
+
     service = TestHelpers.start_service_supervised(Regions, tags)
+
     {:ok, service: service}
   end
 

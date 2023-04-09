@@ -3,7 +3,8 @@ defmodule BirdSong.Services.Ebird.Observations do
     base_url: BirdSong.Services.Ebird.base_url(),
     data_folder_path: "data/observations/ebird",
     ets_opts: [],
-    ets_name: :throttled_cache
+    ets_name: :throttled_cache,
+    throttler: BirdSong.Services.RequestThrottler.EbirdAPI
 
   require Logger
   alias BirdSong.{Services.Ebird, Services.Helpers}

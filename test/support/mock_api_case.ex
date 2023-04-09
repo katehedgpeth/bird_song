@@ -38,10 +38,13 @@ defmodule BirdSong.MockApiCase do
         setup [:seed_from_mock_taxonomy]
       end
 
-      setup [:start_services]
-      setup [:setup_route_mocks]
-      setup [:listen_to_services]
-      setup [:clean_up_tmp_folder_on_exit]
+      setup [
+        :start_throttler,
+        :start_services,
+        :setup_route_mocks,
+        :listen_to_services,
+        :clean_up_tmp_folder_on_exit
+      ]
 
       require Logger
       use BirdSong.MockDataAttributes

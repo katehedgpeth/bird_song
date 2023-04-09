@@ -23,19 +23,19 @@ defmodule BirdSong.Services.ThrottledCacheTest do
   alias BirdSong.{
     Bird,
     Services.DataFile,
-    Services.Helpers,
     Services.Service,
     TestHelpers
   }
 
   @moduletag :capture_log
   @moduletag :tmp_dir
+  @moduletag throttle_ms: 5
 
   @red_shouldered_hawk %Bird{sci_name: "Buteo lineatus", common_name: "Red-shouldered Hawk"}
   @carolina_wren %Bird{sci_name: "Thryothorus ludovicianus", common_name: "Carolina Wren"}
   @eastern_bluebird %Bird{sci_name: "Sialia sialis", common_name: "Eastern Bluebird"}
 
-  setup [:setup_bypass, :mock_response, :start_cache]
+  setup [:setup_bypass, :mock_response, :start_throttler, :start_cache]
 
   describe "ThrottledCache" do
     test "uses cache", %{bypass: bypass, cache: cache} do
@@ -53,21 +53,27 @@ defmodule BirdSong.Services.ThrottledCacheTest do
     end
 
     @tag expect: &__MODULE__.success_response/1
-    test "throttles requests", %{cache: cache} do
+    test "throttles requests", %{cache: cache, throttle_ms: throttle_ms} do
       ThrottledCacheUnderTest.register_request_listener(cache.whereis)
-      throttle_ms = Helpers.get_env(BirdSong.Services.ThrottledCache, :throttle_ms)
       ThrottledCacheUnderTest.clear_cache(cache.whereis)
+      state = GenServer.call(cache.whereis, :state)
+      throttler = Map.fetch!(state, :throttler)
+      assert is_pid(throttler)
+      assert %{throttle_ms: ^throttle_ms} = GenServer.call(throttler, :state)
 
       Enum.map(
         [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird],
         &ThrottledCacheUnderTest.get(&1, cache)
       )
 
-      assert_receive {:end_request, %{bird: @red_shouldered_hawk, time: hawk_end_time}}
-      assert_receive {:start_request, %{bird: @carolina_wren, time: wren_start_time}}
+      assert_receive {:end_request, %{bird: @red_shouldered_hawk, response: hawk_response}}
+      assert_receive {:end_request, %{bird: @carolina_wren, response: wren_response}}
+      assert %{timers: %{responded: hawk_responded}} = hawk_response
+      assert %{timers: %{sent: wren_sent}} = wren_response
 
-      diff = DateTime.diff(wren_start_time, hawk_end_time, :millisecond)
-      assert diff >= throttle_ms and diff <= throttle_ms + 10
+      diff = NaiveDateTime.diff(wren_sent, hawk_responded, :millisecond)
+      assert diff >= throttle_ms
+      assert diff <= throttle_ms + 10
     end
   end
 
@@ -86,51 +92,25 @@ defmodule BirdSong.Services.ThrottledCacheTest do
     assert ThrottledCacheUnderTest.get_from_cache(@red_shouldered_hawk, whereis) === :not_found
   end
 
-  describe "&ThrottledCache.write_to_disk/3 writes a response to disk" do
+  describe "writes a response to disk" do
     @describetag :tmp_dir
-    @describetag use_bypass?: false
 
-    test "does nothing if data file instance is not running", %{
-      tmp_dir: tmp_dir,
-      cache: cache
-    } do
-      assert ThrottledCacheUnderTest.write_to_disk(
-               {:ok, %HTTPoison.Response{status_code: 200, body: ~s({foo: "bar"})}},
-               {@carolina_wren, ""},
-               %BirdSong.Services.ThrottledCache.State{
-                 base_url: "",
-                 data_folder_path: tmp_dir,
-                 service: cache
-               }
-             ) === {:error, {:not_alive, BirdSong.Services.DataFile}}
-    end
-
+    @tag expect_once: &__MODULE__.success_response/1
     test "writes to disk if data file instance is running", %{
-      test: test,
       tmp_dir: tmp_dir,
       cache: cache
     } do
-      assert {:ok, data_file_instance} =
-               start_supervised(
-                 {DataFile, name: Module.concat(test, DataFile), data_folder_path: tmp_dir}
-               )
-
-      DataFile.register_listener(data_file_instance)
-
-      assert ThrottledCacheUnderTest.write_to_disk(
-               {:ok, %HTTPoison.Response{status_code: 200, body: ~s({foo: "bar"})}},
-               @carolina_wren,
-               %BirdSong.Services.ThrottledCache.State{
-                 base_url: "",
-                 data_folder_path: tmp_dir,
-                 data_file_instance: data_file_instance,
-                 service: cache
-               }
-             ) === :ok
-
+      GenServer.cast(cache.whereis, {:update_write_config, true})
+      state = GenServer.call(cache.whereis, :state)
+      assert is_pid(state.data_file_instance)
+      DataFile.register_listener(state.data_file_instance)
+      assert Process.alive?(state.data_file_instance) === true
+      data_folder = Path.join(tmp_dir, "misc")
+      assert File.ls(tmp_dir) === {:ok, ["misc"]}
+      assert {:ok, _} = ThrottledCacheUnderTest.get(@red_shouldered_hawk, cache)
       assert_receive {DataFile, {:ok, %{written?: true, path: path}}}
-
-      assert File.exists?(path)
+      assert path =~ "/misc/"
+      assert File.ls(data_folder) === {:ok, ["data_file.json"]}
     end
   end
 

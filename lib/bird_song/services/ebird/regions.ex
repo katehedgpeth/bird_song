@@ -3,7 +3,8 @@ defmodule BirdSong.Services.Ebird.Regions do
     ets_name: :ebird_regions,
     ets_opts: [],
     base_url: "https://api.ebird.org",
-    data_folder_path: "data/regions"
+    data_folder_path: "data/regions",
+    throttler: BirdSong.Services.RequestThrottler.EbirdAPI
 
   alias BirdSong.{Services, Services.Ebird}
   alias __MODULE__.{Region, Response}

@@ -4,30 +4,73 @@ defmodule BirdSong.Application do
   @moduledoc false
 
   use Application
+  alias BirdSong.Services.{RequestThrottler, RequestThrottlers}
+
+  @supervisors [
+    # supervisors for external API requests
+    {Task.Supervisor, name: BirdSong.Services.Tasks},
+    {Task.Supervisor, name: BirdSong.Services.RequestThrottler.TaskSupervisor},
+    {DynamicSupervisor, name: BirdSong.Services.GenServers}
+  ]
+
+  @throttlers [
+    Supervisor.child_spec(
+      {RequestThrottler,
+       [
+         base_url: "https://api.ebird.org",
+         name: RequestThrottler.EbirdAPI
+       ]},
+      id: :ebird_request_throttler
+    ),
+    {RequestThrottlers.MacaulayLibrary,
+     base_url: "https://search.macaulaylibrary.org",
+     name: RequestThrottlers.MacaulayLibrary,
+     scraper: BirdSong.Services.Ebird.Recordings.Playwright},
+    # Supervisor.child_spec(
+    #   {RequestThrottler,
+    #    [
+    #      base_url: "https://search.macaulaylibrary.org",
+    #      name: RequestThrottler.MacaulayLibrary
+    #    ]},
+    #   id: :macaulay_request_throttler
+    # ),
+    Supervisor.child_spec(
+      {RequestThrottler,
+       [
+         base_url: "https://www.flickr.com",
+         name: RequestThrottler.Flickr
+       ]},
+      id: :flickr_request_throttler
+    )
+  ]
+
+  @services [
+    BirdSong.Services.Ebird.Observations,
+    BirdSong.Services.Ebird.Recordings,
+    BirdSong.Services.Ebird.RegionSpeciesCodes,
+    BirdSong.Services.Flickr
+  ]
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # Start the Ecto repository
-      BirdSong.Repo,
-      # Start the Telemetry supervisor
-      BirdSongWeb.Telemetry,
-      # Start the supervisors for external API requests
-      {Task.Supervisor, name: BirdSong.Services.Tasks},
-      {Task.Supervisor, name: BirdSong.Services.RequestThrottler.TaskSupervisor},
-      {DynamicSupervisor, name: BirdSong.Services.GenServers},
-      # Start service caches
-      BirdSong.Services.Ebird.Observations,
-      BirdSong.Services.Ebird.Recordings,
-      BirdSong.Services.Ebird.RegionSpeciesCodes,
-      BirdSong.Services.Flickr,
-      # Start the PubSub system
-      {Phoenix.PubSub, name: BirdSong.PubSub},
-      # Start the Endpoint (http/https)
-      BirdSongWeb.Endpoint
-      # Start a worker by calling: BirdSong.Worker.start_link(arg)
-      # {BirdSong.Worker, arg}
-    ]
+    children =
+      List.flatten([
+        # Start the Ecto repository
+        BirdSong.Repo,
+        @supervisors,
+        @throttlers,
+        @services,
+        [
+          # Start the Telemetry supervisor
+          BirdSongWeb.Telemetry,
+          # Start the PubSub system
+          {Phoenix.PubSub, name: BirdSong.PubSub},
+          # Start the Endpoint (http/https)
+          BirdSongWeb.Endpoint
+          # Start a worker by calling: BirdSong.Worker.start_link(arg)
+          # {BirdSong.Worker, arg}
+        ]
+      ])
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

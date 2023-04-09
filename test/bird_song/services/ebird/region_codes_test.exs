@@ -1,5 +1,6 @@
 defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
   use ExUnit.Case
+  import BirdSong.TestSetup
 
   alias BirdSong.TestHelpers
   alias BirdSong.Services.Ebird.RegionSpeciesCodes
@@ -9,11 +10,11 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
     {:ok, raw_codes: File.read!("test/mock_data/region_species_codes/" <> @region <> ".json")}
   end
 
-  setup %{test: test} do
-    bypass = Bypass.open()
+  setup [:start_throttler]
 
+  setup %{bypass: bypass, throttler: throttler} do
     {:ok, service} =
-      RegionSpeciesCodes.start_link(base_url: TestHelpers.mock_url(bypass), name: test)
+      RegionSpeciesCodes.start_link(base_url: TestHelpers.mock_url(bypass), throttler: throttler)
 
     {:ok, bypass: bypass, service: service}
   end

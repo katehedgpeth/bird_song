@@ -2,7 +2,7 @@ const { chromium } = require("playwright");
 const [, , BASE_URL, TIMEOUT] = process.argv;
 const USERNAME = process.env.EBIRD_USERNAME;
 const PASSWORD = process.env.EBIRD_PASSWORD;
-const TAKE_SCREENSHOTS = process.env.PLAYWRIGHT_TAKE_SCREENSHOTS
+const TAKE_SCREENSHOTS = process.env.PLAYWRIGHT_TAKE_SCREENSHOTS === "true"
 
 if (!BASE_URL || !TIMEOUT) {
   console.log("message=" + JSON.stringify({argv: process.argv, error: "arguments"}))
@@ -104,12 +104,15 @@ const sendMessage = (data) => {
   }
 
   const sendApiRequest = async (json) => {
-    const { initial_cursor_mark, code, call_count } = parseJSON(json)
+    const { request, call_count } = parseJSON(json)
     if (typeof(call_count) !== "number") {
       throw new Error("expected call_count to be a number, got: " + json)
     }
-    if (call_count > 1 && !initial_cursor_mark) {
-      throw new Error("expected initial_cursor_mark after first request, got: " + json)
+
+    const { params: { taxonCode, initialCursorMark } } = request
+
+    if (!taxonCode || typeof(taxonCode) !== "string") {
+      return sendErrorMessage({ error: "request_error", request })
     }
 
     const url = BASE_URL + "/api/v2/search";
@@ -118,8 +121,8 @@ const sendMessage = (data) => {
       url,
       {
         params: params({
-          initialCursorMark: initial_cursor_mark,
-          taxonCode: code
+          initialCursorMark,
+          taxonCode,
         })
       }
     );

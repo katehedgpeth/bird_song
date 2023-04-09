@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
-  use BirdSong.DataCase
+  use BirdSong.DataCase, async: true
   import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1, setup_bypass: 1]
 
   alias BirdSong.{
@@ -20,44 +20,28 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
   setup %{bypass: bypass} = tags do
     MockEbirdServer.setup(tags)
+    base_url = TestHelpers.mock_url(bypass)
+    {:ok, %Bird{species_code: code}} = Bird.get_by_sci_name("Sialia sialis")
 
-    {:ok, bird} = Bird.get_by_sci_name("Sialia sialis")
+    request = %HTTPoison.Request{
+      url: Path.join(base_url, "api/v2/search"),
+      params: %{"taxonCode" => code}
+    }
 
     {:ok, server} =
       Playwright.start_link(
-        base_url: TestHelpers.mock_url(bypass),
+        base_url: base_url,
         listeners: [self()],
         throttle_ms: @throttle_ms,
         timeout: @timeout_ms
       )
 
-    {:ok, bird: bird, bypass: bypass, server: server}
-  end
-
-  defp endpoint(:html), do: "/catalog"
-  defp endpoint(:api), do: "/api/v2/search"
-
-  def mock_response(bypass, html_or_api, status_code, body) do
-    Bypass.expect(
-      bypass,
-      "GET",
-      endpoint(html_or_api),
-      &Plug.Conn.resp(&1, status_code, body)
-    )
-  end
-
-  def do_not_expect_api_response(bypass) do
-    Bypass.stub(
-      bypass,
-      "GET",
-      endpoint(:api),
-      &Plug.Conn.resp(&1, 500, "this should not have been called")
-    )
+    {:ok, bypass: bypass, server: server, request: request}
   end
 
   describe "Ebird.Recordings.Playwright.run/1 - success response" do
-    test "opens a port and returns a response", %{bird: bird, server: server} do
-      response = Playwright.run(server, bird)
+    test "opens a port and returns a response", %{request: request, server: server} do
+      response = Playwright.run(server, request)
 
       assert %{port: port} = GenServer.call(server, :state)
       assert {:connected, _pid} = Port.info(port, :connected)
@@ -99,7 +83,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
                  "width" => _
                } = recording
 
-        assert %Bird{species_code: species_code} = bird
+        assert %HTTPoison.Request{params: %{"taxonCode" => species_code}} = request
 
         assert Map.keys(taxonomy) === [
                  "category",
@@ -115,8 +99,8 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
       end
     end
 
-    test "sends 3 throttled requests", %{bird: bird, server: server} do
-      Playwright.run(server, bird)
+    test "sends 3 throttled requests", %{request: request, server: server} do
+      Playwright.run(server, request)
 
       refute_receive {Playwright, %DateTime{}, {:request, %{current_request_number: 0}}}
       refute_receive {Playwright, %DateTime{}, {:request, %{current_request_number: 4}}}
@@ -151,8 +135,8 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     @tag expect_login?: false
     @tag list_html_response: &MockEbirdServer.not_found_response/1
     test "returns an error response without crashing when HTML page returns a bad response", %{
-      bird: bird,
       bypass: bypass,
+      request: request,
       server: server
     } do
       assert {:error,
@@ -160,7 +144,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
                 response_body: "That page does not exist",
                 status: 404,
                 url: url
-              }} = Playwright.run(server, bird)
+              }} = Playwright.run(server, request)
 
       assert url === bypass |> TestHelpers.mock_url() |> Path.join("/catalog?view=list")
 
@@ -178,10 +162,10 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     @tag expect_api_call?: false
     @tag expect_login?: false
     test "returns an error when sign in link is not found", %{
-      bird: bird,
+      request: request,
       server: server
     } do
-      assert Playwright.run(server, bird) ===
+      assert Playwright.run(server, request) ===
                {:error,
                 %TimeoutError{
                   timeout_message:
@@ -208,11 +192,11 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
 
     @tag recordings_response: &MockEbirdServer.not_authorized_response/1
     test "returns an error response without crashing when API request returns a bad response", %{
-      bird: bird,
+      request: request,
       bypass: bypass,
       server: server
     } do
-      assert Playwright.run(server, bird, 3_000) === {
+      assert Playwright.run(server, request, 3_000) === {
                :error,
                %BadResponseError{
                  __exception__: true,

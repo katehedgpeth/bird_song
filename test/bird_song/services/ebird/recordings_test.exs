@@ -1,6 +1,9 @@
 defmodule BirdSong.Services.Ebird.RecordingsTest do
   use BirdSong.DataCase
-  import BirdSong.TestSetup
+  import BirdSong.TestSetup, except: [start_throttler: 1]
+
+  alias BirdSong.Services.RequestThrottlers.MacaulayLibrary
+  alias BirdSong.Services.Ebird.Recordings.Playwright
 
   alias BirdSong.{
     Bird,
@@ -19,7 +22,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
      mock_html: File.read!("test/mock_data/ebird_recordings.html")}
   end
 
-  setup [:seed_from_taxonomy, :setup_bypass]
+  setup [:seed_from_taxonomy, :setup_bypass, :start_throttler]
 
   setup tags do
     if Map.get(tags, :copy_files?, false) do
@@ -93,29 +96,23 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
     end
   end
 
-  @tag :skip
-  @tag copy_files?: true
-  @tag seed_services?: true
-  @tag taxonomy_file: "data/taxonomy.json"
-  test "seeds data when server is started", %{service: service, tmp_dir: tmp_dir} do
-    data_folder_path = Recordings.data_folder_path(service)
-    assert data_folder_path === Path.join([tmp_dir, "recordings"])
-    assert data_folder_path |> File.ls!() |> length() > 0
+  def start_throttler(%{bypass: bypass}) do
+    base_url = TestHelpers.mock_url(bypass)
 
-    all_birds = BirdSong.Repo.all(Bird)
+    {:ok, playwright} =
+      Playwright.start_link(
+        base_url: base_url,
+        listeners: [self()],
+        throttle_ms: 0
+      )
 
-    for bird <- all_birds do
-      assert_receive {:response_saved_to_ets, ^bird}, 500
-    end
+    {:ok, throttler} =
+      MacaulayLibrary.start_link(
+        base_url: base_url,
+        throttle_ms: 0,
+        scraper: {Playwright, playwright}
+      )
 
-    table_size =
-      service
-      |> Map.fetch!(:whereis)
-      |> GenServer.call(:state)
-      |> Map.fetch!(:ets_table)
-      |> :ets.tab2list()
-      |> length()
-
-    assert table_size === length(all_birds)
+    {:ok, throttler: throttler, scraper: {Playwright, playwright}}
   end
 end

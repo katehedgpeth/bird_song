@@ -2,7 +2,6 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   use GenServer
 
   alias BirdSong.{
-    Bird,
     Data.Scraper.BadResponseError,
     Data.Scraper.JsonParseError,
     Data.Scraper.TimeoutError,
@@ -33,10 +32,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   defstruct [
     :base_url,
-    :bird,
     :error,
     :port,
     :reply_to,
+    :request,
     current_request_number: 0,
     listeners: [],
     ready?: false,
@@ -47,21 +46,25 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   @type t() :: %__MODULE__{
           base_url: String.t(),
-          bird: Bird.t() | nil,
           current_request_number: integer(),
           error: {:error, any()} | nil,
           listeners: [pid()],
           port: port() | nil,
           ready?: boolean(),
           reply_to: GenServer.from(),
+          request: HTTPoison.Request.t() | nil,
           responses: [Map.t()],
           throttle_ms: integer(),
           timeout: integer()
         }
 
-  @spec run(GenServer.server(), BirdSong.Bird.t()) :: BirdSong.Data.Scraper.response()
-  def run(whereis, %Bird{} = bird, timeout \\ :infinity) do
-    GenServer.call(whereis, {:run, bird}, timeout)
+  @spec run(GenServer.server(), HTTPoison.Request.t()) :: BirdSong.Data.Scraper.response()
+  def run(
+        whereis,
+        %HTTPoison.Request{params: %{"taxonCode" => _}} = request,
+        timeout \\ :infinity
+      ) do
+    GenServer.call(whereis, {:run, request}, timeout)
   end
 
   #########################################################
@@ -115,9 +118,9 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:noreply, shutdown_port(state)}
   end
 
-  def handle_call({:run, bird}, from, %__MODULE__{bird: nil} = state) do
+  def handle_call({:run, request}, from, %__MODULE__{request: nil} = state) do
     send(self(), :send_request)
-    {:noreply, %{state | bird: bird, reply_to: from}}
+    {:noreply, %{state | request: request, reply_to: from}}
   end
 
   def handle_call(:state, _from, %__MODULE__{} = state) do
@@ -143,6 +146,12 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
         Enum.reduce(new_recordings, existing_recordings, &[&1 | &2])
       end
     )
+  end
+
+  defp encode_request(%HTTPoison.Request{} = request) do
+    request
+    |> Map.from_struct()
+    |> Map.update!(:headers, &Enum.into(&1, %{}))
   end
 
   defp ensure_throttled_ms(nil), do: Helpers.get_env(ThrottledCache, :throttle_ms)
@@ -178,7 +187,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     Enum.each(listeners, &send(&1, {__MODULE__, DateTime.now!("Etc/UTC"), message}))
   end
 
-  def open_port(%__MODULE__{base_url: base_url, timeout: timeout} = state) do
+  defp open_port(%__MODULE__{base_url: base_url, timeout: timeout} = state) do
     port =
       Port.open({:spawn_executable, @node_path}, [
         :binary,
@@ -266,7 +275,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   defp do_reply(%__MODULE__{reply_to: from} = state, reply) do
     GenServer.reply(from, reply)
 
-    %{state | bird: nil, reply_to: nil, responses: [], current_request_number: 0}
+    %{state | request: nil, reply_to: nil, responses: [], current_request_number: 0}
   end
 
   defp send_again_or_reply(%__MODULE__{current_request_number: count} = state)
@@ -291,18 +300,15 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
     notify_listeners(
       state,
-      {:request, Map.take(state, [:current_request_number, :bird, :responses])}
+      {:request, Map.take(state, [:current_request_number, :request, :responses])}
     )
-
-    %Bird{species_code: code} = Map.fetch!(state, :bird)
 
     {state,
      Port.command(
        port,
        Jason.encode!(%{
-         code: code,
-         initial_cursor_mark: get_initial_cursor_mark(state),
-         call_count: count
+         call_count: count,
+         request: state |> update_params() |> encode_request()
        })
      )}
   end
@@ -320,5 +326,18 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     end
 
     state
+  end
+
+  defp update_params(%__MODULE__{request: request} = state) do
+    %HTTPoison.Request{params: params} = request
+
+    %{
+      request
+      | params:
+          case get_initial_cursor_mark(state) do
+            nil -> params
+            mark -> Map.put(params, :initialCursorMark, mark)
+          end
+    }
   end
 end

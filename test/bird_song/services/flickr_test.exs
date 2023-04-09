@@ -2,7 +2,7 @@ defmodule BirdSong.Services.FlickrTest do
   use BirdSong.DataCase
   use BirdSong.MockDataAttributes
 
-  import BirdSong.TestSetup, only: [setup_bypass: 1]
+  import BirdSong.TestSetup, only: [setup_bypass: 1, start_throttler: 1]
 
   alias BirdSong.{
     Services.DataFile,
@@ -17,16 +17,16 @@ defmodule BirdSong.Services.FlickrTest do
   @moduletag copy_files?: true
 
   setup_all do
-    real_service = Service.ensure_started(%Service{module: Flickr}, raise?: true)
-    real_df_instance = Flickr.data_file_instance(real_service)
+    service = Service.ensure_started(%Service{module: Flickr})
+    df_instance = Flickr.data_file_instance(service)
 
     {:ok, "" <> raw_images} =
-      DataFile.read(%DataFile.Data{service: real_service, request: @bird}, real_df_instance)
+      DataFile.read(%DataFile.Data{service: service, request: @bird}, df_instance)
 
-    {:ok, raw_images: raw_images, real_service: real_service}
+    {:ok, raw_images: raw_images}
   end
 
-  setup [:setup_bypass]
+  setup [:setup_bypass, :start_throttler]
 
   setup tags do
     service = TestHelpers.start_service_supervised(Flickr, tags)

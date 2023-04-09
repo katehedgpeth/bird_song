@@ -2,8 +2,8 @@ defmodule BirdSong.Services.ThrottledCache do
   alias BirdSong.{
     Bird,
     Services.Ebird,
-    Services.DataFile,
-    Services.Helpers
+    Services.Helpers,
+    Services.RequestThrottler
   }
 
   @type request_data() ::
@@ -146,22 +146,17 @@ defmodule BirdSong.Services.ThrottledCache do
       def ets_key(%Bird{sci_name: sci_name}), do: sci_name
       defoverridable(ets_key: 1)
 
-      @spec get_from_api(TC.request_data(), State.t()) ::
-              {:ok, Response.t()} | Helpers.api_error()
-      def get_from_api(request, %State{} = state) do
-        state
-        |> url(request)
-        |> log_external_api_call()
-        |> HTTPoison.get(
-          headers(request),
-          params: params(request)
-        )
-        |> log_external_api_response(request, state)
-        |> maybe_write_to_disk(request, state)
-        |> parse_response(request, state)
+      @spec build_request(TC.request_data(), State.t()) :: HTTPoison.Request.t()
+      def build_request(request_data, %State{} = state) do
+        %HTTPoison.Request{
+          headers: headers(request_data),
+          method: :get,
+          params: params(request_data),
+          url: Path.join("/", endpoint(request_data))
+        }
       end
 
-      defoverridable(get_from_api: 2)
+      defoverridable(build_request: 2)
 
       @spec headers(TC.request_data()) :: HTTPoison.headers()
       def headers(%Bird{}), do: user_agent()
@@ -185,37 +180,15 @@ defmodule BirdSong.Services.ThrottledCache do
       def parse_from_disk(data, server), do: GenServer.call(server, {:parse_from_disk, data})
       defoverridable(parse_from_disk: 2)
 
-      def successful_response?({:ok, %HTTPoison.Response{status_code: 200}}), do: true
-      def successful_response?({:ok, %HTTPoison.Response{}}), do: false
-      def successful_response?({:error, %HTTPoison.Error{}}), do: false
+      def successful_response?(%RequestThrottler.Response{response: {:ok, _}}),
+        do: true
+
+      def successful_response?(%RequestThrottler.Response{
+            response: {:error, _}
+          }),
+          do: false
+
       defoverridable(successful_response?: 1)
-
-      @spec write_to_disk({:ok, HTTPoison.Response.t() | [Map.t()]}, TC.request_data(), State.t()) ::
-              :ok | {:error, any()}
-      def write_to_disk({:ok, _} = response, request, %State{
-            data_file_instance: instance,
-            service: service
-          })
-          when is_pid(instance) do
-        DataFile.write(
-          %DataFile.Data{
-            request: request,
-            response: response,
-            service: service
-          },
-          instance
-        )
-      end
-
-      def write_to_disk(_, _, %State{data_file_instance: instance}) when is_pid(instance) do
-        {:error, :bad_response}
-      end
-
-      def write_to_disk(_, _, %State{data_file_instance: instance}) do
-        {:error, {:not_alive, instance}}
-      end
-
-      defoverridable(write_to_disk: 3)
 
       #########################################################
       #########################################################
@@ -229,7 +202,7 @@ defmodule BirdSong.Services.ThrottledCache do
           @module_opts
           |> Keyword.merge(opts)
           |> Keyword.put_new(:throttle_ms, @throttle_ms)
-          |> Keyword.pop(:name, __MODULE__)
+          |> Keyword.pop(:name)
 
         GenServer.start_link(__MODULE__, opts, name: name)
       end
@@ -246,11 +219,16 @@ defmodule BirdSong.Services.ThrottledCache do
       def handle_call(
             {:get_from_api, request_data},
             from,
-            %State{} = state
+            %State{throttler: throttler} = state
           ) do
-        send(self(), :send_request)
+        State.notify_listeners(state, request_data, :start)
 
-        {:noreply, State.add_request_to_backlog(state, from, request_data)}
+        request_data
+        |> build_request(state)
+        |> State.save_request_to_ets(from, request_data, state)
+        |> RequestThrottler.add_to_queue(throttler)
+
+        {:noreply, state}
       end
 
       def handle_call({:get_from_cache, data}, _from, state) do
@@ -289,6 +267,13 @@ defmodule BirdSong.Services.ThrottledCache do
         {:reply, state, state}
       end
 
+      def handle_cast(
+            %RequestThrottler.Response{} = response,
+            state
+          ) do
+        {:noreply, State.handle_response(state, response)}
+      end
+
       def handle_cast({:update_write_config, write_to_disk?}, %State{} = state) do
         {:noreply, State.update_write_config(state, write_to_disk?)}
       end
@@ -310,51 +295,20 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, state}
       end
 
-      def handle_info(
-            :send_request,
-            %State{} = state
-          ) do
-        state = if State.should_send_request?(state), do: State.send_request(state), else: state
-        {:noreply, state}
-      end
-
       def handle_info({:save, data}, %State{} = state) do
         State.save_response(state, data)
         {:noreply, state}
       end
 
-      def handle_info(
-            {ref, {:ok, %{__struct__: __MODULE__.Response}} = response},
-            %State{} = state
-          )
+      def handle_info({ref, response}, %State{} = state)
           when is_reference(ref) do
-        handle_task_response(state, ref, response)
-      end
+        Helpers.log(
+          [error: :unexpected_task_response, response: response, ref: ref],
+          __MODULE__,
+          :warning
+        )
 
-      def handle_info({ref, {:error, {:no_results, request}} = response}, %State{} = state)
-          when is_reference(ref) do
-        Helpers.log([error: :no_results, request: request], __MODULE__, :warning)
-        handle_task_response(state, ref, response)
-      end
-
-      def handle_info({ref, {:error, {:not_found, _}} = response}, %State{} = state)
-          when is_reference(ref) do
-        handle_task_response(state, ref, response)
-      end
-
-      def handle_info({ref, {:error, {:bad_response, _}} = response}, %State{} = state)
-          when is_reference(ref) do
-        handle_task_response(state, ref, response)
-      end
-
-      def handle_info({ref, {:error, {:timeout, _}} = response}, %State{} = state)
-          when is_reference(ref) do
-        handle_task_response(state, ref, response)
-      end
-
-      def handle_info({ref, {:error, %HTTPoison.Error{}} = response}, %State{} = state)
-          when is_reference(ref) do
-        handle_task_response(state, ref, response)
+        {:noreply, state}
       end
 
       def handle_info(:unthrottle, %State{} = state) do
@@ -376,95 +330,10 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      defp handle_task_response(%State{tasks: tasks} = state, ref, response) do
-        tasks
-        |> Map.fetch!(ref)
-        |> do_handle_task_response(response, state)
-
-        {:noreply, state}
-      end
-
-      defp do_handle_task_response(
-             {{pid, ref} = from, request_data},
-             response,
-             %State{throttle_ms: throttle_ms} = state
-           )
-           when is_pid(pid) and is_reference(ref) do
-        send(self(), {:save, {request_data, response}})
-
-        State.notify_listeners(state, request_data, {:end, response})
-
-        Process.send_after(self(), :unthrottle, throttle_ms)
-
-        GenServer.reply(from, response)
-      end
-
-      @spec log_external_api_call(String.t()) :: String.t()
-      defp log_external_api_call("http://localhost" <> _ = url) do
-        url
-      end
-
-      defp log_external_api_call("" <> url) do
-        Helpers.log(
-          [event: "external_api_call", url: url, status: "sent"],
-          __MODULE__,
-          case Mix.env() do
-            :test -> :warning
-            _ -> :info
-          end
-        )
-
-        url
-      end
-
-      defp log_external_api_response(
-             response,
-             request,
-             state
-           ) do
-        case url(state, request) do
-          "http://localhost" <> _ -> :ok
-          url -> do_log_external_api_response(url, response)
-        end
-
-        response
-      end
-
-      defp do_log_external_api_response(url, response) do
-        {level, details} =
-          case response do
-            {:ok, %HTTPoison.Response{status_code: 200}} ->
-              {:info, status_code: 200}
-
-            {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
-              {:error, status_code: code, body: body}
-
-            {:error, %HTTPoison.Error{} = error} ->
-              {:error, error: error}
-          end
-
-        [
-          {:event, "external_api_call"},
-          {:url, url} | details
-        ]
-        |> Helpers.log(__MODULE__, level)
-      end
-
-      @spec maybe_write_to_disk(
-              response :: Ebird.Recordings.raw_response() | Helpers.api_response(Response.t()),
-              request :: any(),
-              state :: State.t()
-            ) :: Helpers.api_response(Response.t()) | Ebird.Recordings.raw_response()
-      defp maybe_write_to_disk(response, request, %State{} = state) do
-        if successful_response?(response) and State.write_to_disk?(state) do
-          write_to_disk(response, request, state)
-        end
-
-        response
-      end
-
-      defp url(%State{base_url: "" <> base_url}, request_data) do
-        Path.join(base_url, endpoint(request_data))
+      defp url(%State{throttler: throttler}, request_data) do
+        throttler
+        |> RequestThrottler.base_url()
+        |> Path.join(endpoint(request_data))
       end
 
       defp user_agent(), do: [{"User-Agent", "BirdSongBot (#{@admin_email})"}]

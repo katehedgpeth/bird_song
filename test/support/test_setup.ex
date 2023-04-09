@@ -5,6 +5,7 @@ defmodule BirdSong.TestSetup do
   alias BirdSong.{
     Bird,
     Services,
+    Services.RequestThrottler,
     Services.Service,
     TestHelpers
   }
@@ -39,6 +40,46 @@ defmodule BirdSong.TestSetup do
     )
 
     :ok
+  end
+
+  def start_throttlers(%{} = tags) do
+    {:ok, throttler: ebird} = start_throttler(tags)
+    {:ok, throttler: macaulay} = start_throttler(tags)
+    {:ok, throttler: flickr} = start_throttler(tags)
+
+    {:ok,
+     throttlers: %{
+       ebird: ebird,
+       macaulay: macaulay,
+       flickr: flickr
+     }}
+  end
+
+  @type throttler() :: %{
+          base_url: String.t(),
+          pid: pid(),
+          bypass: Bypass.t()
+        }
+
+  @spec start_throttler(Map.t()) :: {:ok, throttler: pid()}
+  def start_throttler(%{bypass: bypass} = tags) do
+    url = TestHelpers.mock_url(bypass)
+
+    {:ok, pid} =
+      RequestThrottler.start_link(base_url: url, throttle_ms: Map.get(tags, :throttle_ms, 0))
+
+    {:ok, throttler: pid}
+  end
+
+  def start_throttler(%{} = tags) do
+    bypass = Bypass.open()
+
+    {:ok, throttler: throttler} =
+      tags
+      |> Map.put(:bypass, bypass)
+      |> start_throttler()
+
+    {:ok, bypass: bypass, throttler: throttler}
   end
 
   def start_services(%{} = tags) do

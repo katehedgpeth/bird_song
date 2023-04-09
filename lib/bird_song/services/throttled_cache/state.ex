@@ -9,9 +9,10 @@ end
 defmodule BirdSong.Services.ThrottledCache.State do
   require Logger
 
+  alias BirdSong.Services.RequestThrottler
+
   alias BirdSong.{
     Bird,
-    Services,
     Services.ThrottledCache,
     Services.ThrottledCache.State.Supervisors,
     Services.ThrottledCache.ETS,
@@ -23,22 +24,25 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Services.Service
   }
 
-  @type request_data() :: {GenServer.from(), any()}
+  @type request_ets_item() :: %{
+          from: GenServer.from(),
+          request_data: ThrottledCache.request_data()
+        }
 
   @type t() :: %__MODULE__{
           base_url: String.t(),
-          backlog: [request_data],
           data_file_instance: GenServer.server() | nil,
           data_folder_path: String.t(),
           ets_table: :ets.table(),
           ets_name: atom(),
           ets_opts: [:ets.table_type()],
           listeners: [pid()],
+          requests: :ets.table(),
           scraper: atom() | {atom(), pid()},
           service: Service.t(),
           supervisors: Supervisors.t(),
-          tasks: %{reference() => request_data()},
           throttled?: boolean(),
+          throttler: GenServer.server(),
           throttle_ms: integer(),
           write_responses_to_disk?: boolean()
         }
@@ -49,14 +53,15 @@ defmodule BirdSong.Services.ThrottledCache.State do
     :data_folder_path,
     :ets_table,
     :ets_name,
+    :requests,
     :scraper,
     :service,
+    :throttler,
     ets_opts: [],
     backlog: [],
     data_file_instance: DataFile,
     listeners: [],
     supervisors: %__MODULE__.Supervisors{},
-    tasks: %{},
     throttled?: false,
     throttle_ms:
       :bird_song
@@ -77,8 +82,9 @@ defmodule BirdSong.Services.ThrottledCache.State do
                 ]
 
   def new(opts) do
-    __MODULE__
-    |> struct(opts)
+    opts
+    |> Keyword.update!(:throttler, &ensure_throttler_started/1)
+    |> __struct__()
     |> ensure_data_file_started()
     |> verify_state()
     |> start_ets()
@@ -87,6 +93,19 @@ defmodule BirdSong.Services.ThrottledCache.State do
   @spec clear_cache(t()) :: t()
   def clear_cache(%__MODULE__{supervisors: %Supervisors{ets: ets}} = state) do
     ETS.clear_cache(ets)
+
+    state
+  end
+
+  @spec handle_response(t(), RequestThrottler.Response.t()) :: t()
+  def handle_response(%__MODULE__{} = state, %RequestThrottler.Response{} = response) do
+    %{request_data: request_data, from: from} = get_request_from_ets(state, response)
+
+    notify_listeners(state, request_data, {:end, response})
+
+    maybe_write_to_disk(state, response, request_data)
+
+    :ok = send_response(state, response, {request_data, from})
 
     state
   end
@@ -113,48 +132,12 @@ defmodule BirdSong.Services.ThrottledCache.State do
     true
   end
 
-  @spec send_request(t()) :: t()
-  def send_request(%__MODULE__{throttled?: false} = state) do
-    case get_next_request_from_backlog(state) do
-      {:ok, {{from, data}, state}} ->
-        side_effects(state, {:request, data})
-        start_get_from_api_task(state, from, data)
-
-      {:error, :backlog_empty} ->
-        state
-    end
-  end
-
   def side_effects(%__MODULE__{} = state, {:request, data}) do
     log_request(state, data, :start)
     notify_listeners(state, data, :start)
   end
 
-  defp start_get_from_api_task(%__MODULE__{} = state, from, request_data) do
-    %Service{module: module} = Map.fetch!(state, :service)
-
-    %Task{ref: ref} =
-      Task.Supervisor.async(
-        Services.Tasks,
-        module,
-        :get_from_api,
-        [request_data, state],
-        timeout: :infinity
-      )
-
-    state
-    |> Map.replace!(:throttled?, true)
-    |> Map.update!(:tasks, &Map.put(&1, ref, {from, request_data}))
-  end
-
-  defp get_next_request_from_backlog(%__MODULE__{backlog: [{from, data} | backlog]} = state) do
-    {:ok, {{from, data}, Map.replace!(state, :backlog, backlog)}}
-  end
-
-  defp get_next_request_from_backlog(%__MODULE__{backlog: []}) do
-    {:error, :backlog_empty}
-  end
-
+  @spec save_response(t(), {ThrottledCache.request_data(), response :: any()}) :: :ok
   def save_response(%__MODULE__{supervisors: %Supervisors{ets: pid}}, {request_data, response}) do
     ETS.save_response({request_data, response}, pid)
   end
@@ -210,6 +193,23 @@ defmodule BirdSong.Services.ThrottledCache.State do
     end
   end
 
+  @spec save_request_to_ets(
+          HTTPoison.Request.t(),
+          GenServer.from(),
+          ThrottledCache.request_data(),
+          BirdSong.Services.ThrottledCache.State.t()
+        ) :: HTTPoison.Request.t()
+  def save_request_to_ets(
+        %HTTPoison.Request{} = request,
+        from,
+        request_data,
+        %__MODULE__{requests: requests}
+      ) do
+    :ets.insert(requests, {request, from: from, request_data: request_data})
+
+    request
+  end
+
   def update_write_config(%__MODULE__{} = state, write_to_disk?) do
     case write_to_disk? do
       true ->
@@ -221,7 +221,20 @@ defmodule BirdSong.Services.ThrottledCache.State do
     |> Map.replace!(:write_responses_to_disk?, write_to_disk?)
   end
 
-  def write_to_disk?(%__MODULE__{write_responses_to_disk?: write_to_disk?}), do: write_to_disk?
+  def write_to_disk?(
+        %__MODULE__{write_responses_to_disk?: false},
+        _response
+      ),
+      do: false
+
+  def write_to_disk?(
+        %__MODULE__{write_responses_to_disk?: true, service: service},
+        response
+      ) do
+    service
+    |> Service.module()
+    |> apply(:successful_response?, [response])
+  end
 
   def data_folder_path(%__MODULE__{data_folder_path: "" <> data_folder_path}) do
     data_folder_path
@@ -243,6 +256,24 @@ defmodule BirdSong.Services.ThrottledCache.State do
       end
 
     Map.replace!(state, :data_file_instance, pid)
+  end
+
+  defp ensure_throttler_started(name) when is_atom(name) do
+    case GenServer.whereis(name) do
+      nil -> raise RequestThrottler.NotStartedError.exception(name: name)
+      pid -> pid
+    end
+  end
+
+  defp ensure_throttler_started(pid) when is_pid(pid), do: pid
+
+  @spec get_request_from_ets(t(), RequestThrottler.Response.t()) :: request_ets_item()
+  defp get_request_from_ets(
+         %__MODULE__{requests: requests},
+         %RequestThrottler.Response{request: request}
+       ) do
+    [{^request, from: from, request_data: request_data}] = :ets.take(requests, request)
+    %{from: from, request_data: request_data}
   end
 
   @spec service(t()) :: Service.t()
@@ -280,6 +311,19 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Map.put(message, :response, response)
   end
 
+  @spec maybe_write_to_disk(
+          state :: State.t(),
+          response :: Ebird.Recordings.raw_response() | RequestThrottler.Response.t(),
+          request :: any()
+        ) :: RequestThrottler.Response.t() | Ebird.Recordings.raw_response()
+  def maybe_write_to_disk(%__MODULE__{} = state, response, request) do
+    if write_to_disk?(state, response) do
+      write_to_disk(state, response, request)
+    end
+
+    response
+  end
+
   @spec default_message(Service.t()) :: %{module: atom(), time: DateTime.t()}
   defp default_message(%Service{module: module}) do
     %{
@@ -310,9 +354,47 @@ defmodule BirdSong.Services.ThrottledCache.State do
     log
   end
 
+  @type response() :: {:ok, any()} | {:error, any()}
+
+  @spec parse_and_save_response(t(), response(), ThrottledCache.request_data()) :: response()
+  defp parse_and_save_response(%__MODULE__{} = state, response, request_data) do
+    parsed = parse_response(state, response, request_data)
+    save_response(state, {request_data, parsed})
+
+    parsed
+  end
+
+  defp parse_response(%__MODULE__{service: service}, {:ok, json}, request_data) do
+    parsed =
+      service
+      |> Service.response_module()
+      |> apply(:parse, [json, request_data])
+
+    {:ok, parsed}
+  end
+
+  defp parse_response(%__MODULE__{}, {:error, error}, _) do
+    {:error, error}
+  end
+
+  defp send_response(
+         %__MODULE__{} = state,
+         %RequestThrottler.Response{
+           response: response
+         },
+         {request_data, from}
+       ) do
+    GenServer.reply(
+      from,
+      parse_and_save_response(state, response, request_data)
+    )
+  end
+
   @spec start_ets(t()) :: map
   defp start_ets(%__MODULE__{} = state) do
-    Map.update!(state, :supervisors, &do_start_ets(&1, state))
+    state
+    |> Map.replace!(:requests, __MODULE__ |> Module.concat(:RequestsETS) |> :ets.new([]))
+    |> Map.update!(:supervisors, &do_start_ets(&1, state))
   end
 
   @spec do_start_ets(Supervisors.t(), t()) :: Supervisors.t()
@@ -344,4 +426,29 @@ defmodule BirdSong.Services.ThrottledCache.State do
        )
        when is_known_service(service_module) and is_pid(service_pid) and ets_name !== nil,
        do: state
+
+  @spec write_to_disk(
+          t(),
+          RequestThrottler.Response.t(),
+          TC.request_data()
+        ) ::
+          :ok | {:error, any()}
+  def write_to_disk(
+        %__MODULE__{
+          data_file_instance: instance,
+          service: service
+        },
+        %RequestThrottler.Response{response: response},
+        request
+      )
+      when is_pid(instance) do
+    DataFile.write(
+      %DataFile.Data{
+        request: request,
+        response: response,
+        service: service
+      },
+      instance
+    )
+  end
 end

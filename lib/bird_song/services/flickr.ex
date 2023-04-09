@@ -3,7 +3,8 @@ defmodule BirdSong.Services.Flickr do
     base_url: "https://www.flickr.com",
     data_folder_path: "data/images/flickr",
     ets_opts: [],
-    ets_name: :flickr_cache
+    ets_name: :flickr_cache,
+    throttler: BirdSong.Services.RequestThrottler.Flickr
 
   alias BirdSong.{
     Bird,
