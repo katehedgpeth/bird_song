@@ -49,9 +49,13 @@ defmodule BirdSongWeb.QuizLive.HTML do
       <div class="bg-slate-100 p-10 w-full">
         <%= show_answer(assigns) %>
       </div>
-      <%= show_image(assigns) %>
+      <div class="flex space-x-10">
+        <%= show_image(assigns) %>
+        <%= show_possible_birds(assigns) %>
+      </div>
       <%= show_recording_details(assigns) %>
       <%= show_quiz_details(assigns) %>
+      <%= filters(assigns) %>
     </div>
     """
   end
@@ -135,19 +139,33 @@ defmodule BirdSongWeb.QuizLive.HTML do
       HTML.Tag.content_tag(:h3, "Limit to these groups (optional):"),
       HTML.Tag.content_tag(
         :div,
-        [
-          Enum.map(categories, &group_filter_button/1)
-        ],
-        class: "flex flex-wrap"
+        Enum.map(categories, &group_filter_button/1),
+        class: "flex flex-wrap space-x-3"
       )
     ])
   end
 
   defp show_image(assigns) do
     ~H"""
-    <%= image(assigns) %>
-    <%= image_button(assigns) %>
+    <div class="flex-none">
+      <%= image(assigns) %>
+      <%= image_button(assigns) %>
+    </div>
     """
+  end
+
+  defp show_possible_birds(assigns) do
+    HTML.Tag.content_tag(:div, [
+      HTML.Tag.content_tag(:h3, "Possible Birds:"),
+      HTML.Tag.content_tag(
+        :div,
+        assigns
+        |> Map.fetch!(:quiz)
+        |> Map.fetch!(:birds)
+        |> Enum.map(&HTML.Tag.content_tag(:div, &1.common_name, class: "btn btn-outline btn-xs")),
+        class: "flex flex-wrap space-x-2 space-y-1 justify-start"
+      )
+    ])
   end
 
   defp show_recording_details(%{
