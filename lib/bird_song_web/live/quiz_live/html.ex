@@ -38,7 +38,10 @@ defmodule BirdSongWeb.QuizLive.HTML do
             HTML.Tag.content_tag(:span, " (can be city, state, or country)", class: "italic")
           ])
         %>
-        <%= HTML.Form.text_input q, :region, "phx-debounce": 3, class: @text_input_class %>
+        <div class="flex">
+          <%= HTML.Form.text_input q, :region, "phx-debounce": 3, class: @text_input_class %>
+          <%= HTML.Tag.content_tag(:button, "Set region", type: :button, "phx-click": "set_region", class: "btn") %>
+        </div>
       </div>
       <%= show_group_filter_buttons(assigns) %>
 

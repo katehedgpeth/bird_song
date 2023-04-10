@@ -13,6 +13,11 @@ defmodule BirdSongWeb.QuizLive.Services do
   def get_region_species_codes(%Socket{} = socket) do
     socket
     |> get_region()
+    |> do_get_region_species_codes(socket)
+  end
+
+  defp do_get_region_species_codes({:ok, "" <> region}, socket) do
+    region
     |> Ebird.RegionSpeciesCodes.get_codes(get_server(socket, :region_species_codes))
     |> case do
       {:ok, %Ebird.RegionSpeciesCodes.Response{codes: codes}} ->
@@ -21,6 +26,14 @@ defmodule BirdSongWeb.QuizLive.Services do
       {:error, _} ->
         socket
     end
+  end
+
+  defp do_get_region_species_codes({:error, :not_set}, socket) do
+    socket
+  end
+
+  defp get_birds_from_codes(%Socket{} = socket, []) do
+    socket
   end
 
   defp get_birds_from_codes(%Socket{} = socket, ["" <> _ | _] = species_codes) do
@@ -42,7 +55,11 @@ defmodule BirdSongWeb.QuizLive.Services do
     end
   end
 
-  defp get_region(%Socket{assigns: %{quiz: %Quiz{region: region}}}), do: region
+  defp get_region(%Socket{assigns: assigns}) do
+    assigns
+    |> Map.fetch!(:quiz)
+    |> Quiz.get_region()
+  end
 
   defp get_server(%Socket{assigns: %{services: %Services{} = services}}, service_name)
        when is_atom(service_name) do

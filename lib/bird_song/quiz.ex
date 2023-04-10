@@ -1,6 +1,16 @@
 defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
+  alias Ecto.InvalidChangesetError
+  alias Ecto.Changeset
+
+  @type t() :: %__MODULE__{
+          birds: [String.t()],
+          correct_answers: integer(),
+          incorrect_answers: integer(),
+          quiz_length: integer(),
+          region: String.t() | nil
+        }
 
   # region is temporarily hard-coded; future version will take user input
   @default_region "US-NC-067"
@@ -10,15 +20,35 @@ defmodule BirdSong.Quiz do
     field :correct_answers, :integer, default: 0
     field :incorrect_answers, :integer, default: 0
     field :quiz_length, :integer, default: 10
-    field :region, :string, default: "US-NC-067"
+    field :region, :string
+    # , default: "US-NC-067"
 
     # timestamps()
   end
 
+  def apply_valid_changes(%Changeset{
+        valid?: true,
+        changes: %{} = changes,
+        data: %__MODULE__{} = data
+      }) do
+    Map.merge(data, changes)
+  end
+
+  def apply_valid_changes(%Changeset{valid?: false} = changeset) do
+    changeset
+  end
+
+  def apply_valid_changes!(%Changeset{} = changeset) do
+    case apply_valid_changes(changeset) do
+      %__MODULE__{} = quiz -> quiz
+      %Changeset{valid?: false} -> raise InvalidChangesetError.exception(changeset: changeset)
+    end
+  end
+
   @doc false
-  def changeset(quiz, attrs) do
+  def changeset(%__MODULE__{} = quiz, %{} = changes) do
     quiz
-    |> cast(attrs, [:correct_answers, :incorrect_answers, :region, :quiz_length, :birds])
+    |> cast(changes, [:correct_answers, :incorrect_answers, :region, :quiz_length, :birds])
     |> validate_required([:region, :quiz_length])
   end
 
@@ -39,5 +69,23 @@ defmodule BirdSong.Quiz do
       |> Enum.random(),
       bird_id
     )
+  end
+
+  @spec get_region(t()) ::
+          {:error, :not_set} | {:ok, binary}
+  def get_region(%__MODULE__{region: "" <> region}) do
+    {:ok, region}
+  end
+
+  def get_region(%__MODULE__{region: nil}) do
+    {:error, :not_set}
+  end
+
+  def get_region(%Changeset{valid?: false, data: data}), do: get_region(data)
+
+  def get_region(%Changeset{} = changeset) do
+    changeset
+    |> apply_valid_changes!()
+    |> get_region()
   end
 end
