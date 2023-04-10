@@ -30,6 +30,9 @@ defmodule BirdSongWeb.QuizLive.EtsTables do
     Phoenix.LiveView.assign_new(socket, :ets_tables, fn -> ensure_started(server) end)
   end
 
+  def get_ets_server_name(%{"ets_server" => "" <> name}), do: String.to_existing_atom(name)
+  def get_ets_server_name(%{}), do: __MODULE__
+
   #########################################################
   #########################################################
   ##

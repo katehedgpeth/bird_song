@@ -27,8 +27,16 @@ defmodule BirdSongWeb.QuizLive.New do
     disabled:italic
   )
 
-  def mount(_params, session, socket) do
-    {:ok, assign_defaults(socket, session)}
+  def mount(params, session, socket) do
+    {:ok,
+     socket
+     |> Assign.assign_session_id(session)
+     |> EtsTables.assign_tables(EtsTables.get_ets_server_name(params))
+     |> EtsTables.Assigns.lookup_session()
+     |> case do
+       {:ok, assigns} -> %{socket | assigns: assigns}
+       {:error, {:not_found, _}} -> assign_defaults(socket, session)
+     end}
   end
 
   def render(assigns), do: QuizLive.HTML.render(assigns, :new)

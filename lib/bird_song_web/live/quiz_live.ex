@@ -20,7 +20,7 @@ defmodule BirdSongWeb.QuizLive do
     socket =
       socket
       |> Assign.assign_session_id(session)
-      |> EtsTables.assign_tables(get_ets_server_name(params))
+      |> EtsTables.assign_tables(EtsTables.get_ets_server_name(params))
       |> EtsTables.Assigns.lookup_session()
       |> case do
         {:ok, %{} = assigns} ->
@@ -68,7 +68,4 @@ defmodule BirdSongWeb.QuizLive do
     |> assign(:show_recording_details?, false)
     |> assign(:show_image?, false)
   end
-
-  defp get_ets_server_name(%{"ets_server" => "" <> name}), do: String.to_existing_atom(name)
-  defp get_ets_server_name(%{}), do: EtsTables
 end
