@@ -25,6 +25,7 @@ defmodule BirdSongWeb.QuizLive do
       |> case do
         {:ok, %{} = assigns} ->
           %{socket | assigns: assigns}
+          |> assign_next_bird()
 
         {:error, {:not_found, _}} ->
           LiveView.push_redirect(socket, to: "/quiz/new")
@@ -36,16 +37,13 @@ defmodule BirdSongWeb.QuizLive do
   def handle_info(message, socket),
     do: MessageHandlers.handle_info(message, socket)
 
-  def handle_call(message, from, socket),
-    do: MessageHandlers.handle_call(message, from, socket)
-
   def handle_event(message, payload, socket),
     do: EventHandlers.handle_event(message, payload, socket)
 
   def render(assigns) do
     Enum.each(assigns[:render_listeners], &send(&1, {:render, assigns}))
 
-    HTML.render(assigns)
+    HTML.render(assigns, :question)
   end
 
   def assign_next_bird(

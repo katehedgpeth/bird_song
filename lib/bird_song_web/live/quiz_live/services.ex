@@ -16,6 +16,12 @@ defmodule BirdSongWeb.QuizLive.Services do
     |> do_get_region_species_codes(socket)
   end
 
+  defp build_species_category_dict(birds_by_category) do
+    birds_by_category
+    |> Enum.map(fn {category, _} -> {category, false} end)
+    |> Enum.into(%{})
+  end
+
   defp do_get_region_species_codes({:ok, "" <> region}, socket) do
     region
     |> Ebird.RegionSpeciesCodes.get_codes(get_server(socket, :region_species_codes))
@@ -41,9 +47,12 @@ defmodule BirdSongWeb.QuizLive.Services do
     |> Bird.get_many_by_species_code()
     |> case do
       [%Bird{} | _] = birds ->
+        by_category = Enum.group_by(birds, &Bird.family_name/1)
+
         socket
         |> Phoenix.LiveView.assign(:birds, Enum.shuffle(birds))
-        |> QuizLive.assign_next_bird()
+        |> Phoenix.LiveView.assign(:species_categories, build_species_category_dict(by_category))
+        |> Phoenix.LiveView.assign(:birds_by_category, by_category)
 
       [] ->
         socket
@@ -57,7 +66,7 @@ defmodule BirdSongWeb.QuizLive.Services do
 
   defp get_region(%Socket{assigns: assigns}) do
     assigns
-    |> Map.fetch!(:quiz)
+    |> Map.fetch!(:filters)
     |> Quiz.get_region()
   end
 

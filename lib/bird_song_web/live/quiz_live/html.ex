@@ -2,30 +2,65 @@ defmodule BirdSongWeb.QuizLive.HTML do
   use Phoenix.HTML
   use Phoenix.LiveView
 
-  alias Ecto.Changeset
   alias Phoenix.HTML
   alias BirdSong.{Bird, Services.Ebird, Services.Flickr}
 
   def render(assigns) do
     ~H"""
+    &QuizLive.HTML.render/1 should not have been called
+    """
+  end
+
+  def render(assigns, page) do
+    ~H"""
     <div class="flex items-center flex-col">
-      <%= inner_content(assigns) %>
+      <%= apply(__MODULE__, page, [assigns]) %>
     </div>
     """
   end
 
-  def inner_content(%{quiz: %Changeset{}} = assigns), do: new(assigns)
-  def inner_content(%{current: %{bird: nil}} = assigns), do: loading(assigns)
-
-  def inner_content(%{current: %{bird: %Bird{}}} = assigns),
-    do: question(assigns)
+  defp group_filter_button({group_name, selected?}) do
+    HTML.Tag.content_tag(:button, group_name,
+      type: :button,
+      value: group_name,
+      "phx-click": "set_species_category",
+      class: "btn btn-xs #{if selected?, do: "", else: "btn-outline"}"
+    )
+  end
 
   def new(assigns) do
     ~H"""
     <%= page_title("How well do you know your bird songs?") %>
+    <%= filters(assigns) %>
+    """
+  end
+
+  def question(%{current: %{bird: nil}} = assigns), do: loading(assigns)
+
+  def question(assigns) do
+    ~H"""
+    <%= page_title("What bird do you hear?") %>
+    <div class="flex gap-10 flex-col">
+      <%= play_audio(assigns) %>
+      <div class="flex justify-center gap-5">
+        <button phx-click="change_recording" class="btn btn-outline">Hear a different recording of this bird</button>
+        <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
+      </div>
+      <div class="bg-slate-100 p-10 w-full">
+        <%= show_answer(assigns) %>
+      </div>
+      <%= show_image(assigns) %>
+      <%= show_recording_details(assigns) %>
+      <%= show_quiz_details(assigns) %>
+    </div>
+    """
+  end
+
+  defp filters(assigns) do
+    ~H"""
     <.form
       let={q}
-      for={@quiz}
+      for={@filters}
       id="settings"
       phx-change="validate"
       phx-submit="start"
@@ -43,28 +78,12 @@ defmodule BirdSongWeb.QuizLive.HTML do
           <%= HTML.Tag.content_tag(:button, "Set region", type: :button, "phx-click": "set_region", class: "btn") %>
         </div>
       </div>
-      <%= show_group_filter_buttons(assigns) %>
+      <div>
+        <%= show_group_filter_buttons(assigns) %>
+      </div>
 
       <%= HTML.Form.submit "Let's go!", class: "btn btn-primary block w-full" %>
     </.form>
-    """
-  end
-
-  def question(assigns) do
-    ~H"""
-    <%= page_title("What bird do you hear?") %>
-    <div class="flex gap-10 flex-col">
-      <%= play_audio(assigns) %>
-      <div class="flex justify-center gap-5">
-        <button phx-click="change_recording" class="btn btn-outline">Hear a different recording of this bird</button>
-        <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
-      </div>
-      <div class="bg-slate-100 p-10 w-full">
-        <%= show_answer(assigns) %>
-      </div>
-      <%= show_image(assigns) %>
-      <%= show_recording_details(assigns) %>
-    </div>
     """
   end
 
@@ -111,8 +130,17 @@ defmodule BirdSongWeb.QuizLive.HTML do
     ""
   end
 
-  defp show_group_filter_buttons(%{}) do
-    "GROUP FILTER BUTTONS HERE"
+  defp show_group_filter_buttons(%{species_categories: categories}) do
+    HTML.Tag.content_tag(:div, [
+      HTML.Tag.content_tag(:h3, "Limit to these groups (optional):"),
+      HTML.Tag.content_tag(
+        :div,
+        [
+          Enum.map(categories, &group_filter_button/1)
+        ],
+        class: "flex flex-wrap"
+      )
+    ])
   end
 
   defp show_image(assigns) do
@@ -136,6 +164,14 @@ defmodule BirdSongWeb.QuizLive.HTML do
   defp show_recording_details(assigns) do
     ~H"""
     <button phx-click="show_recording_details" class="btn btn-outline">Show Recording Details</button>
+    """
+  end
+
+  defp show_quiz_details(assigns) do
+    ~H"""
+    <div>Total possible birds:  <%= length(@birds) %></div>
+    <div>Selected birds: <%= length(@quiz.birds) %></div>
+
     """
   end
 

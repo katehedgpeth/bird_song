@@ -5,6 +5,7 @@ defmodule BirdSongWeb.QuizLive.Current do
 
   alias BirdSong.{
     Bird,
+    Quiz,
     Services.Flickr,
     Services.Flickr.Photo,
     Services.Ebird.Recordings.Recording,
@@ -27,12 +28,11 @@ defmodule BirdSongWeb.QuizLive.Current do
 
   def assign_current(%Socket{} = socket) do
     %__MODULE__{bird: nil} = get_current(socket)
-    birds = QuizLive.Assign.get_assign(socket, :birds)
-    [%Bird{} = bird | _] = birds
+    %Quiz{birds: birds} = QuizLive.Assign.get_assign(socket, :quiz)
+    bird = Enum.random(birds)
 
     socket
     |> assign(:current, %__MODULE__{bird: bird})
-    |> assign(:birds, Enum.shuffle(birds))
     |> update_resource(:recording)
     |> update_resource(:image)
     |> case do

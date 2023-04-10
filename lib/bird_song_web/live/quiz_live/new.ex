@@ -31,7 +31,7 @@ defmodule BirdSongWeb.QuizLive.New do
     {:ok, assign_defaults(socket, session)}
   end
 
-  def render(assigns), do: QuizLive.HTML.render(assigns)
+  def render(assigns), do: QuizLive.HTML.render(assigns, :new)
 
   def assign_defaults(%Socket{} = socket, session) do
     socket
@@ -42,7 +42,7 @@ defmodule BirdSongWeb.QuizLive.New do
     |> QuizLive.reset_state()
     |> assign_new(:birds, fn -> [] end)
     |> assign_new(:render_listeners, fn -> [] end)
-    |> assign_new(:quiz, &Quiz.default_changeset/0)
+    |> assign_new(:filters, &Quiz.default_changeset/0)
     |> assign_new(:services, fn -> Services.ensure_started() end)
     |> assign_new(:asset_cdn, fn -> @asset_cdn end)
     |> EtsTables.assign_tables()
@@ -50,9 +50,6 @@ defmodule BirdSongWeb.QuizLive.New do
 
   def handle_info(message, socket),
     do: MessageHandlers.handle_info(message, socket)
-
-  def handle_call(message, from, socket),
-    do: MessageHandlers.handle_call(message, from, socket)
 
   def handle_event(message, payload, socket),
     do: EventHandlers.handle_event(message, payload, socket)

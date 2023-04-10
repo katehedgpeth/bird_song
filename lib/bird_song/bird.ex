@@ -49,6 +49,10 @@ defmodule BirdSong.Bird do
           has_images?: boolean()
         }
 
+  def family_name(%__MODULE__{family: %Family{common_name: family_name}}) do
+    family_name
+  end
+
   @spec get_by_sci_name(String.t()) :: {:ok, Bird.t()} | {:error, {:not_found, String.t()}}
   def get_by_sci_name("" <> sci_name) do
     case BirdSong.Repo.get_by(__MODULE__, sci_name: sci_name) do
@@ -69,7 +73,8 @@ defmodule BirdSong.Bird do
   def get_many_by_species_code(["" <> _ | _] = species_codes) do
     BirdSong.Repo.all(
       from b in __MODULE__,
-        where: b.species_code in ^species_codes
+        where: b.species_code in ^species_codes,
+        preload: [:family, :order]
     )
   end
 
