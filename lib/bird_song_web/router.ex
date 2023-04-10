@@ -18,6 +18,7 @@ defmodule BirdSongWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :index
+    live "/quiz/new", QuizLive.New
     live "/quiz", QuizLive
   end
 

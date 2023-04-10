@@ -1,5 +1,7 @@
 defmodule BirdSongWeb.QuizLive.EventHandlers do
   use BirdSongWeb.QuizLive.Assign
+  alias Phoenix.LiveView
+  alias BirdSongWeb.QuizLive.EtsTables
   alias Ecto.Changeset
   alias BirdSong.Quiz
   alias BirdSongWeb.{QuizLive, QuizLive.Current}
@@ -20,7 +22,11 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
       %Quiz{} = quiz ->
         Process.send(self(), :get_region_species_codes, [])
 
-        {:noreply, assign(socket, :quiz, quiz)}
+        {:noreply,
+         socket
+         |> assign(:quiz, quiz)
+         |> EtsTables.Assigns.remember_session()
+         |> LiveView.push_redirect(to: "/quiz")}
 
       %Changeset{} = changeset ->
         {:noreply, assign(socket, :quiz, changeset)}

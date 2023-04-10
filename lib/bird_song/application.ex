@@ -14,6 +14,10 @@ defmodule BirdSong.Application do
   ]
 
   @throttlers [
+    {RequestThrottlers.MacaulayLibrary,
+     base_url: "https://search.macaulaylibrary.org",
+     name: RequestThrottlers.MacaulayLibrary,
+     scraper: BirdSong.Services.Ebird.Recordings.Playwright},
     Supervisor.child_spec(
       {RequestThrottler,
        [
@@ -22,18 +26,6 @@ defmodule BirdSong.Application do
        ]},
       id: :ebird_request_throttler
     ),
-    {RequestThrottlers.MacaulayLibrary,
-     base_url: "https://search.macaulaylibrary.org",
-     name: RequestThrottlers.MacaulayLibrary,
-     scraper: BirdSong.Services.Ebird.Recordings.Playwright},
-    # Supervisor.child_spec(
-    #   {RequestThrottler,
-    #    [
-    #      base_url: "https://search.macaulaylibrary.org",
-    #      name: RequestThrottler.MacaulayLibrary
-    #    ]},
-    #   id: :macaulay_request_throttler
-    # ),
     Supervisor.child_spec(
       {RequestThrottler,
        [
@@ -61,6 +53,7 @@ defmodule BirdSong.Application do
         @throttlers,
         @services,
         [
+          BirdSongWeb.QuizLive.EtsTables,
           # Start the Telemetry supervisor
           BirdSongWeb.Telemetry,
           # Start the PubSub system
