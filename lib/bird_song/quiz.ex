@@ -23,7 +23,7 @@ defmodule BirdSong.Quiz do
   end
 
   def default_changeset() do
-    changeset(%__MODULE__{region: @default_region}, %{})
+    changeset(%__MODULE__{}, %{})
   end
 
   def add_bird(%__MODULE__{} = quiz, "" <> bird_id) do

@@ -2,6 +2,7 @@ defmodule BirdSong.Bird do
   use Ecto.Schema
   import Ecto.Changeset
   import Ecto.Query, only: [from: 2]
+  alias BirdSong.Services.Ebird.RegionSpeciesCodes
   alias BirdSong.{Family, Order}
 
   @cast_keys [
@@ -63,12 +64,19 @@ defmodule BirdSong.Bird do
     )
   end
 
+  def get_many_by_species_code([]), do: []
+
   def get_many_by_species_code(["" <> _ | _] = species_codes) do
     BirdSong.Repo.all(
       from b in __MODULE__,
         where: b.species_code in ^species_codes
     )
   end
+
+  def get_many_by_species_code({:ok, %RegionSpeciesCodes.Response{codes: codes}}),
+    do: {:ok, get_many_by_species_code(codes)}
+
+  def get_many_by_species_code({:error, error}), do: {:error, error}
 
   def update(%__MODULE__{} = bird, attrs) do
     bird

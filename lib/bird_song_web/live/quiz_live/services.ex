@@ -32,12 +32,13 @@ defmodule BirdSongWeb.QuizLive.Services do
         |> Phoenix.LiveView.assign(:birds, Enum.shuffle(birds))
         |> QuizLive.assign_next_bird()
 
-        # [] ->
-        #   socket
-        #   |> Phoenix.LiveView.put_flash(
-        #     :warning,
-        #     "Sorry, there do not appear to be any known birds in that region. Please choose a different or broader region."
-        #   )
+      [] ->
+        socket
+        |> Phoenix.LiveView.assign(:birds, [])
+        |> Phoenix.LiveView.put_flash(
+          :warning,
+          "Sorry, there do not appear to be any known birds in that region. Please choose a different or broader region."
+        )
     end
   end
 

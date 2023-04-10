@@ -38,8 +38,9 @@ defmodule BirdSongWeb.QuizLive.HTML do
             HTML.Tag.content_tag(:span, " (can be city, state, or country)", class: "italic")
           ])
         %>
-        <%= HTML.Form.text_input q, :region, disabled: true, class: @text_input_class %>
+        <%= HTML.Form.text_input q, :region, "phx-debounce": 3, class: @text_input_class %>
       </div>
+      <%= show_group_filter_buttons(assigns) %>
 
       <%= HTML.Form.submit "Let's go!", class: "btn btn-primary block w-full" %>
     </.form>
@@ -102,6 +103,14 @@ defmodule BirdSongWeb.QuizLive.HTML do
     do: ~H"""
     <button phx-click="show_answer" class="btn btn-outline mx-auto block">Show Answer</button>
     """
+
+  defp show_group_filter_buttons(%{birds: []}) do
+    ""
+  end
+
+  defp show_group_filter_buttons(%{}) do
+    "GROUP FILTER BUTTONS HERE"
+  end
 
   defp show_image(assigns) do
     ~H"""

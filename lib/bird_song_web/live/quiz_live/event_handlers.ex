@@ -19,7 +19,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     end
   end
 
-  def handle_event("start", %{}, %Socket{} = socket) do
+  def handle_event("start", %{}, %Socket{assigns: %{birds: []}} = socket) do
     Process.send(self(), :get_region_species_codes, [])
 
     {:noreply,
@@ -31,6 +31,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   end
 
   def handle_event("validate", %{"quiz" => changes}, %Socket{assigns: %{quiz: quiz}} = socket) do
+    send(self(), :get_region_species_codes)
     {:noreply, assign(socket, :quiz, Quiz.changeset(quiz, changes))}
   end
 
