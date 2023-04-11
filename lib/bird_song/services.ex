@@ -64,7 +64,7 @@ defmodule BirdSong.Services do
     Enum.reduce(
       [:images, :recordings, :observations, :region_species_codes],
       %__MODULE__{},
-      fn key, state -> Map.update!(state, key, &Service.ensure_started/1) end
+      fn key, state -> Map.update!(state, key, &Service.ensure_started!/1) end
     )
   end
 
