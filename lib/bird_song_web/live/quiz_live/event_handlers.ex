@@ -71,8 +71,16 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     {:noreply, Current.update_image(socket)}
   end
 
-  defp filter_birds({category_name, birds}, acc, selected_categories) do
-    case Map.fetch!(selected_categories, category_name) do
+  defp filter_birds(assigns, selected_categories) do
+    assigns
+    |> Map.fetch!(:birds_by_category)
+    |> Enum.reduce([], &do_filter_birds(&1, &2, selected_categories))
+    |> List.flatten()
+    |> Enum.sort_by(& &1.common_name, :asc)
+  end
+
+  defp do_filter_birds({category_name, birds}, acc, selected_categories) do
+    case MapSet.member?(selected_categories, category_name) do
       true -> [birds | acc]
       false -> acc
     end
@@ -82,13 +90,16 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   defp get_quiz(%Socket{assigns: %{filters: %Changeset{data: %Quiz{} = quiz}}}), do: quiz
 
   defp set_quiz_birds(%Socket{assigns: assigns} = socket, %Quiz{} = quiz) do
-    selected_categories = Map.fetch!(assigns, :species_categories)
-    by_category = Map.fetch!(assigns, :birds_by_category)
-
     selected_birds =
-      by_category
-      |> Enum.reduce([], &filter_birds(&1, &2, selected_categories))
-      |> List.flatten()
+      assigns
+      |> Map.fetch!(:species_categories)
+      |> Enum.filter(&elem(&1, 1))
+      |> Enum.map(&elem(&1, 0))
+      |> case do
+        [] -> Map.fetch!(assigns, :birds)
+        [_ | _] = selected -> filter_birds(assigns, MapSet.new(selected))
+      end
+      |> Enum.sort_by(& &1.common_name, :asc)
 
     assign(socket, :quiz, %{quiz | birds: selected_birds})
   end

@@ -19,6 +19,12 @@ defmodule BirdSongWeb.QuizLive.HTML do
     """
   end
 
+  defp group_filter_buttons(categories) do
+    categories
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(&group_filter_button/1)
+  end
+
   defp group_filter_button({group_name, selected?}) do
     HTML.Tag.content_tag(:button, group_name,
       type: :button,
@@ -139,7 +145,7 @@ defmodule BirdSongWeb.QuizLive.HTML do
       HTML.Tag.content_tag(:h3, "Limit to these groups (optional):"),
       HTML.Tag.content_tag(
         :div,
-        Enum.map(categories, &group_filter_button/1),
+        group_filter_buttons(categories),
         class: "flex flex-wrap space-x-3"
       )
     ])

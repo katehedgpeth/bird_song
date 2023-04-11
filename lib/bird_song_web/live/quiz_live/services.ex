@@ -8,8 +8,6 @@ defmodule BirdSongWeb.QuizLive.Services do
     Services.Ebird
   }
 
-  alias BirdSongWeb.QuizLive
-
   def get_region_species_codes(%Socket{} = socket) do
     socket
     |> get_region()

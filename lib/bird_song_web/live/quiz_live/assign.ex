@@ -16,4 +16,8 @@ defmodule BirdSongWeb.QuizLive.Assign do
   def assign_session_id(%Socket{} = socket, %{"_csrf_token" => "" <> session_id}) do
     Phoenix.LiveView.assign(socket, :session_id, session_id)
   end
+
+  def assign_session_id(%Socket{} = socket, %{}) do
+    LiveView.assign(socket, :session_id, nil)
+  end
 end

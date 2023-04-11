@@ -3,9 +3,11 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Assigns do
   alias Phoenix.LiveView.Socket
 
   @spec lookup_session(Socket.t()) :: {:error, {:not_found, String.t()}} | {:ok, Map.t()}
-  def lookup_session(%Socket{} = socket) do
-    session_id = get_session_id(socket)
+  def lookup_session(%Socket{assigns: %{session_id: nil}}) do
+    {:error, {:not_found, nil}}
+  end
 
+  def lookup_session(%Socket{assigns: %{session_id: "" <> session_id}} = socket) do
     socket
     |> get_table()
     |> :ets.lookup(session_id)
@@ -32,8 +34,8 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Assigns do
     socket
   end
 
-  defp get_session_id(%Socket{assigns: assigns}) do
-    Map.fetch!(assigns, :session_id)
+  defp get_session_id(%Socket{assigns: %{session_id: "" <> session_id}}) do
+    session_id
   end
 
   defp get_table(%Socket{assigns: assigns}),
