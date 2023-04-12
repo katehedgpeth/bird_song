@@ -104,13 +104,13 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   def handle_info(
-        {:DOWN, _, :port, port, :normal},
-        %__MODULE__{port: port} = state
+        {:DOWN, _, :port, _port, :normal},
+        %__MODULE__{} = state
       ) do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
-  def handle_info({:EXIT, port, :normal}, %__MODULE__{port: port} = state) do
+  def handle_info({:EXIT, _port, :normal}, %__MODULE__{} = state) do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
@@ -197,6 +197,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
     Port.monitor(port)
     Port.command(port, "connect")
+    Helpers.log([message: "port_started", port: port], __MODULE__, :warning)
     %{state | port: port}
   end
 
@@ -256,6 +257,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     [data: message]
     |> UnknownMessageError.exception()
     |> handle_error(state)
+  end
+
+  defp handle_error(error, %__MODULE__{reply_to: nil}) do
+    raise error
   end
 
   defp handle_error(error, %__MODULE__{} = state) do
