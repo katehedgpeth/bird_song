@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.BirdSong.Record do
+defmodule Mix.Tasks.BirdSong.RecordData do
   use Mix.Task
 
   @moduledoc "Fetch missing recordings and images"
@@ -6,7 +6,7 @@ defmodule Mix.Tasks.BirdSong.Record do
 
   @requirements ["app.config", "app.start"]
 
-  def run(args) do
-    BirdSong.Data.Recorder.record(args, BirdSong.Services.ensure_started())
+  def run(args, services \\ BirdSong.Services.ensure_started()) do
+    BirdSong.Data.Recorder.record(args, services)
   end
 end

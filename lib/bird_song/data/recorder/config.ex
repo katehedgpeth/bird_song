@@ -1,5 +1,11 @@
 defmodule BirdSong.Data.Recorder.Config do
-  alias BirdSong.{Services, Services.Helpers, Services.Ebird.RegionSpeciesCodes, Services.Service}
+  alias BirdSong.{
+    Bird,
+    Services,
+    Services.Helpers,
+    Services.Ebird.RegionSpeciesCodes,
+    Services.Service
+  }
 
   defstruct [
     :region_species_codes,

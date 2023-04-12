@@ -36,8 +36,10 @@ The UI is a bit rough at the moment - I am focused more on functionality than lo
 - [ ] use XC + Ebird for recordings?
 - [ ] use Ebird for images? (pro - better images, con - no API)
 - [ ] fix broken tests 
+  - [ ] `quiz_live_test`
   - [ ] `services_test`
-  - [ ] `record_data_test`
+  - [x] `record_data_test`
+  - [x] `count_data_test`
 - [ ] use struct for assigns in LiveView
 - [x] show recording attribution
 - [x] filter by species group

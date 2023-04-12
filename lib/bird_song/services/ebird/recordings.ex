@@ -34,11 +34,6 @@ defmodule BirdSong.Services.Ebird.Recordings do
     }
   end
 
-  @spec successful_response?({:ok, [Map.t()]} | {:error, any()}) :: boolean()
-  def successful_response?({:ok, [%{} | _]}), do: true
-  def successful_response?({:ok, []}), do: false
-  def successful_response?({:error, _}), do: false
-
   def handle_call(:state, _from, state) do
     {:reply, state, state}
   end

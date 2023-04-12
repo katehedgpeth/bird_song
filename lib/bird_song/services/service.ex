@@ -37,7 +37,7 @@ defmodule BirdSong.Services.Service do
   def data_type(Ebird.Recordings), do: :recordings
   def data_type(Flickr), do: :images
   def data_type(Ebird.Observations), do: :observations
-  def data_type(Ebird.RegionSpeciesCodes), do: :species_codes
+  def data_type(Ebird.RegionSpeciesCodes), do: :region_species_codes
   def data_type(Ebird.Regions), do: :regions
 
   def data_type(module) do
