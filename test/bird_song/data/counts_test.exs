@@ -15,6 +15,8 @@ defmodule BirdSong.Data.CountsTest do
 
   @expected_in_db 300
 
+  setup [:start_throttler]
+
   test "&get/1 raises if the database is empty" do
     assert BirdSong.Repo.all(Bird) === []
     assert_raise Counts.NoBirdsError, fn -> Counts.get(%Services{}, %{}) end
