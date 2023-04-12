@@ -23,15 +23,22 @@ The UI is a bit rough at the moment - I am focused more on functionality than lo
 - track correct answers over time
 - verbal descriptions of distinguishing physical characteristics
 - verbal descriptions of songs & calls
-- filter by specific breeds
+- filter by individual species
 
 ## TODO
-- [ ] :bangbang: Playwright ports are not getting shutting down
+- [ ] :bangbang: Playwright ports are not getting shutting down on exit
+- [ ] use browser location
 - [ ] show image attribution
+- [ ] filter by recently observed birds
+- [ ] filter by recent notable observations in a region
 - [ ] enable user to enter any location by text
+- [ ] filter by individual species
+- [ ] use XC + Ebird for recordings?
+- [ ] use Ebird for images? (pro - better images, con - no API)
 - [ ] fix broken tests 
   - [ ] `services_test`
   - [ ] `record_data_test`
+- [ ] use struct for assigns in LiveView
 - [x] show recording attribution
 - [x] filter by species group
 - [x] enable user to enter any location by code
