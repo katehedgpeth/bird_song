@@ -43,7 +43,9 @@ defmodule BirdSongWeb.QuizLive do
   def render(assigns) do
     Enum.each(assigns[:render_listeners], &send(&1, {:render, assigns}))
 
-    HTML.render(assigns, :question)
+    assigns
+    |> Map.put(:inner_template, &HTML.Question.render/1)
+    |> HTML.render()
   end
 
   def assign_next_bird(

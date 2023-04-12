@@ -10,4 +10,5 @@ defmodule BirdSongWeb.QuizLive.HTML.Recording do
   @callback sonogram(recording(), String.t()) :: img_tag()
   @callback audio_src(recording(), String.t()) :: String.t()
   @callback also_audible(recording()) :: span_tag()
+  @callback attribution(recording()) :: Phoenix.HTML.safe()
 end

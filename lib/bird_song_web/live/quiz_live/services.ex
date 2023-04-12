@@ -5,8 +5,14 @@ defmodule BirdSongWeb.QuizLive.Services do
     Bird,
     Quiz,
     Services,
-    Services.Ebird
+    Services.Ebird,
+    Services.Helpers
   }
+
+  @no_birds_error "
+  Sorry, there do not appear to be any known birds in that region.
+  Please choose a different or broader region.
+  "
 
   def get_region_species_codes(%Socket{} = socket) do
     socket
@@ -24,19 +30,23 @@ defmodule BirdSongWeb.QuizLive.Services do
     region
     |> Ebird.RegionSpeciesCodes.get_codes(get_server(socket, :region_species_codes))
     |> case do
+      {:error, _} ->
+        Phoenix.LiveView.put_flash(
+          socket,
+          :error,
+          "We're sorry, but our service is not available at the moment. Please try again later."
+        )
+
+      {:ok, %Ebird.RegionSpeciesCodes.Response{codes: [], region: region}} ->
+        Helpers.log([message: "no_species_codes_returned", region: region], __MODULE__, :warning)
+        Phoenix.LiveView.put_flash(socket, :error, @no_birds_error)
+
       {:ok, %Ebird.RegionSpeciesCodes.Response{codes: codes}} ->
         get_birds_from_codes(socket, codes)
-
-      {:error, _} ->
-        socket
     end
   end
 
   defp do_get_region_species_codes({:error, :not_set}, socket) do
-    socket
-  end
-
-  defp get_birds_from_codes(%Socket{} = socket, []) do
     socket
   end
 
@@ -56,8 +66,8 @@ defmodule BirdSongWeb.QuizLive.Services do
         socket
         |> Phoenix.LiveView.assign(:birds, [])
         |> Phoenix.LiveView.put_flash(
-          :warning,
-          "Sorry, there do not appear to be any known birds in that region. Please choose a different or broader region."
+          :error,
+          @no_birds_error
         )
     end
   end

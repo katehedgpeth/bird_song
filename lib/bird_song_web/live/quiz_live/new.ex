@@ -39,7 +39,15 @@ defmodule BirdSongWeb.QuizLive.New do
      end}
   end
 
-  def render(assigns), do: QuizLive.HTML.render(assigns, :new)
+  def render(assigns) do
+    assigns
+    |> Map.fetch!(:render_listeners)
+    |> Enum.each(&send(&1, {:render, assigns}))
+
+    assigns
+    |> Map.put(:inner_template, &QuizLive.HTML.NewQuiz.render/1)
+    |> QuizLive.HTML.render()
+  end
 
   def assign_defaults(%Socket{} = socket, session) do
     socket

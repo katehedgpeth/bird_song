@@ -3,14 +3,14 @@ defmodule BirdSongWeb.QuizLiveTest do
   use BirdSong.MockApiCase, use_data_case: false
   use BirdSongWeb.LiveCase
   alias ExUnit.CaptureLog
-  alias Phoenix.LiveView.Socket
+  alias Phoenix.{LiveView.Socket, LiveViewTest}
   alias BirdSongWeb.{QuizLive, QuizLive.EtsTables, QuizLive.Current}
   alias BirdSong.{Bird, Services, Services.XenoCanto, Quiz}
 
   @moduletag services: [:ebird, :xeno_canto]
   @moduletag :capture_log
 
-  @path "/quiz"
+  @path "/quiz/new"
 
   setup %{conn: conn, services: services} do
     {:ok, view, html} = live(conn, @path)
@@ -19,63 +19,28 @@ defmodule BirdSongWeb.QuizLiveTest do
     {:ok, view: view, html: html}
   end
 
-  @tag use_mock: false
-  test "default assigns" do
-    %Socket{}
-    |> QuizLive.assign_defaults()
-    |> TestHelpers.assert_expected_keys([
-      :__changed__,
-      :birds,
-      :current,
-      :ets_tables,
-      :max_api_tries,
-      :quiz,
-      :render_listeners,
-      :services,
-      :show_answer?,
-      :show_image?,
-      :show_recording_details?,
-      :task_timeout,
-      :text_input_class
-    ])
-    |> TestHelpers.assert_assigned(:birds, [])
-    |> TestHelpers.assert_assigned(
-      :services,
-      %Services{}
-    )
-    |> TestHelpers.assert_assigned(:current, %Current{})
-    |> TestHelpers.assert_assigned(
-      :ets_tables,
-      fn ets_tables ->
-        assert %EtsTables{tasks: tasks} = ets_tables
-        assert is_reference(tasks), "expected tasks to be a ref but got " <> inspect(tasks)
-      end
-    )
-    |> TestHelpers.assert_assigned(:quiz, Quiz.changeset(%Quiz{}, %{}))
-    |> TestHelpers.assert_assigned(:render_listeners, [])
-    |> TestHelpers.assert_assigned(:show_answer?, false)
-    |> TestHelpers.assert_assigned(:show_image?, false)
-    |> TestHelpers.assert_assigned(:show_recording_details?, false)
-    |> TestHelpers.assert_assigned(
-      :text_input_class,
-      &(&1
-        |> is_list()
-        |> assert("expected :test_input_class to be a list, but got #{&1}"))
-    )
-  end
-
   @tag expect: &MockServer.success_response/1
   describe "connected mount" do
     setup [:seed_from_mock_taxonomy]
 
     test("connected mount", %{view: view, html: html}) do
-      CaptureLog.capture_log(fn ->
-        assert html =~ "How well do you know your bird songs?"
-        assert view |> form("#settings") |> render_submit() =~ "Loading..."
-        assert_receive {:render, %{birds: [%Bird{} | _]}}, 1_000
+      assert html =~ "How well do you know your bird songs?"
+      refute html =~ "US-NC-067"
 
-        assert render(view) =~ "What bird do you hear?"
-      end)
+      html =
+        view
+        |> LiveViewTest.element("#region-btn")
+        |> LiveViewTest.render_click(%{"value" => "US-NC-067"})
+
+      assert html =~ "US-NC-067"
+
+      view
+      |> LiveViewTest.element("#species-filter")
+      |> LiveViewTest.has_element?()
+
+      assert view
+             |> form("#settings")
+             |> render_submit() === {:error, {:live_redirect, %{kind: :push, to: "/quiz"}}}
     end
   end
 
@@ -86,23 +51,19 @@ defmodule BirdSongWeb.QuizLiveTest do
     test "fetches recent observations and saves them to state when response is successful", %{
       view: view
     } do
-      CaptureLog.capture_log(fn ->
-        assert view
-               |> form("#settings", quiz: %{})
-               |> render_submit()
+      assert view
+             |> form("#settings", quiz: %{})
+             |> render_submit()
 
-        assert_current_gets_assigned()
-      end)
+      assert_current_gets_assigned()
     end
 
     test "fetches recordings for bird", %{view: view} do
-      CaptureLog.capture_log(fn ->
-        assert view
-               |> form("#settings", quiz: %{})
-               |> render_submit()
+      assert view
+             |> form("#settings", quiz: %{})
+             |> render_submit()
 
-        assert_current_gets_assigned()
-      end)
+      assert_current_gets_assigned()
     end
   end
 

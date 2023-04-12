@@ -11,6 +11,10 @@ defmodule BirdSongWeb.QuizLive.HTML.Recordings.XenoCanto do
     )
   end
 
+  def attribution(%XenoCanto.Recording{}) do
+    {:safe, ""}
+  end
+
   def audio_src(%XenoCanto.Recording{file: file}, _), do: file
 
   def sonogram(%XenoCanto.Recording{sono: %{"large" => large_sono}}, _),
