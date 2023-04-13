@@ -11,6 +11,24 @@ defmodule BirdSong.Data.Scraper.BadResponseError do
   end
 end
 
+defmodule BirdSong.Data.Scraper.ConnectionError do
+  defexception [:base_url, :js_message]
+
+  @type t() :: %__MODULE__{
+          base_url: String.t(),
+          js_message: String.t()
+        }
+
+  def message(%__MODULE__{base_url: base_url, js_message: js_message}) do
+    """
+    Unable to connect to site.
+    base_url: #{base_url}
+    js_message:
+    #{js_message}
+    """
+  end
+end
+
 defmodule BirdSong.Data.Scraper.TimeoutError do
   defexception [:module, :timeout_message]
 

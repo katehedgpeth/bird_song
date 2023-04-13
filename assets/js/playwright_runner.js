@@ -41,7 +41,8 @@ const sendMessage = (data) => {
       message: error.message
     })
 
-  const continueIfGoodResponse = async (response, url, callback) =>
+  const continueIfGoodResponse = async (response, url, callback) => {
+    if (!response) return;
     response.status() === 200
       ? callback()
       : sendErrorMessage({
@@ -50,6 +51,7 @@ const sendMessage = (data) => {
           status: response.status(),
           url,
         })
+      }
 
   const params = ({ initialCursorMark, taxonCode }) => (
     {
@@ -90,7 +92,12 @@ const sendMessage = (data) => {
 
   const connectToSite = async () => {
     const url = BASE_URL + "/catalog?view=list"
-    const response = await page.goto(url);
+    const response = await page.goto(url).catch(error => {
+      sendErrorMessage({
+        error: "unable_to_connect",
+        message: error.message
+      }).then(shutdown);
+    });
     await takeScreenshot("after_goto_list")
     return continueIfGoodResponse(response, url, signIn);
   }

@@ -42,6 +42,9 @@ config :bird_song, BirdSong.Services.Ebird,
      end),
   taxonomy_file: Path.relative_to_cwd("data/taxonomy.json")
 
+config :bird_song, BirdSong.Services.RequestThrottlers.MacaulayLibrary,
+  base_url: "https://search.macaulaylibrary.org"
+
 config :bird_song, BirdSong.Services.Ebird.Recordings.Playwright, default_timeout: 3_000
 
 config :bird_song, BirdSong.Services.XenoCanto, write_to_disk?: false

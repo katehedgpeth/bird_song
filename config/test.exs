@@ -30,6 +30,9 @@ config :bird_song, BirdSong.Services.ThrottledCache,
 
 config :bird_song, BirdSong.Services, stream_timeout_ms: one_second
 
+config :bird_song, BirdSong.Services.RequestThrottlers.MacaulayLibrary,
+  base_url: "http://localhost:4000"
+
 config :logger, level: :warn
 
 # Initialize plugs at runtime for faster test compilation

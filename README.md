@@ -26,7 +26,6 @@ The UI is a bit rough at the moment - I am focused more on functionality than lo
 - filter by individual species
 
 ## TODO
-- [ ] :bangbang: Playwright ports are not getting shutting down on exit
 - [ ] use browser location
 - [ ] show image attribution
 - [ ] filter by recently observed birds
@@ -44,6 +43,7 @@ The UI is a bit rough at the moment - I am focused more on functionality than lo
 - [x] show recording attribution
 - [x] filter by species group
 - [x] enable user to enter any location by code
+- [x] :bangbang: Playwright ports are not getting shutting down on exit
 
 ## Data Features
 - Written in Elixir, and uses Phoenix's LiveView framework for the front-end

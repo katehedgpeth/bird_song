@@ -5,6 +5,8 @@ defmodule BirdSong.Application do
 
   use Application
 
+  alias BirdSong.Services.Helpers
+
   alias BirdSong.{
     Services,
     Services.Ebird,
@@ -22,7 +24,7 @@ defmodule BirdSong.Application do
 
   @throttlers [
     {RequestThrottlers.MacaulayLibrary,
-     base_url: "https://search.macaulaylibrary.org",
+     base_url: Helpers.get_env(RequestThrottlers.MacaulayLibrary, :base_url),
      name: RequestThrottlers.MacaulayLibrary,
      scraper: Ebird.Recordings.Playwright},
     Supervisor.child_spec(

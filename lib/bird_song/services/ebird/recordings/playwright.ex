@@ -3,6 +3,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
   alias BirdSong.{
     Data.Scraper.BadResponseError,
+    Data.Scraper.ConnectionError,
     Data.Scraper.JsonParseError,
     Data.Scraper.TimeoutError,
     Data.Scraper.UnknownMessageError,
@@ -87,7 +88,13 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   def handle_info({port, {:data, message}}, %__MODULE__{port: port} = state) do
-    {:noreply, receive_message(message, state)}
+    with %__MODULE__{} = state <- receive_message(message, state) do
+      {:noreply, state}
+    end
+  end
+
+  def handle_info(:open_port, %__MODULE__{port: nil, ready?: false} = state) do
+    {:noreply, open_port(state)}
   end
 
   def handle_info(:send_request, %__MODULE__{ready?: false} = state) do
@@ -115,7 +122,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
   end
 
   def handle_cast(:shutdown_port, %__MODULE__{} = state) do
-    {:noreply, shutdown_port(state)}
+    {:noreply, shutdown_port(state, {:handle_cast, :shutdown_port})}
   end
 
   def handle_call({:run, request}, from, %__MODULE__{request: nil} = state) do
@@ -127,8 +134,8 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     {:reply, state, state}
   end
 
-  def terminate(_reason, %__MODULE__{} = state) do
-    shutdown_port(state)
+  def terminate(reason, %__MODULE__{} = state) do
+    shutdown_port(state, {:terminate, reason})
   end
 
   #########################################################
@@ -197,32 +204,48 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
 
     Port.monitor(port)
     Port.command(port, "connect")
-    Helpers.log([message: "port_started", port: port], __MODULE__, :warning)
+    Helpers.log([message: "port_started", port: port, base_url: base_url], __MODULE__, :warning)
     %{state | port: port}
   end
 
-  defp parse_error_message(%{"error" => "timeout", "message" => js_message}) do
+  defp parse_error_message(%{"error" => "timeout", "message" => js_message}, %__MODULE__{}) do
     TimeoutError.exception(timeout_message: js_message)
   end
 
-  defp parse_error_message(%{
-         "error" => "bad_response",
-         "status" => status,
-         "response_body" => response_body,
-         "url" => url
-       }) do
+  defp parse_error_message(
+         %{
+           "error" => "bad_response",
+           "status" => status,
+           "response_body" => response_body,
+           "url" => url
+         },
+         %__MODULE__{}
+       ) do
     BadResponseError.exception(status: status, response_body: response_body, url: url)
   end
 
-  defp parse_error_message(%{
-         "error" => "json_parse_error",
-         "input" => input,
-         "message" => js_message
-       }) do
+  defp parse_error_message(
+         %{
+           "error" => "json_parse_error",
+           "input" => input,
+           "message" => js_message
+         },
+         %__MODULE__{}
+       ) do
     JsonParseError.exception(input: input, error_message: js_message)
   end
 
-  @spec receive_message(String.t(), t()) :: t()
+  defp parse_error_message(
+         %{
+           "error" => "unable_to_connect",
+           "message" => js_message
+         },
+         %__MODULE__{base_url: base_url}
+       ) do
+    ConnectionError.exception(base_url: base_url, js_message: js_message)
+  end
+
+  @spec receive_message(String.t(), t()) :: t() | {:stop, :connection_error, t()}
   defp receive_message(message, state) do
     message
     |> String.trim()
@@ -237,7 +260,7 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     case Jason.decode(message) do
       {:ok, %{"error" => _} = error} ->
         error
-        |> parse_error_message()
+        |> parse_error_message(state)
         |> handle_error(state)
 
       {:ok, []} ->
@@ -259,6 +282,20 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     |> handle_error(state)
   end
 
+  defp handle_error(%ConnectionError{} = error, %__MODULE__{throttle_ms: throttle_ms} = state) do
+    # ConnectionError is triggered when the site won't load at all in the initial
+    # attempt to setup the port.
+    # This should really only happen when ExUnit starts up BirdSong.Application, which
+    # starts the real Playwright process that is not meant to be used by tests.
+    # That process has a bogus base_url in the test environment, to ensure that we are not
+    # hitting https://search.macaulaylibrary.org every time we run a test.
+    Process.send_after(self(), :open_port, throttle_ms * 10)
+
+    %{state | error: {:error, error}}
+    |> shutdown_port({:connection_error, error})
+    |> reply()
+  end
+
   defp handle_error(error, %__MODULE__{reply_to: nil}) do
     raise error
   end
@@ -267,6 +304,10 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
     state
     |> Map.replace!(:error, {:error, error})
     |> reply()
+  end
+
+  defp reply(%__MODULE__{reply_to: nil} = state) do
+    state
   end
 
   defp reply(%__MODULE__{error: {:error, _} = error} = state) do
@@ -318,14 +359,30 @@ defmodule BirdSong.Services.Ebird.Recordings.Playwright do
      )}
   end
 
-  @spec shutdown_port(t()) :: t()
-  defp shutdown_port(%__MODULE__{port: port} = state) do
+  @spec shutdown_port(t(), any()) :: t()
+  defp shutdown_port(
+         %__MODULE__{
+           port: port,
+           base_url: base_url
+         } = state,
+         reason
+       ) do
     case Port.info(port) do
       nil ->
         :ok
 
       _ ->
-        Helpers.log([message: "shutting_down_port", port: port], __MODULE__, :warning)
+        Helpers.log(
+          [
+            message: "shutting_down_port",
+            reason: reason,
+            base_url: base_url,
+            port: port
+          ],
+          __MODULE__,
+          :warning
+        )
+
         # JS script shuts itself down with process.exit()
         Port.command(port, "shutdown")
     end
