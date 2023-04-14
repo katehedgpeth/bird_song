@@ -45,20 +45,29 @@ defmodule BirdSong.Data.Counts do
     end
   end
 
-  defp calculate_data_folder_bytes(%Services{images: images, recordings: recordings}) do
-    Enum.reduce([images, recordings], 0, &(&2 + get_data_folder_bytes(&1)))
+  defp calculate_data_folder_bytes(%Services{} = services) do
+    services
+    |> Map.from_struct()
+    |> Enum.reduce(0, &(&2 + get_data_folder_bytes(&1)))
   end
 
   defp keep_bird?(0, _codes, %Bird{}), do: true
   defp keep_bird?(_, codes, %Bird{species_code: code}), do: MapSet.member?(codes, code)
 
-  def get_data_folder_bytes(%Service{} = service) do
+  defp get_data_folder_bytes({_, %Service{} = service}) do
     service
     |> Service.module()
     |> apply(:data_folder_path, [service])
-    |> File.stat!()
-    |> Map.fetch!(:size)
+    |> File.stat()
+    |> case do
+      {:ok, %{size: size}} -> size
+      {:error, :enoent} -> 0
+    end
   end
+
+  defp get_data_folder_bytes({key, _})
+       when key in [:__tasks, :overwrite?, :__from, :bird, :timeout],
+       do: 0
 
   defp get_region_species_codes(%{region: region}, %Service{module: RegionSpeciesCodes} = service) do
     case RegionSpeciesCodes.get({:region_species_codes, region}, service) do
