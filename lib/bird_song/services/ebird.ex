@@ -1,4 +1,6 @@
 defmodule BirdSong.Services.Ebird do
+  alias BirdSong.Services.Ebird.RegionInfo
+
   alias __MODULE__.{
     Observations,
     Regions,
@@ -14,6 +16,7 @@ defmodule BirdSong.Services.Ebird do
   @type request_data() ::
           Observations.request_data()
           | Regions.request_data()
+          | RegionInfo.request_data()
           | RegionSpeciesCodes.request_data()
 
   def base_url(), do: @base_url

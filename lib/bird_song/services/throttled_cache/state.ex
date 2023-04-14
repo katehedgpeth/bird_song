@@ -70,17 +70,6 @@ defmodule BirdSong.Services.ThrottledCache.State do
     write_responses_to_disk?: false
   ]
 
-  defguard is_known_service(service)
-           when service in [
-                  XenoCanto,
-                  Flickr,
-                  ThrottledCacheUnderTest,
-                  Ebird.Observations,
-                  Ebird.Recordings,
-                  Ebird.Regions,
-                  Ebird.RegionSpeciesCodes
-                ]
-
   def new(opts) do
     opts
     |> Keyword.update!(:throttler, &ensure_throttler_started/1)
@@ -420,11 +409,11 @@ defmodule BirdSong.Services.ThrottledCache.State do
   defp verify_state(
          %__MODULE__{
            base_url: "" <> _,
-           service: %Service{module: service_module, whereis: service_pid},
+           service: %Service{whereis: service_pid},
            ets_name: ets_name
          } = state
        )
-       when is_known_service(service_module) and is_pid(service_pid) and ets_name !== nil,
+       when is_pid(service_pid) and ets_name !== nil,
        do: state
 
   @spec write_to_disk(

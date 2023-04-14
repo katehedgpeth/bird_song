@@ -49,6 +49,8 @@ defmodule BirdSong.Application do
     {Ebird.Observations, name: Ebird.Observations},
     {Ebird.Recordings, name: Ebird.Recordings},
     {Ebird.RegionSpeciesCodes, name: Ebird.RegionSpeciesCodes},
+    {Ebird.Regions, name: Ebird.Regions},
+    {Ebird.RegionInfo, name: Ebird.RegionInfo},
     {Flickr, name: Flickr}
   ]
 

@@ -1,17 +1,15 @@
 defmodule BirdSong.Services do
   use GenServer
   alias BirdSong.Bird
-  alias __MODULE__.Service
 
-  @env Application.compile_env(:bird_song, BirdSong.Services)
+  alias BirdSong.Services.{
+    Ebird,
+    Service
+  }
+
+  @env Application.compile_env(:bird_song, __MODULE__)
   @images Keyword.fetch!(@env, :images)
   @recordings Keyword.fetch!(@env, :recordings)
-  @observations Keyword.fetch!(@env, :observations)
-  @region_species_codes Keyword.get(
-                          @env,
-                          :region_species_codes,
-                          BirdSong.Services.Ebird.RegionSpeciesCodes
-                        )
   @timeout Keyword.fetch!(@env, :stream_timeout_ms)
 
   defstruct [
@@ -24,11 +22,13 @@ defmodule BirdSong.Services do
       module: @recordings
     },
     observations: %Service{
-      module: @observations
+      module: Ebird.Observations
     },
     overwrite?: false,
+    regions: %Service{module: Ebird.Regions},
+    region_info: %Service{module: Ebird.RegionInfo},
     region_species_codes: %Service{
-      module: @region_species_codes
+      module: Ebird.RegionSpeciesCodes
     },
     timeout: @timeout,
     __tasks: []
