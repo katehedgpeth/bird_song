@@ -12,6 +12,15 @@ defmodule BirdSong.Services do
   @recordings Keyword.fetch!(@env, :recordings)
   @timeout Keyword.fetch!(@env, :stream_timeout_ms)
 
+  @service_keys MapSet.new([
+                  :images,
+                  :observations,
+                  :recordings,
+                  :regions,
+                  :region_info,
+                  :region_species_codes
+                ])
+
   defstruct [
     :bird,
     :__from,
@@ -62,7 +71,7 @@ defmodule BirdSong.Services do
 
   def ensure_started() do
     Enum.reduce(
-      [:images, :recordings, :observations, :region_species_codes],
+      @service_keys,
       %__MODULE__{},
       fn key, state -> Map.update!(state, key, &Service.ensure_started!/1) end
     )
