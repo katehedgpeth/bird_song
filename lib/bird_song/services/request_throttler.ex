@@ -198,7 +198,8 @@ defmodule BirdSong.Services.RequestThrottler do
   def handle_info(
         {ref, response},
         %__MODULE__{} = state
-      ) do
+      )
+      when is_reference(ref) do
     # this is the response to the request that is being awaited
     response
     |> parse_response(state)
@@ -259,9 +260,8 @@ defmodule BirdSong.Services.RequestThrottler do
 
   @spec do_add_to_queue(t(), queue_item()) :: t()
   defp do_add_to_queue(%__MODULE__{} = state, {request, parent, timers}) do
-    state
-    |> Map.update!(:queue, &:queue.in({request, parent, timers}, &1))
-    |> Map.update!(:queue_size, &(&1 + 1))
+    %{state | queue: :queue.in({request, parent, timers}, state.queue)}
+    |> update_queue_size()
   end
 
   defp do_update_request_url("" <> path, %URI{} = base_url) do
@@ -270,17 +270,26 @@ defmodule BirdSong.Services.RequestThrottler do
     |> URI.to_string()
   end
 
-  @spec log_external_api_call(HTTPoison.Request.t(), timers()) :: :ok
-  defp log_external_api_call(%HTTPoison.Request{url: "http://localhost" <> _}, %{}) do
+  defp get_queue_size(%__MODULE__{queue: queue}) do
+    :queue.len(queue)
+  end
+
+  @spec log_external_api_call(HTTPoison.Request.t(), timers(), t()) :: :ok
+  defp log_external_api_call(%HTTPoison.Request{url: "http://localhost" <> _}, %{}, %__MODULE__{}) do
     :ok
   end
 
-  defp log_external_api_call(%HTTPoison.Request{} = request, %{queued: queued, sent: sent}) do
+  defp log_external_api_call(
+         %HTTPoison.Request{} = request,
+         %{queued: queued, sent: sent},
+         %__MODULE__{} = state
+       ) do
     Helpers.log(
       [
         event: "external_api_call",
         request: request,
         status: "sent",
+        queue_size: get_queue_size(state),
         waiting_for: NaiveDateTime.diff(sent, queued, :millisecond)
       ],
       __MODULE__,
@@ -289,6 +298,13 @@ defmodule BirdSong.Services.RequestThrottler do
         _ -> :info
       end
     )
+  end
+
+  defp update_queue_size(%__MODULE__{} = state) do
+    %{
+      state
+      | queue_size: get_queue_size(state)
+    }
   end
 
   defp update_request_url(%__MODULE__{base_url: base_url}, %HTTPoison.Request{} = request) do
@@ -310,7 +326,7 @@ defmodule BirdSong.Services.RequestThrottler do
     timers = Map.put(timers, :sent, NaiveDateTime.utc_now())
 
     with_updated_url = update_request_url(state, request)
-    log_external_api_call(with_updated_url, timers)
+    log_external_api_call(with_updated_url, timers, state)
 
     task =
       Task.Supervisor.async_nolink(
@@ -327,6 +343,6 @@ defmodule BirdSong.Services.RequestThrottler do
   def take_from_queue(%__MODULE__{queue: queue, queue_size: size} = state) when size > 0 do
     {{:value, item}, queue} = :queue.out(queue)
 
-    {item, %{state | queue: queue, queue_size: size - 1}}
+    {item, update_queue_size(%{state | queue: queue})}
   end
 end

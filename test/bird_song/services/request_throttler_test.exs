@@ -1,11 +1,25 @@
+defmodule BirdSong.Services.RequestThrottlerTest.ThrottledCache1 do
+  use BirdSong.ThrottledCacheUnderTest, ets_name: :throttled_cache_1, ets_opts: []
+end
+
+defmodule BirdSong.Services.RequestThrottlerTest.ThrottledCache2 do
+  use BirdSong.ThrottledCacheUnderTest, ets_name: :throttled_cache_2, ets_opts: []
+end
+
 defmodule BirdSong.Services.RequestThrottlerTest do
   use ExUnit.Case, async: true
 
   alias BirdSong.{
     Services.RequestThrottler,
     Services.RequestThrottler.Response,
+    Services.Service,
+    Services.ThrottledCache,
     TestHelpers
   }
+
+  alias __MODULE__.{ThrottledCache1, ThrottledCache2}
+
+  @moduletag :tmp_dir
 
   @throttle_ms 200
 
@@ -13,17 +27,17 @@ defmodule BirdSong.Services.RequestThrottlerTest do
     bypass = Bypass.open()
     Bypass.expect(bypass, &mock_response/1)
 
-    {:ok, pid} =
+    {:ok, throttler_pid} =
       RequestThrottler.start_link(
         base_url: TestHelpers.mock_url(bypass),
         throttle_ms: @throttle_ms
       )
 
-    {:ok, pid: pid, bypass: bypass}
+    {:ok, throttler_pid: throttler_pid, bypass: bypass}
   end
 
   describe "&add_to_queue/1" do
-    test "sends a request immediately if the queue is empty", %{pid: pid} do
+    test "sends a request immediately if the queue is empty", %{throttler_pid: pid} do
       request = %HTTPoison.Request{url: "/success/1"}
 
       assert RequestThrottler.add_to_queue(request, pid) === :ok
@@ -35,7 +49,7 @@ defmodule BirdSong.Services.RequestThrottlerTest do
       assert %{queued: %NaiveDateTime{}, responded: %NaiveDateTime{}} = timers
     end
 
-    test "throttles requests", %{pid: pid} do
+    test "throttles requests", %{throttler_pid: pid} do
       1..5
       |> Enum.map(&%HTTPoison.Request{url: "/success/#{&1}"})
       |> Enum.map(&RequestThrottler.add_to_queue(&1, pid))
@@ -67,6 +81,88 @@ defmodule BirdSong.Services.RequestThrottlerTest do
       assert throttled_time(timers_3, timers_4) >= @throttle_ms
       assert throttled_time(timers_4, timers_5) >= @throttle_ms
     end
+
+    test "works with more than 1 ThrottledCache at a time", %{
+      bypass: bypass,
+      tmp_dir: tmp_dir,
+      throttler_pid: throttler_pid
+    } do
+      base_url = TestHelpers.mock_url(bypass)
+
+      {:ok, tc_1_pid} =
+        ThrottledCache1.start_link(
+          base_url: base_url,
+          data_folder_path: Path.join(tmp_dir, "tc_1"),
+          name: ThrottledCache1,
+          throttler: throttler_pid
+        )
+
+      tc_1 = %Service{module: ThrottledCache1, whereis: tc_1_pid}
+
+      {:ok, tc_2_pid} =
+        ThrottledCache2.start_link(
+          base_url: base_url,
+          data_folder_path: Path.join(tmp_dir, "tc_2"),
+          name: ThrottledCache2,
+          throttler: throttler_pid
+        )
+
+      tc_2 = %Service{module: ThrottledCache2, whereis: tc_2_pid}
+
+      calls = [
+        {ThrottledCache1, "tc1_call_1", tc_1},
+        {ThrottledCache2, "tc2_call_1", tc_2},
+        {ThrottledCache1, "tc1_call_2", tc_1},
+        {ThrottledCache2, "tc2_call_2", tc_2},
+        {ThrottledCache1, "tc1_call_3", tc_1},
+        {ThrottledCache2, "tc2_call_3", tc_2}
+      ]
+
+      responses =
+        calls
+        |> Enum.map(fn {module, arg, service} ->
+          {module, :get, [{module, arg}, service]}
+        end)
+        |> Task.async_stream(fn {m, f, a} -> apply(m, f, a) end)
+        |> Enum.into([])
+        |> Enum.map(fn {:ok, response} -> response end)
+
+      [{"User-Agent", user_agent}] = ThrottledCache.user_agent()
+
+      expected_responses =
+        Enum.map(calls, fn {module, arg, %Service{}} ->
+          {:ok,
+           module
+           |> Module.concat(:Response)
+           |> struct(
+             response: %{
+               "endpoint" => "endpoint/" <> arg,
+               "headers" => %{
+                 "host" => "localhost:#{bypass.port}",
+                 "user-agent" => user_agent,
+                 "x-custom-header" => arg
+               },
+               "query_params" => %{"param" => arg}
+             }
+           )}
+        end)
+
+      assert Enum.at(expected_responses, 0) ===
+               {:ok,
+                %ThrottledCache1.Response{
+                  response: %{
+                    "endpoint" => "endpoint/tc1_call_1",
+                    "headers" => %{
+                      "host" => "localhost:#{bypass.port}",
+                      "user-agent" => user_agent,
+                      "x-custom-header" => "tc1_call_1"
+                    },
+                    "query_params" => %{"param" => "tc1_call_1"}
+                  }
+                }}
+
+      assert responses === expected_responses
+    end
   end
 
   defp throttled_time(%{responded: responded}, %{sent: sent}) do
@@ -78,6 +174,28 @@ defmodule BirdSong.Services.RequestThrottlerTest do
       conn,
       200,
       Jason.encode!(%{message: "success", request: String.to_integer(request)})
+    )
+  end
+
+  defp mock_response(
+         %Plug.Conn{
+           query_params: query_params,
+           req_headers: headers,
+           path_info:
+             [
+               "endpoint",
+               "tc" <> <<_::binary-size(1)>> <> "_call_" <> <<_::binary-size(1)>>
+             ] = path
+         } = conn
+       ) do
+    Plug.Conn.resp(
+      conn,
+      200,
+      Jason.encode!(%{
+        endpoint: Path.join(path),
+        headers: Enum.into(headers, %{}),
+        query_params: query_params
+      })
     )
   end
 end
