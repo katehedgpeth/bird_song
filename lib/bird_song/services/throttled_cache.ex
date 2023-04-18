@@ -16,7 +16,12 @@ defmodule BirdSong.Services.ThrottledCache do
   @callback params(request_data()) :: HTTPoison.params()
   @callback message_details(request_data()) :: Map.t()
 
-  @env Application.compile_env!(:bird_song, __MODULE__)
+  @env Application.compile_env(:bird_song, __MODULE__)
+  @admin_email Application.compile_env(
+                 :bird_song,
+                 [__MODULE__, :admin_email],
+                 {:error, :admin_email_missing}
+               )
 
   def data_file_name(%Bird{common_name: common_name}) do
     common_name
@@ -24,8 +29,16 @@ defmodule BirdSong.Services.ThrottledCache do
     |> String.replace("/", "\\")
   end
 
+  # dialyzer thinks this will only ever match the string
+  @dialyzer {:no_match, user_agent: 0}
   def user_agent() do
-    [{"User-Agent", "BirdSongBot (#{@admin_email})"}]
+    case @admin_email do
+      {:error, :admin_email_missing} ->
+        raise "Admin email is missing!!!"
+
+      "" <> email ->
+        [{"User-Agent", "BirdSongBot (#{email})"}]
+    end
   end
 
   defmacro __using__(module_opts) do
@@ -50,7 +63,6 @@ defmodule BirdSong.Services.ThrottledCache do
 
       alias __MODULE__.Response
 
-      @admin_email Application.compile_env!(:bird_song, :admin_email)
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
       @module_opts module_opts

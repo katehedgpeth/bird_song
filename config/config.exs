@@ -10,12 +10,7 @@ import Config
 one_second = 1_000
 
 config :bird_song,
-  ecto_repos: [BirdSong.Repo],
-  admin_email:
-    (case System.get_env("BIRD_SONG_ADMIN_EMAIL") do
-       "" <> email -> email
-       _ -> raise "missing environment variable: BIRD_SONG_ADMIN_EMAIL"
-     end)
+  ecto_repos: [BirdSong.Repo]
 
 # Configures the endpoint
 config :bird_song, BirdSongWeb.Endpoint,
@@ -32,7 +27,12 @@ config :bird_song, BirdSongWeb.Endpoint,
 
 config :bird_song, BirdSong.Services.ThrottledCache,
   backlog_timeout_ms: :infinity,
-  throttle_ms: 2 * one_second
+  throttle_ms: 2 * one_second,
+  admin_email:
+    (case System.get_env("BIRD_SONG_ADMIN_EMAIL") do
+       "" <> email -> email
+       _ -> raise "missing environment variable: BIRD_SONG_ADMIN_EMAIL"
+     end)
 
 config :bird_song, BirdSong.Services.Ebird,
   token:
