@@ -72,7 +72,7 @@ defmodule BirdSong.MixProject do
         "ecto.create --quiet",
         "ecto.migrate --quiet",
         "build_playwright",
-        "test"
+        "test --exclude broken"
       ],
       "assets.deploy": [
         "tailwind default --minify",

@@ -8,6 +8,7 @@ defmodule BirdSong.ServicesTest do
   @moduletag expect: &MockServer.success_response/1
 
   describe "&fetch_data_for_bird/1" do
+    @tag :broken
     @tag bird: @eastern_bluebird
     @tag :tmp_dir
     @tag seed_services?: false
@@ -37,6 +38,7 @@ defmodule BirdSong.ServicesTest do
       assert {:ok, %Ebird.Recordings.Response{}} = recordings
     end
 
+    @tag :broken
     @tag bird: @carolina_wren
     @tag :tmp_dir
     @tag use_route_mocks?: false

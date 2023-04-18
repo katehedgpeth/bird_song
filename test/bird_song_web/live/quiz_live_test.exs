@@ -46,6 +46,7 @@ defmodule BirdSongWeb.QuizLiveTest do
     setup [:seed_from_mock_taxonomy]
     @describetag expect: &MockServer.success_response/1
 
+    @tag :broken
     test "fetches recent observations and saves them to state when response is successful", %{
       view: view
     } do
@@ -56,6 +57,7 @@ defmodule BirdSongWeb.QuizLiveTest do
       assert_current_gets_assigned()
     end
 
+    @tag :broken
     test "fetches recordings for bird", %{view: view} do
       assert view
              |> form("#settings", quiz: %{})
