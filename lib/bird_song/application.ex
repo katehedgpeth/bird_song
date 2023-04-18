@@ -10,6 +10,7 @@ defmodule BirdSong.Application do
   alias BirdSong.{
     Services,
     Services.Ebird,
+    Services.Ebird.Regions.RegionETS,
     Services.Flickr,
     Services.RequestThrottler,
     Services.RequestThrottlers
@@ -57,6 +58,7 @@ defmodule BirdSong.Application do
   @children List.flatten([
               # Start the Ecto repository
               BirdSong.Repo,
+              RegionETS,
               @supervisors,
               @throttlers,
               @services,
