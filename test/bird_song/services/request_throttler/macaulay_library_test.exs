@@ -15,6 +15,8 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
   @throttle_ms 100
   @timeout_ms 1_000
 
+  @moduletag :capture_log
+
   setup [:seed_from_mock_taxonomy, :setup_bypass]
 
   setup tags do

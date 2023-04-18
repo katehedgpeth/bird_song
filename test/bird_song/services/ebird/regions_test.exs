@@ -22,12 +22,7 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
   end
 
   test "&get_countries/1", %{service: service} do
-    assert {:ok,
-            %Regions.Response{
-              level: :country,
-              country: "world",
-              regions: regions
-            }} = Regions.get_countries(service)
+    assert {:ok, regions} = Regions.get_countries(service)
 
     assert regions === [
              %Region{name: "Afghanistan", code: "AF", level: :country, country: "world"},

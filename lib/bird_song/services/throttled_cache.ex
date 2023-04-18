@@ -24,6 +24,10 @@ defmodule BirdSong.Services.ThrottledCache do
     |> String.replace("/", "\\")
   end
 
+  def user_agent() do
+    [{"User-Agent", "BirdSongBot (#{@admin_email})"}]
+  end
+
   defmacro __using__(module_opts) do
     quote location: :keep,
           bind_quoted: [
@@ -336,7 +340,7 @@ defmodule BirdSong.Services.ThrottledCache do
         |> Path.join(endpoint(request_data))
       end
 
-      defp user_agent(), do: [{"User-Agent", "BirdSongBot (#{@admin_email})"}]
+      defp user_agent(), do: BirdSong.Services.ThrottledCache.user_agent()
     end
   end
 end

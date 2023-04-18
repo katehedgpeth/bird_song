@@ -2,10 +2,8 @@ defmodule BirdSongWeb.QuizLiveTest do
   require Logger
   use BirdSong.MockApiCase, use_data_case: false
   use BirdSongWeb.LiveCase
-  alias ExUnit.CaptureLog
-  alias Phoenix.{LiveView.Socket, LiveViewTest}
-  alias BirdSongWeb.{QuizLive, QuizLive.EtsTables, QuizLive.Current}
-  alias BirdSong.{Bird, Services, Services.XenoCanto, Quiz}
+  alias Phoenix.LiveViewTest
+  alias BirdSong.{Bird, Services.XenoCanto}
 
   @moduletag services: [:ebird, :xeno_canto]
   @moduletag :capture_log
