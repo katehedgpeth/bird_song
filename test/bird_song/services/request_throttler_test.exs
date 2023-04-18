@@ -9,6 +9,8 @@ end
 defmodule BirdSong.Services.RequestThrottlerTest do
   use ExUnit.Case, async: true
 
+  alias BirdSong.Services.RequestThrottler.ForbiddenExternalURLError
+
   alias BirdSong.{
     Services.RequestThrottler,
     Services.RequestThrottler.Response,
@@ -23,7 +25,13 @@ defmodule BirdSong.Services.RequestThrottlerTest do
 
   @throttle_ms 200
 
-  setup do
+  setup [:setup_throttler]
+
+  defp setup_throttler(%{skip_setup: true}) do
+    :ok
+  end
+
+  defp setup_throttler(%{}) do
     bypass = Bypass.open()
     Bypass.expect(bypass, &mock_response/1)
 
@@ -34,6 +42,9 @@ defmodule BirdSong.Services.RequestThrottlerTest do
       )
 
     {:ok, throttler_pid: throttler_pid, bypass: bypass}
+  end
+
+  describe "external_urls" do
   end
 
   describe "&add_to_queue/1" do
@@ -162,6 +173,65 @@ defmodule BirdSong.Services.RequestThrottlerTest do
                 }}
 
       assert responses === expected_responses
+    end
+  end
+
+  describe "&add_to_queue/1 with external base_url" do
+    @describetag :skip_setup
+    @describetag external_url: "https://google.com"
+
+    test "returns an error when external url is not expressly allowed in tests", %{
+      external_url: external_url
+    } do
+      assert {:ok, pid} = RequestThrottler.start_link(base_url: external_url)
+      request = %HTTPoison.Request{url: "/aisdflasdjflsj"}
+
+      RequestThrottler.add_to_queue(request, pid)
+
+      expected_error = ForbiddenExternalURLError.exception(opts: [base_url: external_url])
+
+      assert_receive {:"$gen_cast",
+                      %Response{
+                        base_url: {:error, ^expected_error},
+                        response: {:error, ^expected_error}
+                      }}
+    end
+
+    test "calls external URL if external urls are explicitly allowed", %{
+      external_url: external_url
+    } do
+      assert {:ok, pid} =
+               RequestThrottler.start_link(
+                 base_url: external_url,
+                 allow_external_calls?: true
+               )
+
+      request = %HTTPoison.Request{url: "/aisdflasdjflsj"}
+
+      RequestThrottler.add_to_queue(request, pid)
+
+      {:ok, log} =
+        ExUnit.CaptureLog.with_log(fn ->
+          unexpected_error = ForbiddenExternalURLError.exception(opts: [base_url: external_url])
+          full_path = "#{external_url}/aisdflasdjflsj"
+
+          assert_receive {:"$gen_cast",
+                          %Response{
+                            base_url: ^external_url,
+                            response: {:error, {:not_found, ^full_path}}
+                          }},
+                         5_000
+
+          refute_receive {:"$gen_cast",
+                          %Response{
+                            base_url: {:error, ^unexpected_error},
+                            response: {:error, ^unexpected_error}
+                          }}
+
+          :ok
+        end)
+
+      assert log =~ ~s(event="external_api_call")
     end
   end
 

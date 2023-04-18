@@ -1,5 +1,6 @@
 defmodule BirdSong.Services.RequestThrottler do
   use GenServer
+  alias BirdSong.Services.RequestThrottler.ForbiddenExternalURLError
   alias BirdSong.Services.Helpers
   alias __MODULE__.{UrlError, Response}
 
@@ -28,7 +29,7 @@ defmodule BirdSong.Services.RequestThrottler do
           {:response, any(), timers()}
 
   @type t() :: %__MODULE__{
-          base_url: URI.t(),
+          base_url: URI.t() | {:error, ForbiddenExternalURLError.exception()},
           current_request: current_request_info() | nil,
           queue: :queue.queue(queue_item()),
           queue_size: integer(),
@@ -80,7 +81,7 @@ defmodule BirdSong.Services.RequestThrottler do
 
   def build_state(opts) do
     opts
-    |> Keyword.update!(:base_url, &URI.new!/1)
+    |> parse_base_url()
     |> Keyword.put_new(:queue, :queue.new())
     |> __struct__()
   end
@@ -104,18 +105,7 @@ defmodule BirdSong.Services.RequestThrottler do
         ref,
         %__MODULE__{current_request: {%Task{ref: ref}, request_tuple}} = state
       ) do
-    {%HTTPoison.Request{} = request, from, timers} = request_tuple
-    timers = Map.replace!(timers, :responded, NaiveDateTime.utc_now())
-
-    GenServer.cast(
-      from,
-      %Response{
-        base_url: URI.to_string(state.base_url),
-        request: request,
-        response: response,
-        timers: timers
-      }
-    )
+    reply(state, response, request_tuple)
 
     {
       :noreply,
@@ -141,6 +131,14 @@ defmodule BirdSong.Services.RequestThrottler do
   end
 
   @impl GenServer
+  def handle_cast(
+        {:add_to_queue, request_tuple},
+        %__MODULE__{base_url: {:error, %ForbiddenExternalURLError{} = error}} = state
+      ) do
+    reply(state, {:error, error}, request_tuple)
+    {:noreply, state}
+  end
+
   def handle_cast(
         {:add_to_queue,
          {
@@ -300,6 +298,33 @@ defmodule BirdSong.Services.RequestThrottler do
     )
   end
 
+  defp parse_base_url(opts) do
+    opts
+    |> Keyword.replace!(:base_url, opts |> Map.new() |> uri_or_error(Mix.env()))
+    |> Keyword.delete(:allow_external_calls?)
+  end
+
+  defp reply(%__MODULE__{base_url: base_url}, response, request_tuple) do
+    {%HTTPoison.Request{} = request, from, timers} = request_tuple
+    timers = Map.replace!(timers, :responded, NaiveDateTime.utc_now())
+
+    url_or_error =
+      case base_url do
+        %URI{} -> URI.to_string(base_url)
+        {:error, _} -> base_url
+      end
+
+    GenServer.cast(
+      from,
+      %Response{
+        base_url: url_or_error,
+        request: request,
+        response: response,
+        timers: timers
+      }
+    )
+  end
+
   defp update_queue_size(%__MODULE__{} = state) do
     %{
       state
@@ -309,6 +334,29 @@ defmodule BirdSong.Services.RequestThrottler do
 
   defp update_request_url(%__MODULE__{base_url: base_url}, %HTTPoison.Request{} = request) do
     Map.update!(request, :url, &do_update_request_url(&1, base_url))
+  end
+
+  @spec uri_or_error(
+          %{required(:base_url) => String.t(), optional(:allow_external_calls?) => boolean()},
+          :dev | :test | :prod
+        ) :: URI.t() | ForbiddenExternalURLError.t()
+  defp uri_or_error(%{base_url: "" <> _ = base_url}, env) when env in [:dev, :prod] do
+    URI.new!(base_url)
+  end
+
+  defp uri_or_error(%{base_url: "http://localhost" <> _ = localhost}, :test) do
+    URI.new!(localhost)
+  end
+
+  defp uri_or_error(
+         %{base_url: "https://" <> _ = external_url, allow_external_calls?: true},
+         :test
+       ) do
+    URI.new!(external_url)
+  end
+
+  defp uri_or_error(%{base_url: "" <> _} = opts, :test) do
+    {:error, ForbiddenExternalURLError.exception(opts: Keyword.new(opts))}
   end
 
   @spec schedule_next_send(t(), integer()) :: t()
@@ -340,7 +388,7 @@ defmodule BirdSong.Services.RequestThrottler do
   end
 
   @spec take_from_queue(t()) :: {queue_item(), t()}
-  def take_from_queue(%__MODULE__{queue: queue, queue_size: size} = state) when size > 0 do
+  defp take_from_queue(%__MODULE__{queue: queue, queue_size: size} = state) when size > 0 do
     {{:value, item}, queue} = :queue.out(queue)
 
     {item, update_queue_size(%{state | queue: queue})}
