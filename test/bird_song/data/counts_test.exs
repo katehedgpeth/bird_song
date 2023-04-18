@@ -102,7 +102,7 @@ defmodule BirdSong.Data.CountsTest do
       assert recordings === 89_928_626
       assert images === 10_099_859
       assert regions === 641_644
-      assert region_info === 411_569
+      assert region_info === 418_083
 
       services
       |> Map.fetch!(:images)
