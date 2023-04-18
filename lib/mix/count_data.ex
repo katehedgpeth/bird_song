@@ -21,7 +21,13 @@ defmodule Mix.Tasks.BirdSong.CountData do
   end
 
   def print({:data_folder_bytes = key, val}) do
-    IO.inspect("#{val / 1000} KB", label: key)
+    {divisor, unit} =
+      case val do
+        mb when mb > 1_000_000 -> {1_000_000, "MB"}
+        kb when kb > 1_000 -> {1_000, "KB"}
+      end
+
+    IO.inspect("#{val / divisor} #{unit}", label: key)
     {key, val}
   end
 

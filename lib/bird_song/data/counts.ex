@@ -55,12 +55,13 @@ defmodule BirdSong.Data.Counts do
   defp keep_bird?(_, codes, %Bird{species_code: code}), do: MapSet.member?(codes, code)
 
   defp get_data_folder_bytes({_, %Service{} = service}) do
-    service
-    |> Service.module()
-    |> apply(:data_folder_path, [service])
-    |> File.stat()
-    |> case do
-      {:ok, %{size: size}} -> size
+    folder =
+      service
+      |> Service.module()
+      |> apply(:data_folder_path, [service])
+
+    case File.stat(folder) do
+      {:ok, %{type: :directory}} -> get_folder_size(%{name: folder}, 0)
       {:error, :enoent} -> 0
     end
   end
@@ -68,6 +69,27 @@ defmodule BirdSong.Data.Counts do
   defp get_data_folder_bytes({key, _})
        when key in [:__tasks, :overwrite?, :__from, :bird, :timeout],
        do: 0
+
+  def get_folder_size(%{name: folder_name}, size) do
+    folder_name
+    |> File.ls!()
+    |> Enum.map(&Path.join(folder_name, &1))
+    |> Enum.map(&%{name: &1, stats: File.lstat!(&1)})
+    |> Enum.group_by(& &1[:stats].type)
+    |> Enum.reduce(size, &do_get_folder_size/2)
+  end
+
+  defp do_get_folder_size({:directory, files_or_folders}, size) do
+    Enum.reduce(files_or_folders, size, &get_folder_size/2)
+  end
+
+  defp do_get_folder_size({:regular, files}, size) do
+    Enum.reduce(files, size, &get_file_size/2)
+  end
+
+  defp get_file_size(%{name: _, stats: %File.Stat{size: file_size}}, acc) do
+    acc + file_size
+  end
 
   defp get_region_species_codes(%{region: region}, %Service{module: RegionSpeciesCodes} = service) do
     case RegionSpeciesCodes.get({:region_species_codes, region}, service) do
