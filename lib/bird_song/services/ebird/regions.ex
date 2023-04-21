@@ -146,7 +146,7 @@ defmodule BirdSong.Services.Ebird.Regions do
 
   @spec return_regions(request_args(), Service.t()) ::
           regions_response()
-  defp return_regions(args, %Service{} = service) do
+  defp return_regions(args, service) do
     case get({:regions, args}, service) do
       {:ok, %Response{regions: [%Region{} | _] = regions}} -> {:ok, regions}
       {:ok, %Response{regions: []}} -> {:error, {:no_subregions, args}}

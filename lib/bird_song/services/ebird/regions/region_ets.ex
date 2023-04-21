@@ -34,8 +34,8 @@ defmodule BirdSong.Services.Ebird.Regions.RegionETS do
   ##
   #########################################################
 
-  def start_link([]) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link(name: name) do
+    GenServer.start_link(__MODULE__, [], name: name)
   end
 
   def init(opts) do

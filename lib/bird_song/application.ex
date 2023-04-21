@@ -10,7 +10,6 @@ defmodule BirdSong.Application do
   alias BirdSong.{
     Services,
     Services.Ebird,
-    Services.Ebird.Regions.RegionETS,
     Services.Flickr,
     Services.RequestThrottler,
     Services.RequestThrottlers
@@ -28,37 +27,22 @@ defmodule BirdSong.Application do
      base_url: Helpers.get_env(RequestThrottlers.MacaulayLibrary, :base_url),
      name: RequestThrottlers.MacaulayLibrary,
      scraper: Ebird.Recordings.Playwright},
-    Supervisor.child_spec(
-      {RequestThrottler,
-       [
-         base_url: "https://api.ebird.org",
-         name: RequestThrottler.EbirdAPI
-       ]},
-      id: :ebird_request_throttler
-    ),
-    Supervisor.child_spec(
-      {RequestThrottler,
-       [
-         base_url: "https://www.flickr.com",
-         name: RequestThrottler.Flickr
-       ]},
-      id: :flickr_request_throttler
-    )
+    {RequestThrottler,
+     [
+       base_url: "https://www.flickr.com",
+       name: RequestThrottler.Flickr
+     ]}
   ]
 
   @services [
-    {Ebird.Observations, name: Ebird.Observations},
+    Services.Supervisors.Ebird,
     {Ebird.Recordings, name: Ebird.Recordings},
-    {Ebird.RegionSpeciesCodes, name: Ebird.RegionSpeciesCodes},
-    {Ebird.Regions, name: Ebird.Regions},
-    {Ebird.RegionInfo, name: Ebird.RegionInfo},
     {Flickr, name: Flickr}
   ]
 
   @children List.flatten([
               # Start the Ecto repository
               BirdSong.Repo,
-              RegionETS,
               @supervisors,
               @throttlers,
               @services,
