@@ -9,7 +9,7 @@ defmodule Mix.Tasks.RecordDataTest do
   alias BirdSong.{
     Bird,
     Data.Recorder.Config,
-    MockEbirdServer,
+    MockMacaulayServer,
     MockServer,
     Services,
     Services.Ebird.Recordings.Playwright,
@@ -201,6 +201,6 @@ defmodule Mix.Tasks.RecordDataTest do
   defp expect_ebird_routes(tags) do
     tags
     |> use_ebird_bypass()
-    |> MockEbirdServer.setup()
+    |> MockMacaulayServer.setup()
   end
 end

@@ -1,4 +1,4 @@
-defmodule BirdSong.MockEbirdServer do
+defmodule BirdSong.MockMacaulayServer do
   alias Plug.Conn
 
   @ebird_login_html File.read!("test/mock_data/ebird_login.html")

@@ -6,7 +6,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     Bird,
     Data.Scraper.TimeoutError,
     Data.Scraper.BadResponseError,
-    MockEbirdServer,
+    MockMacaulayServer,
     Services.Ebird.Recordings.Playwright,
     TestHelpers
   }
@@ -19,7 +19,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   setup [:seed_from_mock_taxonomy, :setup_bypass]
 
   setup %{bypass: bypass} = tags do
-    MockEbirdServer.setup(tags)
+    MockMacaulayServer.setup(tags)
     base_url = TestHelpers.mock_url(bypass)
     {:ok, %Bird{species_code: code}} = Bird.get_by_sci_name("Sialia sialis")
 
@@ -133,7 +133,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
   describe "Ebird.Recordings.Playwright.run/1 - error responses" do
     @tag expect_api_call?: false
     @tag expect_login?: false
-    @tag list_html_response: &MockEbirdServer.not_found_response/1
+    @tag list_html_response: &MockMacaulayServer.not_found_response/1
     test "returns an error response without crashing when HTML page returns a bad response", %{
       bypass: bypass,
       request: request,
@@ -158,7 +158,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
       assert {:connected, _pid} = Port.info(port, :connected)
     end
 
-    @tag list_html_response: &MockEbirdServer.bad_structure_response/1
+    @tag list_html_response: &MockMacaulayServer.bad_structure_response/1
     @tag expect_api_call?: false
     @tag expect_login?: false
     test "returns an error when sign in link is not found", %{
@@ -190,7 +190,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
       assert {:connected, _pid} = Port.info(port, :connected)
     end
 
-    @tag recordings_response: &MockEbirdServer.not_authorized_response/1
+    @tag recordings_response: &MockMacaulayServer.not_authorized_response/1
     test "returns an error response without crashing when API request returns a bad response", %{
       request: request,
       bypass: bypass,

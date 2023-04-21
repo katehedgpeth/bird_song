@@ -7,7 +7,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
 
   alias BirdSong.{
     Bird,
-    MockEbirdServer,
+    MockMacaulayServer,
     Services.Ebird.Recordings,
     Services.Service,
     TestHelpers
@@ -52,7 +52,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
          service: %Service{} = service,
          tmp_dir: tmp_dir
        } = tags do
-    MockEbirdServer.setup(tags)
+    MockMacaulayServer.setup(tags)
     bird = BirdSong.Repo.get_by(Bird, common_name: "Eastern Bluebird")
     assert %{data_folder_path: folder} = GenServer.call(service.whereis, :state)
     assert folder =~ tmp_dir

@@ -3,7 +3,7 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
 
   alias BirdSong.{
     Bird,
-    MockEbirdServer,
+    MockMacaulayServer,
     Services.Ebird.Recordings.Playwright,
     Services.RequestThrottler,
     Services.RequestThrottler.ForbiddenExternalURLError,
@@ -62,7 +62,7 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
 
     tags
     |> Map.put(:bypass, bypass)
-    |> MockEbirdServer.setup()
+    |> MockMacaulayServer.setup()
 
     {:ok, bypass: bypass, base_url: TestHelpers.mock_url(bypass)}
   end
