@@ -10,7 +10,7 @@ end
 defmodule BirdSong.Services.Service do
   alias BirdSong.Services.{Ebird, Flickr, XenoCanto, GenServers, Helpers}
 
-  defstruct [:module, :whereis, :response, :exit_reason]
+  defstruct [:module, :name, :whereis, :response, :exit_reason]
 
   @type t() :: %__MODULE__{
           module: atom(),

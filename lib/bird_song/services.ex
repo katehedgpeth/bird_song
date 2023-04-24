@@ -2,7 +2,7 @@ defmodule BirdSong.Services do
   use GenServer
   alias BirdSong.Bird
 
-  alias BirdSong.Services.{
+  alias __MODULE__.{
     Ebird,
     Service
   }
@@ -14,37 +14,28 @@ defmodule BirdSong.Services do
 
   @service_keys MapSet.new([
                   :images,
-                  :observations,
                   :recordings,
-                  :regions,
-                  :region_info,
-                  :region_species_codes
+                  :ebird
                 ])
 
   defstruct [
     :bird,
     :__from,
+    :ebird,
     images: %Service{
       module: @images
     },
     recordings: %Service{
       module: @recordings
     },
-    observations: %Service{
-      module: Ebird.Observations
-    },
     overwrite?: false,
-    regions: %Service{module: Ebird.Regions},
-    region_info: %Service{module: Ebird.RegionInfo},
-    region_species_codes: %Service{
-      module: Ebird.RegionSpeciesCodes
-    },
     timeout: @timeout,
     __tasks: []
   ]
 
   @type t() :: %__MODULE__{
           bird: Bird.t(),
+          ebird: Ebird.t(),
           images: Service.t(),
           recordings: Service.t(),
           timeout: integer(),
@@ -73,8 +64,16 @@ defmodule BirdSong.Services do
     Enum.reduce(
       @service_keys,
       %__MODULE__{},
-      fn key, state -> Map.update!(state, key, &Service.ensure_started!/1) end
+      &do_ensure_started/2
     )
+  end
+
+  defp do_ensure_started(:ebird, %__MODULE__{} = state) do
+    Map.replace!(state, :ebird, Ebird.services())
+  end
+
+  defp do_ensure_started(key, %__MODULE__{} = state) do
+    Map.update!(state, key, &Service.ensure_started!/1)
   end
 
   def start_link(%__MODULE__{} = state) do

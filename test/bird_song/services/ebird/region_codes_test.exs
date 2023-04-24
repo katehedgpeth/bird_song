@@ -1,30 +1,27 @@
 defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
-  use ExUnit.Case
-  import BirdSong.TestSetup
+  use BirdSong.TestSetup, [:setup_bypass, :start_service_supervisor!]
 
-  alias BirdSong.TestHelpers
-  alias BirdSong.Services.Ebird.RegionSpeciesCodes
+  alias BirdSong.Services.{
+    Ebird,
+    Ebird.RegionSpeciesCodes,
+    TestSetup
+  }
+
+  @moduletag service: :Ebird
+
   @region "US-NC-067"
 
   setup_all do
     {:ok, raw_codes: File.read!("test/mock_data/region_species_codes/" <> @region <> ".json")}
   end
 
-  setup [:start_throttler]
-
-  setup %{bypass: bypass, throttler: throttler} do
-    {:ok, service} =
-      RegionSpeciesCodes.start_link(base_url: TestHelpers.mock_url(bypass), throttler: throttler)
-
-    {:ok, bypass: bypass, service: service}
-  end
-
   describe "&get/1" do
     test "returns a list of species codes when API returns a successful response", %{
       bypass: bypass,
       raw_codes: raw_codes,
-      service: service
+      test: test
     } do
+      service = Ebird.get_instance_child(test, :RegionSpeciesCodes)
       Bypass.expect(bypass, &success_response(&1, raw_codes))
 
       assert {:ok, %RegionSpeciesCodes.Response{region: @region, codes: ["bbwduc" | _]}} =

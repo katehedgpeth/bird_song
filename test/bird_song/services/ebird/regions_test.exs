@@ -3,22 +3,23 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
   import BirdSong.TestSetup
 
   alias BirdSong.{
+    Services.Ebird,
     Services.Ebird.Regions,
-    Services.Ebird.Regions.Region,
-    TestHelpers
+    Services.Ebird.Regions.Region
   }
 
   @moduletag :tmp_dir
   @moduletag throttle_ms: 3_000
+  @moduletag service: :Ebird
 
-  setup [:start_throttler, :setup_route_mocks]
+  setup [:setup_bypass, :setup_route_mocks, :start_service_supervisor!]
 
-  setup %{} = tags do
-    {:ok, service: TestHelpers.start_service_supervised(Regions, tags)}
+  setup %{test: test} do
+    {:ok, regions: Ebird.get_instance_child(test, :Regions)}
   end
 
   @tag expect: &__MODULE__.success_response/1
-  test "&get_countries/1", %{service: service} do
+  test "&get_countries/1", %{regions: service} do
     assert {:ok, regions} = Regions.get_countries(service)
 
     assert regions === [
@@ -31,7 +32,7 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
 
   @tag tmp_dir: false
   @tag use_mock_routes?: false
-  test "&get_subregions/3", %{service: service} do
+  test "&get_subregions/3", %{regions: service} do
     assert {:ok, [_ | _] = countries} = Regions.get_countries(service)
     countries_len = length(countries)
 

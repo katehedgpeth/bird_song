@@ -1,15 +1,15 @@
 defmodule BirdSong.Services.Ebird.ObservationsTest do
-  use BirdSong.MockApiCase
+  use ExUnit.Case, async: true
+  import BirdSong.TestSetup
   alias BirdSong.MockServer
 
   alias BirdSong.{
-    Services,
+    Services.Ebird,
     Services.Ebird.Observations,
-    Services.Service,
     TestHelpers
   }
 
-  @moduletag services: [Observations]
+  @moduletag service: :Ebird
   @moduletag :capture_log
 
   @forsyth_county "US-NC-067"
@@ -23,8 +23,10 @@ defmodule BirdSong.Services.Ebird.ObservationsTest do
     {:ok, recent_observations: recent_observations}
   end
 
-  setup %{services: %Services{observations: %Service{whereis: instance}}} do
-    {:ok, instance: instance}
+  setup [:setup_bypass, :setup_route_mocks, :start_service_supervisor!]
+
+  setup %{test: test} do
+    {:ok, instance: Ebird.get_instance_child(test, :Observations)}
   end
 
   @tag use_mock_routes?: false

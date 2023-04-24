@@ -3,11 +3,11 @@ defmodule BirdSong.ServicesTest do
   alias BirdSong.{Bird, Data.Scraper, Services, MockServer}
   alias Services.{Ebird, Flickr, Service}
 
-  @moduletag services: [:flickr, :xeno_canto]
-  @moduletag inject_playwright?: true
-  @moduletag expect: &MockServer.success_response/1
-
   describe "&fetch_data_for_bird/1" do
+    @describetag services: [:flickr, :xeno_canto]
+    @describetag inject_playwright?: true
+    @describetag expect: &MockServer.success_response/1
+
     @tag :broken
     @tag bird: @eastern_bluebird
     @tag :tmp_dir
@@ -91,6 +91,13 @@ defmodule BirdSong.ServicesTest do
       assert {:ok, %{__struct__: recordings_struct}} = recordings
       assert recordings_struct === Ebird.Recordings.Response
     end
+  end
+
+  @tag :capture_log
+  @tag use_mock_routes?: false
+  test "ensure_started/0 returns running instances without raising an error" do
+    services = Services.ensure_started()
+    assert %Services{} = services
   end
 
   def assert_file_not_exist(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do

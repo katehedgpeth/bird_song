@@ -3,6 +3,7 @@ defmodule BirdSong.Data.Recorder.Config do
     Bird,
     Services,
     Services.Helpers,
+    Services.Ebird,
     Services.Ebird.RegionSpeciesCodes,
     Services.Service
   }
@@ -40,9 +41,16 @@ defmodule BirdSong.Data.Recorder.Config do
   end
 
   defp do_parse("--region=" <> region, %__MODULE__{} = config, %Services{
-         region_species_codes: service
+         ebird: %Service{name: instance_name}
        }) do
-    %{config | region_species_codes: get_region_species_codes(region, service)}
+    %{
+      config
+      | region_species_codes:
+          get_region_species_codes(
+            region,
+            Ebird.get_instance_child(instance_name, :RegionSpeciesCode)
+          )
+    }
   end
 
   defp do_parse("" <> arg, %__MODULE__{}, _services) do

@@ -10,6 +10,42 @@ defmodule BirdSong.TestSetup do
     TestHelpers
   }
 
+  defmacro __using__(functions) do
+    quote bind_quoted: [functions: functions] do
+      use ExUnit.Case, async: true
+      alias BirdSong.TestSetup
+      :ok = TestSetup.verify_use_args(functions)
+
+      @tag setup_functions: functions
+
+      setup [:run_setup_functions]
+
+      # ExUnit.Case.register_test(&__MODULE__.register_test/6)
+
+      def register_test(mod, file, line, test_type, name, tags) do
+        Module.put_attribute(
+          BirdSong.Services.Supervisor,
+          :registered_tests,
+          %{mod: mod, file: file, line: line, test_type: test_type, name: name, tags: tags}
+        )
+      end
+
+      defp run_setup_functions(tags) do
+        TestSetup.run_setup_functions(tags)
+      end
+    end
+  end
+
+  def run_setup_functions(tags) do
+    {setup_functions, tags} = Map.pop!(tags, :setup_functions)
+
+    {:ok,
+     Enum.reduce(setup_functions, tags, fn func, acc ->
+       {:ok, new_tags} = apply(BirdSong.TestSetup, func, [acc])
+       Map.merge(acc, Map.new(new_tags))
+     end)}
+  end
+
   def listen_to_services(%{services: %Services{} = services}) do
     TestHelpers.do_for_services(services, &listen_to_service/1)
 
@@ -40,6 +76,13 @@ defmodule BirdSong.TestSetup do
     )
 
     :ok
+  end
+
+  def set_tmp_data_folder(opts, tags) do
+    case tags do
+      %{tmp_dir: "" <> tmp_dir} -> Keyword.put(opts, :data_folder_path, tmp_dir)
+      %{} -> opts
+    end
   end
 
   def start_throttlers(%{} = tags) do
@@ -89,21 +132,20 @@ defmodule BirdSong.TestSetup do
 
     images_module = Map.get(tags, :images_service, Flickr)
     recordings_module = Map.get(tags, :recordings_module, Ebird.Recordings)
-    observations_module = Map.get(tags, :observations_service, Ebird.Observations)
 
-    region_species_codes_module =
-      Map.get(tags, :region_species_code_module, Ebird.RegionSpeciesCodes)
-
-    [recordings_service, images_service, observations_service, region_species_code_service] =
+    [recordings_service, images_service] =
       Enum.map(
         [
           recordings_module,
-          images_module,
-          observations_module,
-          region_species_codes_module
+          images_module
         ],
         &TestHelpers.start_service_supervised(&1, tags)
       )
+
+    {:ok, supervisor: %Service{}, service: ebird} =
+      tags
+      |> Map.update(:service, :Ebird, fn _ -> :Ebird end)
+      |> start_service_supervisor!()
 
     bird =
       case Map.get(tags, :bird) do
@@ -118,11 +160,37 @@ defmodule BirdSong.TestSetup do
         bird: bird,
         images: images_service,
         recordings: recordings_service,
-        observations: observations_service,
-        region_species_codes: region_species_code_service,
+        ebird: ebird,
         timeout: Map.get(tags, :timeout, 1_000)
       }
     }
+  end
+
+  def start_service_supervisor!(%{test: test, service: service} = tags)
+      when service in [:Ebird] do
+    opts =
+      []
+      |> Keyword.put(:service_name, test)
+      |> set_tmp_data_folder(tags)
+      |> TestHelpers.get_base_url(tags)
+      |> TestHelpers.get_throttle_ms_opt(tags)
+
+    module = Module.concat([BirdSong.Services, service])
+    whereis = ExUnit.Callbacks.start_supervised!({module, opts})
+
+    test
+    |> BirdSong.Services.Supervisor.instance_name(module)
+    |> GenServer.whereis()
+    |> is_pid()
+    |> ExUnit.Assertions.assert()
+
+    {:ok,
+     supervisor: %Service{
+       module: module,
+       name: test,
+       whereis: whereis
+     },
+     service: apply(module, :services, [test])}
   end
 
   def clean_up_tmp_folder_on_exit(%{tmp_dir: "" <> tmp_dir}) do
@@ -221,5 +289,40 @@ defmodule BirdSong.TestSetup do
 
   def copy_seed_files_to_tmp_folder(%{}) do
     :ok
+  end
+
+  def verify_use_args(funcs) when is_list(funcs) do
+    funcs
+    |> Enum.group_by(&is_setup_function?/1)
+    |> Map.new()
+    |> case do
+      %{false: not_functions} ->
+        raise_use_error(not_functions)
+
+      %{} ->
+        :ok
+    end
+  end
+
+  def verify_use_args(not_func_list) do
+    raise_use_error(not_func_list)
+  end
+
+  defp is_setup_function?(func) when is_atom(func) do
+    Kernel.function_exported?(__MODULE__, func, 1)
+  end
+
+  defp raise_use_error(not_functions) do
+    raise ArgumentError.exception(
+            message: """
+
+
+            use Helpers.TestSetup expected to get a list of names of
+            setup functions to run, but these are not known functions:
+
+            #{inspect(not_functions)}
+
+            """
+          )
   end
 end

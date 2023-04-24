@@ -197,6 +197,7 @@ defmodule BirdSong.Services.RequestThrottlerTest do
                       }}
     end
 
+    @tag :not_mocked
     test "calls external URL if external urls are explicitly allowed", %{
       external_url: external_url
     } do

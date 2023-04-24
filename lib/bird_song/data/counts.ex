@@ -12,8 +12,9 @@ defmodule BirdSong.Data.Counts do
   alias BirdSong.{
     Bird,
     Services,
-    Services.Service,
-    Services.DataFile
+    Services.Ebird,
+    Services.DataFile,
+    Services.Service
   }
 
   defmodule NoBirdsError do
@@ -21,8 +22,8 @@ defmodule BirdSong.Data.Counts do
   end
 
   def get(%Services{} = services, args) do
-    region_species_codes =
-      get_region_species_codes(args, Map.fetch!(services, :region_species_codes))
+    %Services{ebird: %Ebird{RegionSpeciesCodes: service}} = services
+    region_species_codes = get_region_species_codes(args, service)
 
     size = MapSet.size(region_species_codes)
 
@@ -45,30 +46,35 @@ defmodule BirdSong.Data.Counts do
     end
   end
 
-  defp calculate_data_folder_bytes(%Services{} = services) do
+  defp calculate_data_folder_bytes(%{__struct__: struct} = services, acc \\ 0)
+       when struct in [Services, Ebird] do
     services
     |> Map.from_struct()
-    |> Enum.reduce(0, &(&2 + get_data_folder_bytes(&1)))
+    |> Enum.reduce(acc, &get_data_folder_bytes/2)
   end
 
   defp keep_bird?(0, _codes, %Bird{}), do: true
   defp keep_bird?(_, codes, %Bird{species_code: code}), do: MapSet.member?(codes, code)
 
-  defp get_data_folder_bytes({_, %Service{} = service}) do
+  defp get_data_folder_bytes({:ebird, %Ebird{} = ebird}, acc) do
+    calculate_data_folder_bytes(ebird, acc)
+  end
+
+  defp get_data_folder_bytes({_, %Service{} = service}, acc) do
     folder =
       service
       |> Service.module()
       |> apply(:data_folder_path, [service])
 
     case File.stat(folder) do
-      {:ok, %{type: :directory}} -> get_folder_size(%{name: folder}, 0)
-      {:error, :enoent} -> 0
+      {:ok, %{type: :directory}} -> get_folder_size(%{name: folder}, 0) + acc
+      {:error, :enoent} -> acc
     end
   end
 
-  defp get_data_folder_bytes({key, _})
+  defp get_data_folder_bytes({key, _}, acc)
        when key in [:__tasks, :overwrite?, :__from, :bird, :timeout],
-       do: 0
+       do: acc
 
   def get_folder_size(%{name: folder_name}, size) do
     folder_name

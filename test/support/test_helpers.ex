@@ -143,11 +143,11 @@ defmodule BirdSong.TestHelpers do
     end
   end
 
-  defp get_base_url(opts, %{bypass: %Bypass{} = bypass}) do
+  def get_base_url(opts, %{bypass: %Bypass{} = bypass}) do
     Keyword.put(opts, :base_url, mock_url(bypass))
   end
 
-  defp get_base_url([], %{}) do
+  def get_base_url([], %{}) do
     raise "Bypass must be initialized in order to use services in tests"
   end
 

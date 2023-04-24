@@ -122,8 +122,12 @@ defmodule BirdSong.Services.RequestThrottler do
   #########################################################
 
   @impl GenServer
-  def handle_call(:base_url, _from, %__MODULE__{base_url: %URI{} = uri} = state) do
-    {:reply, URI.to_string(uri), state}
+  def handle_call(:base_url, _from, %__MODULE__{base_url: base_url} = state) do
+    {:reply,
+     case base_url do
+       %URI{} -> URI.to_string(base_url)
+       _ -> base_url
+     end, state}
   end
 
   def handle_call(:state, _from, state) do

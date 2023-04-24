@@ -35,7 +35,7 @@ defmodule BirdSong.Application do
   ]
 
   @services [
-    Services.Supervisors.Ebird,
+    Services.Ebird,
     {Ebird.Recordings, name: Ebird.Recordings},
     {Flickr, name: Flickr}
   ]
