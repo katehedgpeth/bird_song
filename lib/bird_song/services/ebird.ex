@@ -209,7 +209,6 @@ defmodule BirdSong.Services.Ebird do
   end
 
   @spec child_module(atom()) :: atom()
-  defp child_module(:RegionETS), do: Regions.RegionETS
   defp child_module(:RequestThrottler), do: RequestThrottler
   defp child_module(child) when is_child_name(child), do: concat_name(__MODULE__, child)
 

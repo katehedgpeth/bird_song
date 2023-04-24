@@ -2,7 +2,7 @@ defmodule BirdSong.Services.EbirdTest do
   use ExUnit.Case
 
   alias BirdSong.Services.RequestThrottler.ForbiddenExternalURLError
-  alias BirdSong.Services.Supervisors.UnknownOptionKeyError
+  alias BirdSong.Services.Supervisor.UnknownOptionKeyError
 
   alias BirdSong.{
     MockServer,
@@ -21,7 +21,7 @@ defmodule BirdSong.Services.EbirdTest do
                  name: Ebird.RequestThrottler, base_url: "https://api.ebird.org"
                },
                {
-                 Ebird.Regions.RegionETS,
+                 Ebird.RegionETS,
                  name: Ebird.RegionETS
                },
                {
@@ -80,7 +80,7 @@ defmodule BirdSong.Services.EbirdTest do
              }
 
       assert region_ets === {
-               Ebird.Regions.RegionETS,
+               Ebird.RegionETS,
                name: Module.concat(test, :RegionETS)
              }
 
@@ -133,7 +133,7 @@ defmodule BirdSong.Services.EbirdTest do
              Ebird.Regions,
              Ebird.RegionSpeciesCodes,
              Ebird.Observations,
-             Ebird.Regions.RegionETS,
+             Ebird.RegionETS,
              RequestThrottler
            ]
 
@@ -143,7 +143,7 @@ defmodule BirdSong.Services.EbirdTest do
     assert GenServer.call(throttler, :base_url) === TestHelpers.mock_url(bypass)
 
     assert {:ok, %Ebird.Regions.Region{} = region} =
-             Ebird.Regions.RegionETS.get(
+             Ebird.RegionETS.get(
                "US-NC",
                Ebird.child_name(opts, :RegionETS)
              )

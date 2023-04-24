@@ -19,7 +19,7 @@ end
 
 defmodule BirdSong.Services.Ebird.Regions.Region do
   alias __MODULE__.MalformedRegionCodeError
-  alias BirdSong.Services.Ebird.Regions.RegionETS
+  alias BirdSong.Services.Ebird.RegionETS
 
   defstruct [:code, :name, :level]
 
@@ -60,7 +60,7 @@ defmodule BirdSong.Services.Ebird.Regions.Region do
   end
 
   def get_parent(%__MODULE__{level: child_level} = region, :country, ets_server)
-  when is_child_level(child_level) do
+      when is_child_level(child_level) do
     region
     |> parse_country_code()
     |> RegionETS.get(ets_server)

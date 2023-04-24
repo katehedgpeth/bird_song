@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.Ebird.Regions.RegionETS do
+defmodule BirdSong.Services.Ebird.RegionETS do
   alias BirdSong.Services.Ebird.Regions.Region
   use GenServer
 
