@@ -10,7 +10,6 @@ defmodule BirdSong.Application do
   alias BirdSong.{
     Services,
     Services.Ebird,
-    Services.Flickr,
     Services.RequestThrottler,
     Services.RequestThrottlers
   }
@@ -26,18 +25,13 @@ defmodule BirdSong.Application do
     {RequestThrottlers.MacaulayLibrary,
      base_url: Helpers.get_env(RequestThrottlers.MacaulayLibrary, :base_url),
      name: RequestThrottlers.MacaulayLibrary,
-     scraper: Ebird.Recordings.Playwright},
-    {RequestThrottler,
-     [
-       base_url: "https://www.flickr.com",
-       name: RequestThrottler.Flickr
-     ]}
+     scraper: Ebird.Recordings.Playwright}
   ]
 
   @services [
     Services.Ebird,
-    {Ebird.Recordings, name: Ebird.Recordings},
-    {Flickr, name: Flickr}
+    Services.Flickr,
+    {Ebird.Recordings, name: Ebird.Recordings}
   ]
 
   @children List.flatten([

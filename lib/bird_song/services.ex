@@ -4,11 +4,11 @@ defmodule BirdSong.Services do
 
   alias __MODULE__.{
     Ebird,
+    Flickr,
     Service
   }
 
   @env Application.compile_env(:bird_song, __MODULE__)
-  @images Keyword.fetch!(@env, :images)
   @recordings Keyword.fetch!(@env, :recordings)
   @timeout Keyword.fetch!(@env, :stream_timeout_ms)
 
@@ -18,13 +18,14 @@ defmodule BirdSong.Services do
                   :ebird
                 ])
 
+  @supervisors [:ebird, :images]
+  @gen_servers [:recordings]
+
   defstruct [
     :bird,
     :__from,
-    :ebird,
-    images: %Service{
-      module: @images
-    },
+    ebird: Ebird,
+    images: Flickr,
     recordings: %Service{
       module: @recordings
     },
@@ -36,7 +37,7 @@ defmodule BirdSong.Services do
   @type t() :: %__MODULE__{
           bird: Bird.t(),
           ebird: Ebird.t(),
-          images: Service.t(),
+          images: Flickr.t(),
           recordings: Service.t(),
           timeout: integer(),
           __tasks: [{reference(), atom()}],
@@ -48,7 +49,7 @@ defmodule BirdSong.Services do
   def fetch_data_for_bird(
         %__MODULE__{
           bird: %Bird{},
-          images: %Service{},
+          images: %Flickr{},
           recordings: %Service{}
         } = state
       ) do
@@ -68,11 +69,11 @@ defmodule BirdSong.Services do
     )
   end
 
-  defp do_ensure_started(:ebird, %__MODULE__{} = state) do
-    Map.replace!(state, :ebird, Ebird.services())
+  defp do_ensure_started(key, %__MODULE__{} = state) when key in @supervisors do
+    Map.update!(state, key, & &1.services())
   end
 
-  defp do_ensure_started(key, %__MODULE__{} = state) do
+  defp do_ensure_started(key, %__MODULE__{} = state) when key in @gen_servers do
     Map.update!(state, key, &Service.ensure_started!/1)
   end
 
@@ -101,25 +102,22 @@ defmodule BirdSong.Services do
   end
 
   def maybe_start_task(key, %__MODULE__{bird: bird, overwrite?: false} = state) do
-    service = Map.fetch!(state, key)
-    response_module = Service.response_module(service)
-
-    state
-    |> Map.fetch!(key)
+    key
+    |> get_service_for_task(state)
     |> Service.parse_from_disk(bird)
     |> case do
       :not_found ->
         start_task(key, state)
 
-      {:ok, %{__struct__: ^response_module} = response} ->
+      {:ok, _} = response ->
         # overwrite? is false and a data file exists for this bird,
         # so do not call the service.
-        Map.update!(state, key, &Map.replace!(&1, :response, {:ok, response}))
+        Map.update!(state, key, &use_response_from_disk(&1, response))
     end
   end
 
   def start_task(key, %__MODULE__{bird: bird, timeout: timeout} = state) do
-    service = Map.fetch!(state, key)
+    service = get_service_for_task(key, state)
     %Service{module: module} = service
 
     %Task{ref: task_ref} =
@@ -141,6 +139,18 @@ defmodule BirdSong.Services do
      state
      |> handle_downed_task(ref, reason)
      |> maybe_reply()}
+  end
+
+  defp get_service_for_task(:images, %__MODULE__{
+         images: %Flickr{PhotoSearch: %Service{} = service}
+       }) do
+    service
+  end
+
+  defp get_service_for_task(:recordings, %__MODULE__{
+         recordings: %Service{} = recordings
+       }) do
+    recordings
   end
 
   defp handle_response({ref, response}, %__MODULE__{__tasks: tasks} = state) do
@@ -190,5 +200,19 @@ defmodule BirdSong.Services do
     })
 
     state
+  end
+
+  defp use_response_from_disk(
+         %Flickr{PhotoSearch: %Service{} = endpoint} = service,
+         {:ok, %Flickr.Response{}} = response
+       ) do
+    %{service | PhotoSearch: %{endpoint | response: response}}
+  end
+
+  defp use_response_from_disk(
+         %Service{module: Ebird.Recordings} = service,
+         {:ok, %Ebird.Recordings.Response{}} = response
+       ) do
+    %{service | response: response}
   end
 end

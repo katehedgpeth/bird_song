@@ -15,6 +15,8 @@ defmodule BirdSong.Services.ThrottledCache do
   @callback headers(request_data()) :: HTTPoison.headers()
   @callback params(request_data()) :: HTTPoison.params()
   @callback message_details(request_data()) :: Map.t()
+  @callback response_module() :: module()
+  @optional_callbacks [response_module: 0]
 
   @env Application.compile_env(:bird_song, __MODULE__)
   @admin_email Application.compile_env(

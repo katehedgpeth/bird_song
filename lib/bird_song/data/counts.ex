@@ -13,6 +13,7 @@ defmodule BirdSong.Data.Counts do
     Bird,
     Services,
     Services.Ebird,
+    Services.Flickr,
     Services.DataFile,
     Services.Service
   }
@@ -47,7 +48,7 @@ defmodule BirdSong.Data.Counts do
   end
 
   defp calculate_data_folder_bytes(%{__struct__: struct} = services, acc \\ 0)
-       when struct in [Services, Ebird] do
+       when struct in [Services, Ebird, Flickr] do
     services
     |> Map.from_struct()
     |> Enum.reduce(acc, &get_data_folder_bytes/2)
@@ -55,10 +56,6 @@ defmodule BirdSong.Data.Counts do
 
   defp keep_bird?(0, _codes, %Bird{}), do: true
   defp keep_bird?(_, codes, %Bird{species_code: code}), do: MapSet.member?(codes, code)
-
-  defp get_data_folder_bytes({:ebird, %Ebird{} = ebird}, acc) do
-    calculate_data_folder_bytes(ebird, acc)
-  end
 
   defp get_data_folder_bytes({_, %Service{} = service}, acc) do
     folder =
@@ -75,6 +72,10 @@ defmodule BirdSong.Data.Counts do
   defp get_data_folder_bytes({key, _}, acc)
        when key in [:__tasks, :overwrite?, :__from, :bird, :timeout],
        do: acc
+
+  defp get_data_folder_bytes({key, service_instance}, acc) do
+    calculate_data_folder_bytes(service_instance, acc)
+  end
 
   def get_folder_size(%{name: folder_name}, size) do
     folder_name
@@ -118,6 +119,14 @@ defmodule BirdSong.Data.Counts do
         |> Map.fetch!(&1)
         |> add_service_count(bird, &2, &1))
     )
+  end
+
+  defp add_service_count(service_instance, %Bird{} = bird, %__MODULE__{} = counts, type)
+       when is_struct(service_instance, Ebird) or is_struct(service_instance, Flickr) do
+    service_instance
+    |> Map.from_struct()
+    |> Map.values()
+    |> Enum.reduce(counts, &add_service_count(&1, bird, &2, type))
   end
 
   defp add_service_count(%Service{} = service, %Bird{} = bird, %__MODULE__{} = counts, type) do

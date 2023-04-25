@@ -31,7 +31,7 @@ defmodule BirdSong.MockDataAttributes do
       @mocked_birds [@red_shouldered_hawk, @carolina_wren, @eastern_bluebird]
 
       @xeno_canto_path BirdSong.MockDataAttributes.endpoint(XenoCanto)
-      @flickr_path BirdSong.MockDataAttributes.endpoint(Flickr)
+      @flickr_path BirdSong.MockDataAttributes.endpoint(Flickr.PhotoSearch)
       @ebird_observations_path BirdSong.MockDataAttributes.endpoint(
                                  Ebird.Observations,
                                  {:recent_observations, ":region"}

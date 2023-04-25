@@ -6,6 +6,7 @@ defmodule BirdSong.Data.CountsTest do
     Bird,
     Data.Counts,
     Services,
+    Services.Flickr,
     Services.DataFile,
     Services.Service
   }
@@ -55,6 +56,8 @@ defmodule BirdSong.Data.CountsTest do
       services: services
     } do
       assert %Services{images: images, recordings: recordings} = services
+      assert %Service{} = recordings
+      assert %Flickr{PhotoSearch: %Service{} = images} = images
 
       refute Service.data_folder_path(recordings) === Service.data_folder_path(images)
 
@@ -168,11 +171,15 @@ defmodule BirdSong.Data.CountsTest do
     end
   end
 
-  defp add_fake_files(%Service{} = service) do
+  defp add_fake_files(service) do
     Bird
     |> BirdSong.Repo.all()
     |> Enum.take(3)
     |> Enum.each(&add_fake_file(&1, service))
+  end
+
+  defp add_fake_file(%Bird{} = bird, %Flickr{PhotoSearch: %Service{} = service}) do
+    add_fake_file(bird, service)
   end
 
   defp add_fake_file(%Bird{} = bird, %Service{} = service) do

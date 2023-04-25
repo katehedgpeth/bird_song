@@ -17,8 +17,6 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Services.ThrottledCache.State.Supervisors,
     Services.ThrottledCache.ETS,
     Services.DataFile,
-    Services.XenoCanto,
-    Services.Flickr,
     Services.Helpers,
     Services.Ebird,
     Services.Service

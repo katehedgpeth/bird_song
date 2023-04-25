@@ -1,16 +1,14 @@
 defmodule BirdSong.Services.Ebird.TaxonomyTest do
-  use BirdSong.MockApiCase
+  use BirdSong.DataCase, async: true
+  use BirdSong.MockDataAttributes
 
   alias BirdSong.{
+    Bird,
     Order,
-    Services.Ebird.Taxonomy,
-    Services.Flickr
+    Services.Ebird.Taxonomy
   }
 
-  @moduletag service: [Flickr]
-  @moduletag use_mock_routes?: false
   @moduletag :capture_log
-  @moduletag seed_data?: false
 
   setup_all do
     raw_data = Taxonomy.read_data_file()

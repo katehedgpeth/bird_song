@@ -1,13 +1,35 @@
+defmodule BirdSong.Services.ThrottledCache.ETS.ResponseError do
+  defexception [:expected, :received]
+
+  def message(%__MODULE__{expected: expected, received: %{__struct__: received}}) do
+    do_message(expected, received, "module")
+  end
+
+  def message(%__MODULE__{expected: expected, received: received}) do
+    do_message(expected, received, "format")
+  end
+
+  def do_message(expected, received, error_type) do
+    """
+    \n\n
+    Services.ThrottledCache.ETS: Unexpected response #{error_type}
+
+    expected -> #{inspect(expected)}
+    received -> #{inspect(received)}
+
+    """
+  end
+end
+
 defmodule BirdSong.Services.ThrottledCache.ETS do
   require Logger
   use GenServer
 
-  alias BirdSong.Services.ThrottledCache
-
   alias BirdSong.{
     Bird,
     Services.DataFile,
-    Services.Service
+    Services.Service,
+    Services.ThrottledCache
   }
 
   @type t() :: %__MODULE__{
@@ -77,24 +99,12 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
         parent
       )
       when is_pid(parent) do
-    response_module =
-      service
-      |> Service.module()
-      |> Module.concat(:Response)
+    with {:ok, raw} <- do_read_from_disk(request, state) do
+      parsed = Service.parse_response(service, Jason.decode!(raw), request)
 
-    case do_read_from_disk(request, state) do
-      {:ok, str} ->
-        data =
-          str
-          |> Jason.decode!()
-          |> response_module.parse(request)
+      send(parent, {:save, {request, {:ok, parsed}}})
 
-        send(parent, {:save, {request, {:ok, data}}})
-
-        {:ok, data}
-
-      error ->
-        error
+      {:ok, parsed}
     end
   end
 
@@ -169,21 +179,15 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
   def do_save_response(
         request_data,
         response,
-        %__MODULE__{
-          ets_table: ets_table,
-          listeners: listeners,
-          service: service
-        } = state
+        %__MODULE__{} = state
       ) do
-    # require the response to be structured correctly
-    response_module = Service.response_module(service)
-    %{__struct__: ^response_module} = response
+    :ok = verify_response_struct!(state, response)
 
-    ets_table
+    state.ets_table
     |> :ets.insert({ets_key(state, request_data), response})
     |> case do
       true ->
-        Enum.each(listeners, &send(&1, {:response_saved_to_ets, request_data}))
+        Enum.each(state.listeners, &send(&1, {:response_saved_to_ets, request_data}))
     end
   end
 
@@ -198,16 +202,11 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     apply(module, :ets_key, [request_data])
   end
 
-  defp response_module(%__MODULE__{service: %Service{module: module}}) do
-    Module.concat(module, :Response)
-  end
-
   defp save_response_to_ets(
          {request_data, {:ok, response}},
          %__MODULE__{} = state
        ) do
-    response_module = response_module(state)
-    %{__struct__: ^response_module} = response
+    :ok = verify_response_struct!(state, response)
 
     state
     |> Map.fetch!(:ets_table)
@@ -225,5 +224,20 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
   defp stop_table(%__MODULE__{ets_table: ets_table} = state) do
     :ets.delete(ets_table)
     %{state | ets_table: nil}
+  end
+
+  defp verify_response_struct!(%__MODULE__{service: %Service{} = service}, response) do
+    expected = Service.response_module(service)
+
+    case response do
+      %{__struct__: ^expected} ->
+        :ok
+
+      {:ok, %{__struct__: ^expected}} ->
+        :ok
+
+      other ->
+        raise __MODULE__.ResponseError.exception(expected: expected, received: other)
+    end
   end
 end

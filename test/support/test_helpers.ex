@@ -26,11 +26,10 @@ defmodule BirdSong.TestHelpers do
     )
   end
 
-  @spec start_cache(atom) ::
-          {:error, any} | {:ok, :undefined | pid} | {:ok, :undefined | pid, any}
+  @spec start_cache(atom) :: pid
   def start_cache(opts \\ [name: Ecto.UUID.generate() |> String.to_atom()], module)
       when is_atom(module) and is_list(opts) do
-    ExUnit.Callbacks.start_supervised({module, opts})
+    ExUnit.Callbacks.start_supervised!({module, opts})
   end
 
   def parse_logs("" <> logs) do
@@ -116,7 +115,7 @@ defmodule BirdSong.TestHelpers do
   end
 
   def start_service_supervised(module, %{} = tags) do
-    {:ok, pid} =
+    pid =
       []
       |> get_base_url(tags)
       |> get_data_folder_path_opt(tags, module)

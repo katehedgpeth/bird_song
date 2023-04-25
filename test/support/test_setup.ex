@@ -20,8 +20,6 @@ defmodule BirdSong.TestSetup do
 
       setup [:run_setup_functions]
 
-      # ExUnit.Case.register_test(&__MODULE__.register_test/6)
-
       def register_test(mod, file, line, test_type, name, tags) do
         Module.put_attribute(
           BirdSong.Services.Supervisor,
@@ -130,22 +128,21 @@ defmodule BirdSong.TestSetup do
 
     setup_route_mocks(tags)
 
-    images_module = Map.get(tags, :images_service, Flickr)
-    recordings_module = Map.get(tags, :recordings_module, Ebird.Recordings)
-
-    [recordings_service, images_service] =
-      Enum.map(
-        [
-          recordings_module,
-          images_module
-        ],
-        &TestHelpers.start_service_supervised(&1, tags)
-      )
-
-    {:ok, supervisor: %Service{}, service: ebird} =
+    recordings_service =
       tags
-      |> Map.update(:service, :Ebird, fn _ -> :Ebird end)
-      |> start_service_supervisor!()
+      |> Map.get(:recordings_module, Ebird.Recordings)
+      |> TestHelpers.start_service_supervised(tags)
+
+    [ebird, flickr] =
+      for name <- [:Ebird, :Flickr] do
+        {:ok, supervisor: %Service{}, service: service} =
+          tags
+          |> Map.put(:concat_instance_name?, true)
+          |> Map.update(:service, name, fn _ -> name end)
+          |> start_service_supervisor!()
+
+        service
+      end
 
     bird =
       case Map.get(tags, :bird) do
@@ -158,7 +155,7 @@ defmodule BirdSong.TestSetup do
       bypass: Map.fetch!(tags, :bypass),
       services: %Services{
         bird: bird,
-        images: images_service,
+        images: flickr,
         recordings: recordings_service,
         ebird: ebird,
         timeout: Map.get(tags, :timeout, 1_000)
@@ -166,11 +163,20 @@ defmodule BirdSong.TestSetup do
     }
   end
 
-  def start_service_supervisor!(%{test: test, service: service} = tags)
-      when service in [:Ebird] do
+  def start_service_supervisor!(%{service: service} = tags) do
+    # TODO: refactor existing tests so name is always concatenated
+    instance_name =
+      case tags do
+        %{test: test, concat_instance_name?: true} ->
+          Module.concat(test, service)
+
+        %{test: test} ->
+          test
+      end
+
     opts =
       []
-      |> Keyword.put(:service_name, test)
+      |> Keyword.put(:service_name, instance_name)
       |> set_tmp_data_folder(tags)
       |> TestHelpers.get_base_url(tags)
       |> TestHelpers.get_throttle_ms_opt(tags)
@@ -178,7 +184,7 @@ defmodule BirdSong.TestSetup do
     module = Module.concat([BirdSong.Services, service])
     whereis = ExUnit.Callbacks.start_supervised!({module, opts})
 
-    test
+    instance_name
     |> BirdSong.Services.Supervisor.instance_name(module)
     |> GenServer.whereis()
     |> is_pid()
@@ -187,10 +193,10 @@ defmodule BirdSong.TestSetup do
     {:ok,
      supervisor: %Service{
        module: module,
-       name: test,
+       name: instance_name,
        whereis: whereis
      },
-     service: apply(module, :services, [test])}
+     service: apply(module, :services, [instance_name])}
   end
 
   def clean_up_tmp_folder_on_exit(%{tmp_dir: "" <> tmp_dir}) do

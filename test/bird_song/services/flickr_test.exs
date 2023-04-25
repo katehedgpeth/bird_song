@@ -2,7 +2,7 @@ defmodule BirdSong.Services.FlickrTest do
   use BirdSong.DataCase
   use BirdSong.MockDataAttributes
 
-  import BirdSong.TestSetup, only: [setup_bypass: 1, start_throttler: 1]
+  import BirdSong.TestSetup, only: [setup_bypass: 1, start_service_supervisor!: 1]
 
   alias BirdSong.{
     Services.DataFile,
@@ -15,10 +15,12 @@ defmodule BirdSong.Services.FlickrTest do
 
   @moduletag :tmp_dir
   @moduletag copy_files?: true
+  @moduletag service: :Flickr
 
   setup_all do
-    service = Service.ensure_started(%Service{module: Flickr})
-    df_instance = Flickr.data_file_instance(service)
+    service = Flickr.get_instance_child(Flickr, :PhotoSearch)
+    assert %Service{} = service
+    df_instance = Flickr.PhotoSearch.data_file_instance(service)
 
     {:ok, "" <> raw_images} =
       DataFile.read(%DataFile.Data{service: service, request: @bird}, df_instance)
@@ -26,13 +28,13 @@ defmodule BirdSong.Services.FlickrTest do
     {:ok, raw_images: raw_images}
   end
 
-  setup [:setup_bypass, :start_throttler]
+  setup [:setup_bypass, :start_service_supervisor!]
 
   setup tags do
-    service = TestHelpers.start_service_supervised(Flickr, tags)
+    service = Flickr.get_instance_child(tags[:test], :PhotoSearch)
 
     if Map.fetch!(tags, :copy_files?) do
-      expected_path = Flickr.data_folder_path(service)
+      expected_path = Flickr.PhotoSearch.data_folder_path(service)
       [_ | _] = File.cp_r!("data/images/flickr", expected_path)
     end
 
@@ -47,12 +49,12 @@ defmodule BirdSong.Services.FlickrTest do
            raw_images: raw_images,
            service: %Service{whereis: whereis}
          } do
-      assert Flickr.get_from_cache(@bird, whereis) === :not_found
-      assert Flickr.parse_from_disk(@bird, whereis) === :not_found
+      assert Flickr.PhotoSearch.get_from_cache(@bird, whereis) === :not_found
+      assert Flickr.PhotoSearch.parse_from_disk(@bird, whereis) === :not_found
 
       Bypass.expect_once(bypass, &Plug.Conn.resp(&1, 200, raw_images))
 
-      assert {:ok, response} = Flickr.get(@bird, whereis)
+      assert {:ok, response} = Flickr.PhotoSearch.get(@bird, whereis)
 
       assert %Flickr.Response{
                images: [%Flickr.Photo{url: "https://live.staticflickr.com" <> path} | _]
@@ -64,10 +66,12 @@ defmodule BirdSong.Services.FlickrTest do
     test "returns {:ok, %Flickr.Response{}} when cache is not populated but data file exists", %{
       service: %Service{whereis: whereis}
     } do
-      assert Flickr.get_from_cache(@bird, whereis) === :not_found
-      assert {:ok, %Flickr.Response{} = response} = Flickr.parse_from_disk(@bird, whereis)
+      assert Flickr.PhotoSearch.get_from_cache(@bird, whereis) === :not_found
 
-      assert {:ok, ^response} = Flickr.get_images(@bird, whereis)
+      assert {:ok, %Flickr.Response{} = response} =
+               Flickr.PhotoSearch.parse_from_disk(@bird, whereis)
+
+      assert {:ok, ^response} = Flickr.PhotoSearch.get_images(@bird, whereis)
     end
 
     @tag copy_files?: false
@@ -76,13 +80,13 @@ defmodule BirdSong.Services.FlickrTest do
       raw_images: raw_images,
       service: service
     } do
-      assert Flickr.get_from_cache(@bird, service.whereis) === :not_found
-      assert Flickr.parse_from_disk(@bird, service.whereis) === :not_found
+      assert Flickr.PhotoSearch.get_from_cache(@bird, service.whereis) === :not_found
+      assert Flickr.PhotoSearch.parse_from_disk(@bird, service.whereis) === :not_found
       Bypass.expect_once(bypass, &Plug.Conn.resp(&1, 200, raw_images))
-      assert {:ok, response} = Flickr.get(@bird, service)
-      assert {:ok, ^response} = Flickr.get_from_cache(@bird, service.whereis)
+      assert {:ok, response} = Flickr.PhotoSearch.get(@bird, service)
+      assert {:ok, ^response} = Flickr.PhotoSearch.get_from_cache(@bird, service.whereis)
       # expect_once should throw an error if the API is called again
-      assert {:ok, ^response} = Flickr.get(@bird, service)
+      assert {:ok, ^response} = Flickr.PhotoSearch.get(@bird, service)
     end
 
     @tag copy_files?: false
@@ -90,8 +94,8 @@ defmodule BirdSong.Services.FlickrTest do
       bypass: bypass,
       service: service
     } do
-      assert Flickr.get_from_cache(@bird, service.whereis) === :not_found
-      assert Flickr.parse_from_disk(@bird, service.whereis) === :not_found
+      assert Flickr.PhotoSearch.get_from_cache(@bird, service.whereis) === :not_found
+      assert Flickr.PhotoSearch.parse_from_disk(@bird, service.whereis) === :not_found
 
       Bypass.expect(bypass, fn conn -> Plug.Conn.resp(conn, 404, "That page does not exist") end)
 
@@ -99,7 +103,8 @@ defmodule BirdSong.Services.FlickrTest do
               {:not_found,
                bypass
                |> TestHelpers.mock_url()
-               |> Path.join(Flickr.endpoint(@bird))}} === Flickr.get(@bird, service)
+               |> Path.join(Flickr.PhotoSearch.endpoint(@bird))}} ===
+               Flickr.PhotoSearch.get(@bird, service)
     end
   end
 end

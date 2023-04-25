@@ -75,12 +75,22 @@ defmodule BirdSong.Services.Service do
     module.parse_from_disk(request_data, whereis)
   end
 
+  def parse_response(%__MODULE__{} = service, response, request) do
+    service
+    |> response_module()
+    |> apply(:parse, [response, request])
+  end
+
   def read_from_disk(%__MODULE__{module: module, whereis: whereis}, request_data) do
     module.read_from_disk(request_data, whereis)
   end
 
-  def response_module(%__MODULE__{module: module}) do
-    Module.concat(module, :Response)
+  def response_module(%__MODULE__{module: module}) when module !== nil do
+    if Kernel.function_exported?(module, :response_module, 0) do
+      module.response_module()
+    else
+      Module.concat(module, :Response)
+    end
   end
 
   def register_request_listener(%__MODULE__{module: module, whereis: whereis}) do

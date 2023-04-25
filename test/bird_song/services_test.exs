@@ -75,10 +75,12 @@ defmodule BirdSong.ServicesTest do
       assert_file_exists(bird, services)
 
       assert %Services{
-               images: %Service{response: images},
+               images: %Flickr{} = images,
                recordings: %Service{response: recordings},
                overwrite?: false
              } = Services.fetch_data_for_bird(services)
+
+      assert %Flickr{PhotoSearch: %Service{response: images}} = images
 
       for module <- [Flickr, Ebird.Recordings] do
         for status <- [:start_request, :end_request] do
@@ -86,10 +88,10 @@ defmodule BirdSong.ServicesTest do
         end
       end
 
-      assert {:ok, %{__struct__: images_struct}} = images
-      assert images_struct === Flickr.Response
-      assert {:ok, %{__struct__: recordings_struct}} = recordings
-      assert recordings_struct === Ebird.Recordings.Response
+      assert {:ok, images_response} = images
+      assert is_struct(images_response, Flickr.Response)
+      assert {:ok, recordings_response} = recordings
+      assert is_struct(recordings_response, Ebird.Recordings.Response)
     end
   end
 
@@ -100,13 +102,18 @@ defmodule BirdSong.ServicesTest do
     assert %Services{} = services
   end
 
-  def assert_file_not_exist(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do
+  def assert_file_not_exist(%Bird{} = bird, %Services{images: flickr, recordings: recordings}) do
+    assert %Flickr{PhotoSearch: %Service{}} = flickr
     assert {:error, {:enoent, _}} = Service.read_from_disk(flickr, bird)
-    assert {:error, {:enoent, _}} = Service.read_from_disk(xeno_canto, bird)
+    assert %Service{module: Ebird.Recordings} = recordings
+    assert {:error, {:enoent, _}} = Service.read_from_disk(recordings, bird)
   end
 
-  def assert_file_exists(%Bird{} = bird, %Services{images: flickr, recordings: xeno_canto}) do
-    assert {:ok, "" <> _} = Service.read_from_disk(flickr, bird)
-    assert {:ok, "" <> _} = Service.read_from_disk(xeno_canto, bird)
+  def assert_file_exists(%Bird{} = bird, %Services{images: images, recordings: recordings}) do
+    assert %Flickr{PhotoSearch: %Service{} = images} = images
+    assert {:ok, "" <> _} = Service.read_from_disk(images, bird)
+
+    assert %Service{module: Ebird.Recordings} = recordings
+    assert {:ok, "" <> _} = Service.read_from_disk(recordings, bird)
   end
 end
