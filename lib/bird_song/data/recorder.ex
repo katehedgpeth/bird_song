@@ -11,10 +11,14 @@ defmodule BirdSong.Data.Recorder do
     Order,
     Services,
     Services.Ebird.Taxonomy,
+    Services.Flickr,
     Services.Service
   }
 
-  alias __MODULE__.Config
+  alias __MODULE__.{
+    Config,
+    Worker
+  }
 
   def record(args, injected_services \\ Services.ensure_started()) do
     config = Config.parse(args, injected_services)
@@ -59,6 +63,10 @@ defmodule BirdSong.Data.Recorder do
     Enum.each([images, recordings], &update_write_config/1)
   end
 
+  defp update_write_config(%Flickr{PhotoSearch: service}) do
+    update_write_config(service)
+  end
+
   defp update_write_config(%Service{whereis: whereis}) do
     GenServer.cast(whereis, {:update_write_config, true})
   end
@@ -88,7 +96,7 @@ defmodule BirdSong.Data.Recorder do
          services: %Services{} = services
        }) do
     birds
-    |> Enum.map(&%{services | bird: &1})
+    |> Enum.map(&struct(Worker, bird: &1, services: services))
     |> fetch_data_for_bird({now(), length(birds)})
   end
 
@@ -97,10 +105,7 @@ defmodule BirdSong.Data.Recorder do
   end
 
   defp fetch_data_for_bird(
-         [
-           %Services{bird: %Bird{} = bird, images: %Service{}, recordings: %Service{}} = current
-           | rest
-         ],
+         [%Worker{} = current | rest],
          {%DateTime{} = start_time, initial_count}
        ) do
     Helpers.log(
@@ -112,12 +117,12 @@ defmodule BirdSong.Data.Recorder do
       :warning
     )
 
-    responses = Services.fetch_data_for_bird(current)
+    responses = Worker.fetch_data_for_bird(current)
 
     run_again = fn -> fetch_data_for_bird(rest, {start_time, initial_count}) end
 
     try do
-      case {bird.common_name,
+      case {current.bird.common_name,
             Enum.map(
               [:images, :recordings],
               &{&1,
@@ -142,7 +147,7 @@ defmodule BirdSong.Data.Recorder do
         Helpers.log(
           [
             message: "exited_before_finish",
-            last_bird: bird,
+            last_bird: current.bird,
             elapsed_seconds: elapsed_seconds(start_time)
           ],
           __MODULE__,

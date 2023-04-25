@@ -60,8 +60,9 @@ config :bird_song, BirdSong.Services.Flickr,
 config :bird_song, BirdSong.Services,
   images: BirdSong.Services.Flickr,
   recordings: BirdSong.Services.Ebird.Recordings,
-  observations: BirdSong.Services.Ebird.Observations,
-  stream_timeout_ms: :infinity
+  observations: BirdSong.Services.Ebird.Observations
+
+config :bird_song, BirdSong.Data.Recorder, stream_timeout_ms: :infinity
 
 # Configure esbuild (the version is required)
 config :esbuild,

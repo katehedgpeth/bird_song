@@ -153,12 +153,11 @@ defmodule BirdSong.TestSetup do
     {
       :ok,
       bypass: Map.fetch!(tags, :bypass),
+      bird: bird,
       services: %Services{
-        bird: bird,
         images: flickr,
         recordings: recordings_service,
-        ebird: ebird,
-        timeout: Map.get(tags, :timeout, 1_000)
+        ebird: ebird
       }
     }
   end
