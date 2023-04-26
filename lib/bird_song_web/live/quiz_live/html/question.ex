@@ -1,8 +1,19 @@
 defmodule BirdSongWeb.QuizLive.HTML.Question do
   use Phoenix.LiveComponent
   alias Phoenix.HTML
-  alias BirdSongWeb.{Components.ButtonGroup, Components.GroupButton, QuizLive}
-  alias BirdSong.{Bird, Quiz, Services.Ebird, Services.Flickr}
+
+  alias BirdSongWeb.{
+    Components.ButtonGroup,
+    Components.GroupButton,
+    QuizLive
+  }
+
+  alias BirdSong.{
+    Bird,
+    Quiz,
+    Services.Flickr,
+    Services.MacaulayLibrary
+  }
 
   def render(%{current: %{bird: nil}} = assigns), do: loading(assigns)
 
@@ -79,7 +90,7 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     %GroupButton{text: name, value: code}
   end
 
-  defp rendering_module(%Ebird.Recordings.Recording{}), do: QuizLive.HTML.Recordings.Ebird
+  defp rendering_module(%MacaulayLibrary.Recording{}), do: QuizLive.HTML.Recordings.Ebird
   defp rendering_module(%Flickr.Photo{}), do: QuizLive.HTML.Images.Flickr
 
   defp show_answer(%{

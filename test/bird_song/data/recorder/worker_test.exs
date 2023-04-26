@@ -7,8 +7,8 @@ defmodule BirdSong.Data.Recorder.WorkerTest do
     Data.Recorder.Worker,
     Data.Scraper,
     MockServer,
-    Services.Ebird,
     Services.Flickr,
+    Services.MacaulayLibrary,
     Services.Service
   }
 
@@ -35,7 +35,7 @@ defmodule BirdSong.Data.Recorder.WorkerTest do
                recordings: %Service{response: recordings}
              } = Worker.fetch_data_for_bird(services)
 
-      for module <- [Flickr, Ebird.Recordings] do
+      for module <- [Flickr, MacaulayLibrary.Recordings] do
         for status <- [:start_request, :end_request] do
           assert_receive {^status, %{bird: %Bird{common_name: ^common_name}, module: ^module}},
                          500
@@ -43,7 +43,7 @@ defmodule BirdSong.Data.Recorder.WorkerTest do
       end
 
       assert {:ok, %Flickr.Response{}} = images
-      assert {:ok, %Ebird.Recordings.Response{}} = recordings
+      assert {:ok, %MacaulayLibrary.Response{}} = recordings
     end
 
     @tag :broken
@@ -90,7 +90,7 @@ defmodule BirdSong.Data.Recorder.WorkerTest do
 
       assert %Flickr{PhotoSearch: %Service{response: images}} = images
 
-      for module <- [Flickr, Ebird.Recordings] do
+      for module <- [Flickr, MacaulayLibrary.Recordings] do
         for status <- [:start_request, :end_request] do
           refute_receive {^status, %{module: ^module}}
         end
@@ -99,14 +99,14 @@ defmodule BirdSong.Data.Recorder.WorkerTest do
       assert {:ok, images_response} = images
       assert is_struct(images_response, Flickr.Response)
       assert {:ok, recordings_response} = recordings
-      assert is_struct(recordings_response, Ebird.Recordings.Response)
+      assert is_struct(recordings_response, MacaulayLibrary.Response)
     end
   end
 
   def assert_file_not_exist(%Bird{} = bird, %Worker{images: flickr, recordings: recordings}) do
     assert %Flickr{PhotoSearch: %Service{}} = flickr
     assert {:error, {:enoent, _}} = Service.read_from_disk(flickr, bird)
-    assert %Service{module: Ebird.Recordings} = recordings
+    assert %Service{module: MacaulayLibrary.Recordings} = recordings
     assert {:error, {:enoent, _}} = Service.read_from_disk(recordings, bird)
   end
 
@@ -114,7 +114,7 @@ defmodule BirdSong.Data.Recorder.WorkerTest do
     assert %Flickr{PhotoSearch: %Service{} = images} = images
     assert {:ok, "" <> _} = Service.read_from_disk(images, bird)
 
-    assert %Service{module: Ebird.Recordings} = recordings
+    assert %Service{module: MacaulayLibrary.Recordings} = recordings
     assert {:ok, "" <> _} = Service.read_from_disk(recordings, bird)
   end
 end

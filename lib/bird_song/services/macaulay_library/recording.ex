@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.Ebird.Recordings.Recording do
+defmodule BirdSong.Services.MacaulayLibrary.Recording do
   defstruct [
     :asset_id,
     :location,

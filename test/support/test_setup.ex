@@ -130,7 +130,7 @@ defmodule BirdSong.TestSetup do
 
     recordings_service =
       tags
-      |> Map.get(:recordings_module, Ebird.Recordings)
+      |> Map.get(:recordings_module, MacaulayLibrary.Recordings)
       |> TestHelpers.start_service_supervised(tags)
 
     [ebird, flickr] =

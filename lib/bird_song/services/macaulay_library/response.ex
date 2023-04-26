@@ -1,5 +1,5 @@
-defmodule BirdSong.Services.Ebird.Recordings.Response do
-  alias BirdSong.{Bird, Services.Ebird.Recordings.Recording}
+defmodule BirdSong.Services.MacaulayLibrary.Response do
+  alias BirdSong.{Bird, Services.MacaulayLibrary.Recording}
 
   defstruct recordings: []
 

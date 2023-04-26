@@ -18,7 +18,6 @@ defmodule BirdSong.Services.ThrottledCache.State do
     Services.ThrottledCache.ETS,
     Services.DataFile,
     Services.Helpers,
-    Services.Ebird,
     Services.Service
   }
 
@@ -300,9 +299,10 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   @spec maybe_write_to_disk(
           state :: State.t(),
-          response :: Ebird.Recordings.raw_response() | RequestThrottler.Response.t(),
+          response ::
+            MacaulayLibrary.RequestThrottler.raw_response() | RequestThrottler.Response.t(),
           request :: any()
-        ) :: RequestThrottler.Response.t() | Ebird.Recordings.raw_response()
+        ) :: RequestThrottler.Response.t() | MacaulayLibrary.RequestThrottler.raw_response()
   def maybe_write_to_disk(%__MODULE__{} = state, response, request) do
     if write_to_disk?(state, response) do
       write_to_disk(state, response, request)

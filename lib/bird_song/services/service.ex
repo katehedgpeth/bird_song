@@ -34,7 +34,7 @@ defmodule BirdSong.Services.Service do
 
   def data_type(%__MODULE__{module: module}), do: data_type(module)
   def data_type(XenoCanto), do: :recordings
-  def data_type(Ebird.Recordings), do: :recordings
+  def data_type(MacaulayLibrary.Recordings), do: :recordings
   def data_type(Flickr), do: :images
   def data_type(Ebird.Observations), do: :observations
   def data_type(Ebird.RegionSpeciesCodes), do: :region_species_codes

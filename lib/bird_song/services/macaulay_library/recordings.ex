@@ -1,18 +1,17 @@
-defmodule BirdSong.Services.Ebird.Recordings do
+defmodule BirdSong.Services.MacaulayLibrary.Recordings do
   use BirdSong.Services.ThrottledCache,
-    data_folder_path: "data/recordings/ebird",
+    data_folder_path: "data/recordings/macaulay_library",
     ets_opts: [],
-    ets_name: :ebird_recordings,
-    base_url: "https://search.macaulaylibrary.org",
-    scraper: __MODULE__.Playwright,
-    throttler: BirdSong.Services.RequestThrottlers.MacaulayLibrary
-
-  alias BirdSong.Data.Scraper.TimeoutError
-  alias BirdSong.Data.Scraper.BadResponseError
+    ets_name: :macaulay_library_recordings,
+    throttler: BirdSong.Services.MacaulayLibrary.RequestThrottler,
+    scraper: __MODULE__.Playwright
 
   alias BirdSong.{
     Bird,
-    Services.Helpers
+    Data.Scraper.TimeoutError,
+    Data.Scraper.BadResponseError,
+    Services.Helpers,
+    Services.MacaulayLibrary
   }
 
   alias BirdSong.Services.ThrottledCache, as: TC
@@ -32,6 +31,10 @@ defmodule BirdSong.Services.Ebird.Recordings do
       "taxonCode" => code,
       "mediaType" => "audio"
     }
+  end
+
+  def response_module() do
+    MacaulayLibrary.Response
   end
 
   def handle_call(:state, _from, state) do

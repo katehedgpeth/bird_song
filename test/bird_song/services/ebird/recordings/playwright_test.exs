@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
+defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
   use BirdSong.DataCase, async: true
   import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1, setup_bypass: 1]
 
@@ -7,7 +7,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     Data.Scraper.TimeoutError,
     Data.Scraper.BadResponseError,
     MockMacaulayServer,
-    Services.Ebird.Recordings.Playwright,
+    Services.MacaulayLibrary.Playwright,
     TestHelpers
   }
 
@@ -39,7 +39,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     {:ok, bypass: bypass, server: server, request: request}
   end
 
-  describe "Ebird.Recordings.Playwright.run/1 - success response" do
+  describe "MacaulayLibrary.Playwright.run/1 - success response" do
     test "opens a port and returns a response", %{request: request, server: server} do
       response = Playwright.run(server, request)
 
@@ -130,7 +130,7 @@ defmodule BirdSong.Services.Ebird.Recordings.PlaywrightTest do
     end
   end
 
-  describe "Ebird.Recordings.Playwright.run/1 - error responses" do
+  describe "MacaulayLibrary.Playwright.run/1 - error responses" do
     @tag expect_api_call?: false
     @tag expect_login?: false
     @tag list_html_response: &MockMacaulayServer.not_found_response/1

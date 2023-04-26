@@ -8,7 +8,7 @@ defmodule BirdSongWeb.QuizLive.Current do
     Quiz,
     Services.Flickr,
     Services.Flickr.Photo,
-    Services.Ebird.Recordings.Recording,
+    Services.MacaulayLibrary.Recording,
     Services.Service
   }
 
@@ -19,7 +19,7 @@ defmodule BirdSongWeb.QuizLive.Current do
   @type t() :: %__MODULE__{
           bird: Bird.t(),
           image: Flickr.Photo.t(),
-          recording: Ebird.Recordings.Recording.t()
+          recording: MacaulayLibrary.Recording.t()
         }
 
   def reset(%Socket{} = socket) do

@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.RequestThrottlers.MacaulayLibrary do
+defmodule BirdSong.Services.MacaulayLibrary.RequestThrottler do
   use GenServer
   alias BirdSong.Services.RequestThrottler
   @behaviour RequestThrottler

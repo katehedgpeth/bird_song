@@ -3,8 +3,8 @@ defmodule BirdSong.Data.Recorder.Worker do
     Bird,
     Data.Recorder,
     Services,
-    Services.Ebird,
     Services.Flickr,
+    Services.MacaulayLibrary,
     Services.Service
   }
 
@@ -168,8 +168,8 @@ defmodule BirdSong.Data.Recorder.Worker do
   end
 
   defp use_response_from_disk(
-         %Service{module: Ebird.Recordings} = service,
-         {:ok, %Ebird.Recordings.Response{}} = response
+         %Service{module: MacaulayLibrary.Recordings} = service,
+         {:ok, %MacaulayLibrary.Response{}} = response
        ) do
     %{service | response: response}
   end

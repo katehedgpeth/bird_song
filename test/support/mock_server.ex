@@ -53,7 +53,7 @@ defmodule BirdSong.MockServer do
     Conn.resp(conn, 200, File.read!("test/mock_data/region_species_codes/US-NC-067.json"))
   end
 
-  def success_response(%Conn{request_path: "/" <> @ebird_recordings_path} = conn) do
+  def success_response(%Conn{request_path: "/" <> @macaulay_library_path} = conn) do
     {:ok, body} = File.read("test/mock_data/ebird_recordings.html")
     Conn.resp(conn, 200, body)
   end

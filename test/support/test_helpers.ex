@@ -1,13 +1,15 @@
 defmodule BirdSong.TestHelpers do
   require Logger
 
+  alias BirdSong.Services.MacaulayLibrary
+
   alias BirdSong.{
     Bird,
     Data.Scraper.BadResponseError,
     MockJsScraper,
     Services,
-    Services.Service,
-    Services.Ebird
+    Services.MacaulayLibrary,
+    Services.Service
   }
 
   alias Phoenix.LiveView.Socket
@@ -167,7 +169,7 @@ defmodule BirdSong.TestHelpers do
   defp get_scraper_opt(
          opts,
          %{inject_playwright?: true, playwright_response: maybe_response},
-         Ebird.Recordings
+         MacaulayLibrary.Recordings
        ) do
     scraper_module = MockJsScraper
     response = verify_playwright_response_format(maybe_response)
@@ -175,13 +177,8 @@ defmodule BirdSong.TestHelpers do
     Keyword.put(opts, :scraper, {scraper_module, pid})
   end
 
-  defp get_scraper_opt(opts, %{scraper: scraper}, Ebird.Recordings) do
+  defp get_scraper_opt(opts, %{scraper: scraper}, MacaulayLibrary.Recordings) do
     Keyword.put(opts, :scraper, scraper)
-  end
-
-  defp get_scraper_opt(opts, %{}, Ebird.Recordings) do
-    Logger.warning("using Ebird.Recordings.Playwright for scraper module")
-    opts
   end
 
   defp get_scraper_opt(opts, %{}, _) do

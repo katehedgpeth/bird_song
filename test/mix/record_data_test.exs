@@ -2,19 +2,16 @@ defmodule Mix.Tasks.RecordDataTest do
   use BirdSong.DataCase
   import BirdSong.TestSetup
 
-  alias BirdSong.Services.Ebird.RegionSpeciesCodes
-  alias BirdSong.Services.RequestThrottler
-  alias BirdSong.Services.Ebird.Recordings
-
   alias BirdSong.{
     Bird,
     Data.Recorder.Config,
     MockMacaulayServer,
     MockServer,
     Services,
-    Services.Ebird.Recordings.Playwright,
+    Services.Ebird.RegionSpeciesCodes,
     Services.Flickr,
-    Services.RequestThrottlers.MacaulayLibrary,
+    Services.MacaulayLibrary,
+    Services.RequestThrottler,
     Services.Service,
     TestHelpers
   }
@@ -49,7 +46,7 @@ defmodule Mix.Tasks.RecordDataTest do
       bird = BirdSong.Repo.get_by(Bird, common_name: "Wilson's Warbler")
       assert %Bird{} = bird
 
-      assert %Service{module: Recordings} = Map.fetch!(services, :recordings)
+      assert %Service{module: MacaulayLibrary.Recordings} = services.recordings
       assert %Service{module: RegionSpeciesCodes} = Map.fetch!(services, :region_species_codes)
 
       for key <- [:images, :recordings] do
@@ -62,9 +59,9 @@ defmodule Mix.Tasks.RecordDataTest do
 
       assert RecordData.run(["--bird=Wilson's_Warbler"], services) === :ok
 
-      assert_receive {:start_request, %{module: Recordings}}
+      assert_receive {:start_request, %{module: MacaulayLibrary.Recordings}}
       assert_receive {:start_request, %{module: Flickr}}
-      assert_receive {:end_request, %{module: Recordings}}
+      assert_receive {:end_request, %{module: MacaulayLibrary.Recordings}}
       assert_receive {:end_request, %{module: Flickr}}
 
       assert {:ok, _} = Service.read_from_disk(services.recordings, bird)
@@ -148,9 +145,9 @@ defmodule Mix.Tasks.RecordDataTest do
          %{service_module: Flickr},
          %{service_module: RegionSpeciesCodes},
          %{
-           service_module: Recordings,
+           service_module: MacaulayLibrary.Recordings,
            scraper: {Playwright, playwright},
-           throttler_module: MacaulayLibrary,
+           throttler_module: MacaulayLibrary.RequestThrottler,
            bypass_tag: :ebird_bypass
          }
        ],

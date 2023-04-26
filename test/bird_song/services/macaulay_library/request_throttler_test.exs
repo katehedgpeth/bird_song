@@ -1,13 +1,12 @@
-defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
+defmodule BirdSong.Services.MacaulayLibrary.RequestThrottlerTest do
   use BirdSong.DataCase
 
   alias BirdSong.{
     Bird,
     MockMacaulayServer,
-    Services.Ebird.Recordings.Playwright,
-    Services.RequestThrottler,
+    Services.MacaulayLibrary,
+    Services.RequestThrottler.Response,
     Services.RequestThrottler.ForbiddenExternalURLError,
-    Services.RequestThrottlers.MacaulayLibrary,
     TestHelpers
   }
 
@@ -27,12 +26,12 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
   ]
 
   test "add_to_queue", %{throttler: throttler, request: request} do
-    MacaulayLibrary.add_to_queue(
+    MacaulayLibrary.RequestThrottler.add_to_queue(
       request,
       throttler
     )
 
-    assert_receive {:"$gen_cast", %RequestThrottler.Response{response: response}},
+    assert_receive {:"$gen_cast", %Response{response: response}},
                    5_000
 
     assert {:ok, [%{"ageSex" => _} | _]} = response
@@ -44,13 +43,13 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
     request: request,
     throttler: throttler
   } do
-    assert :ok = MacaulayLibrary.add_to_queue(%{request | url: "/"}, throttler)
+    assert :ok = MacaulayLibrary.RequestThrottler.add_to_queue(%{request | url: "/"}, throttler)
 
-    assert_receive {:"$gen_cast", %RequestThrottler.Response{response: response}},
+    assert_receive {:"$gen_cast", %Response{response: response}},
                    5_000
 
     assert {:error, %ForbiddenExternalURLError{}} = response
-    refute_receive {:"$gen_cast", %RequestThrottler.Response{base_url: ^base_url}}
+    refute_receive {:"$gen_cast", %Response{base_url: ^base_url}}
   end
 
   defp setup_mock_server(%{use_mock_server?: false}) do
@@ -92,7 +91,7 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
         throttle_ms: @throttle_ms,
         timeout: @timeout_ms
       )
-      |> Playwright.start_link()
+      |> MacaulayLibrary.Playwright.start_link()
 
     {:ok, playwright: playwright}
   end
@@ -103,9 +102,9 @@ defmodule BirdSong.Services.RequestThrottlers.MacaulayLibraryTest do
       |> get_variable_opts()
       |> Keyword.merge(
         throttle_ms: @throttle_ms,
-        scraper: {Playwright, tags[:playwright]}
+        scraper: {MacaulayLibrary.Playwright, tags[:playwright]}
       )
-      |> MacaulayLibrary.start_link()
+      |> MacaulayLibrary.RequestThrottler.start_link()
 
     {:ok, throttler: throttler}
   end

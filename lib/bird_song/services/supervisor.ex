@@ -24,16 +24,15 @@ defmodule BirdSong.Services.Supervisor do
   This will be the service name in `:prod` and `:dev`, but tests can start a service
   using the test name as the service name to ensure that test values are isolated.
   """
-  @type service_instance_name() :: service_module() | test_name()
-  @type service_instance_name(service) ::
-          test_name() | service
+  @type service_instance_name(service_modul) :: service_modul | test_name()
+  @type service_instance_name() :: service_instance_name(service_module())
 
   @typedoc """
   The module name of a service's child, where the child's methods are defined.
   """
   @type instance_worker_module() :: module()
-  @type instance_worker_module(service_mod, worker_atom) ::
-          Module.concat(service_mod, worker_atom)
+  @type instance_worker_module(service_modul, worker_atom) ::
+          Module.concat(service_modul, worker_atom)
 
   @typedoc """
   The unique single-atom version of a service's child worker module.
@@ -58,20 +57,22 @@ defmodule BirdSong.Services.Supervisor do
   @type instance_worker_name(name_atom) :: Module.concat(service_instance_name(), name_atom)
   @type instance_worker_name() :: instance_worker_name(instance_worker_atom())
 
-  @type instance_worker_info(service_module, worker_atom) :: %Service{
+  @type instance_worker_info(instance, worker_atom) :: %Service{
           name: instance_worker_name(worker_atom),
-          module: instance_worker_module(service_module, worker_atom),
+          module: instance_worker_module(instance, worker_atom),
           whereis: pid()
         }
 
-  @type instance_worker_info() :: instance_worker_info(service_module(), instance_worker_atom())
+  @type instance_worker_info() ::
+          instance_worker_info(service_instance_name(), instance_worker_atom())
 
-  @type service_struct(service, worker_atom) :: %{
-          required(:__struct__) => service,
-          required(worker_atom) => instance_worker_info(service, worker_atom)
+  @type service_struct(instance, service_mod, worker_atom) :: %{
+          required(:__struct__) => service_mod,
+          required(worker_atom) => instance_worker_info(instance, worker_atom)
         }
 
-  @type service_struct() :: service_struct(service_module(), instance_worker_atom())
+  @type service_struct() ::
+          service_struct(service_instance_name(), service_module(), instance_worker_atom())
 
   @typedoc """
   The name of the actual supervisor instance that is supervising all of the service's workers.
@@ -83,7 +84,7 @@ defmodule BirdSong.Services.Supervisor do
 
   @type supervisor_options() :: [default_supervisor_option() | {atom(), any()}]
 
-  @type service_name_or_options() :: service_instance_name() | supervisor_options()
+  @type service_name_or_options(option) :: service_instance_name() | [option]
 
   #########################################################
   #########################################################
@@ -98,14 +99,16 @@ defmodule BirdSong.Services.Supervisor do
   @callback default_service_name() :: service_module()
 
   @callback child_name(
-              service_name_or_options(),
+              service_name_or_options(Keyword.t()),
               instance_worker_atom()
             ) :: instance_worker_name()
 
   @callback child_module(instance_worker_atom()) :: instance_worker_module()
 
-  @callback get_instance_child(service_instance_name(), instance_worker_atom()) ::
-              instance_worker_info()
+  @callback get_instance_child(
+              service_instance_name(),
+              instance_worker_atom()
+            ) :: instance_worker_info()
 
   defmacro __using__(use_opts) do
     use_opts = Map.new(use_opts)
@@ -188,7 +191,12 @@ defmodule BirdSong.Services.Supervisor do
       ##
       #########################################################
 
-      @type instance_name() :: BirdSong.Services.Supervisor.service_instance_name(__MODULE__)
+      @type this_instance_name() :: BirdSong.Services.Supervisor.service_instance_name(__MODULE__)
+      @type option() ::
+              {:base_url, String.t()}
+              | {:service_name, this_instance_name()}
+              | {:allow_external_calls?, boolean}
+              | {:throttle_ms, integer()}
 
       #########################################################
       #########################################################
@@ -240,7 +248,7 @@ defmodule BirdSong.Services.Supervisor do
       @spec base_url() :: String.t()
       def base_url(), do: @base_url
 
-      @spec base_url(Sup.service_instance_name()) :: String.t()
+      @spec base_url(this_instance_name()) :: String.t()
       def base_url(instance_name) do
         when_service_instance_name instance_name, __MODULE__ do
           %{RequestThrottler: %Service{whereis: whereis}} = map_of_child_pids(instance_name)
@@ -249,7 +257,9 @@ defmodule BirdSong.Services.Supervisor do
         end
       end
 
-      @impl Sup
+      # @impl Sup
+      @spec child_name(Sup.service_name_or_options(option()), Sup.instance_worker_atom()) ::
+              Sup.instance_worker_name()
       def child_name(opts, child)
           when is_list(opts) and is_child_name(child) do
         opts
@@ -263,17 +273,21 @@ defmodule BirdSong.Services.Supervisor do
         end
       end
 
-      @impl Sup
+      # @impl Sup
+      @spec child_module(Sup.instance_worker_atom()) :: Sup.instance_worker_module()
       def child_module(:RequestThrottler), do: RequestThrottler
       def child_module(child) when is_child_name(child), do: concat_name(__MODULE__, child)
       defoverridable(child_module: 1)
 
-      @impl Sup
+      # @impl Sup
+      @spec default_service_name() :: module()
       def default_service_name() do
         Keyword.fetch!(@default_opts, :service_name)
       end
 
-      @impl Sup
+      # @impl Sup
+      @spec get_instance_child(this_instance_name(), module()) ::
+              Sup.instance_worker_info(this_instance_name(), Sup.instance_worker_atom())
       def get_instance_child(service_instance, child) do
         when_service_instance_name service_instance, __MODULE__ do
           service_instance
@@ -282,23 +296,21 @@ defmodule BirdSong.Services.Supervisor do
         end
       end
 
-      @impl Sup
+      # @impl Sup
       def services() do
         default_service_name()
         |> services()
       end
 
-      @impl Sup
+      # @impl Sup
       def services(service) do
         when_service_instance_name service, __MODULE__ do
           @caches
           |> Enum.map(
             &{&1,
-             get_instance_child(
-               map_of_child_pids(service),
-               service,
-               &1
-             )}
+             service
+             |> map_of_child_pids()
+             |> get_instance_child(service, &1)}
           )
           |> Keyword.new()
           |> __struct__()
@@ -359,7 +371,7 @@ defmodule BirdSong.Services.Supervisor do
         Map.put(acc, module, pid)
       end
 
-      @spec child_specs(Sup.options()) :: [Supervisor.child_spec()]
+      @spec child_specs(Sup.supervisor_options()) :: [Supervisor.child_spec()]
       defp child_specs(opts) when is_list(opts) do
         opts
         |> with_default_opts()
@@ -367,7 +379,7 @@ defmodule BirdSong.Services.Supervisor do
         |> do_child_specs()
       end
 
-      @spec do_child_specs(Sup.options()) :: [Supervisor.child_spec()]
+      @spec do_child_specs(Sup.supervisor_options()) :: [Supervisor.child_spec()]
       defp do_child_specs(opts) do
         Enum.map(
           @child_names,

@@ -73,7 +73,7 @@ defmodule BirdSong.Data.Counts do
        when key in [:__tasks, :overwrite?, :__from, :bird, :timeout],
        do: acc
 
-  defp get_data_folder_bytes({key, service_instance}, acc) do
+  defp get_data_folder_bytes({_key, service_instance}, acc) do
     calculate_data_folder_bytes(service_instance, acc)
   end
 

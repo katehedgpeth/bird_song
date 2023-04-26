@@ -1,6 +1,6 @@
 defmodule BirdSongWeb.QuizLive.HTML.Recordings.Ebird do
   alias Phoenix.HTML
-  alias BirdSong.Services.Ebird.Recordings.Recording
+  alias BirdSong.Services.MacaulayLibrary.Recording
 
   @behaviour BirdSongWeb.QuizLive.HTML.Recording
 

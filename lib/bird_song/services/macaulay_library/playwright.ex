@@ -1,4 +1,4 @@
-defmodule BirdSong.Services.Ebird.Recordings.Playwright do
+defmodule BirdSong.Services.MacaulayLibrary.Playwright do
   use GenServer
 
   alias BirdSong.{

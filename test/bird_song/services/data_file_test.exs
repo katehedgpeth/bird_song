@@ -57,7 +57,6 @@ defmodule BirdSong.Services.DataFileTest do
   import BirdSong.TestSetup
 
   alias BirdSong.{
-    Services.Ebird,
     Services.DataFile,
     Services.Service,
     TestHelpers
@@ -248,14 +247,14 @@ defmodule BirdSong.Services.DataFileTest do
       assert_works_for_service(tags)
     end
 
-    @tag service: Ebird.Recordings
-    test "works for Ebird.Recordings service", tags do
+    @tag service: MacaulayLibrary.Recordings
+    test "works for MacaulayLibrary.Recordings service", tags do
       assert_works_for_service(tags)
     end
   end
 
   describe "&read/1" do
-    @tag service: Ebird.Recordings
+    @tag service: MacaulayLibrary.Recordings
     @tag use_existing_file?: true
     @tag tmp_dir: false
     test "returns {:ok, string} when read is successful", %{

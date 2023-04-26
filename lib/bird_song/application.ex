@@ -7,31 +7,29 @@ defmodule BirdSong.Application do
 
   alias BirdSong.Services.Helpers
 
-  alias BirdSong.{
-    Services,
-    Services.Ebird,
-    Services.RequestThrottler,
-    Services.RequestThrottlers
-  }
+  alias BirdSong.Services
+
+  @macaulay_base_url Helpers.get_env(Services.MacaulayLibrary, :base_url)
 
   @supervisors [
     # supervisors for external API requests
     {Task.Supervisor, name: Services.Tasks},
-    {Task.Supervisor, name: RequestThrottler.TaskSupervisor},
+    {Task.Supervisor, name: Services.RequestThrottler.TaskSupervisor},
     {DynamicSupervisor, name: Services.GenServers}
   ]
 
   @throttlers [
-    {RequestThrottlers.MacaulayLibrary,
-     base_url: Helpers.get_env(RequestThrottlers.MacaulayLibrary, :base_url),
-     name: RequestThrottlers.MacaulayLibrary,
-     scraper: Ebird.Recordings.Playwright}
+    {Services.MacaulayLibrary.RequestThrottler,
+     base_url: @macaulay_base_url,
+     name: BirdSong.Services.MacaulayLibrary.RequestThrottler,
+     scraper: Services.MacaulayLibrary.Playwright}
   ]
 
   @services [
     Services.Ebird,
     Services.Flickr,
-    {Ebird.Recordings, name: Ebird.Recordings}
+    {Services.MacaulayLibrary.Recordings,
+     name: Services.MacaulayLibrary.Recordings, base_url: @macaulay_base_url}
   ]
 
   @children List.flatten([

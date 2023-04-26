@@ -1,14 +1,11 @@
-defmodule BirdSong.Services.Ebird.RecordingsTest do
+defmodule BirdSong.Services.MacaulayLibraryTest do
   use BirdSong.DataCase
   import BirdSong.TestSetup, except: [start_throttler: 1]
-
-  alias BirdSong.Services.RequestThrottlers.MacaulayLibrary
-  alias BirdSong.Services.Ebird.Recordings.Playwright
 
   alias BirdSong.{
     Bird,
     MockMacaulayServer,
-    Services.Ebird.Recordings,
+    Services.MacaulayLibrary,
     Services.Service,
     TestHelpers
   }
@@ -32,11 +29,11 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
 
     service =
       TestHelpers.start_service_supervised(
-        Recordings,
+        MacaulayLibrary.Recordings,
         Map.merge(tags, %{throttle_ms: 0})
       )
 
-    Recordings.register_request_listener(service.whereis)
+    MacaulayLibrary.Recordings.register_request_listener(service.whereis)
 
     {:ok, service: service}
   end
@@ -45,7 +42,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
     Plug.Conn.resp(conn, 200, mock_response)
   end
 
-  @tag recordings_module: Recordings
+  @tag recordings_module: MacaulayLibrary.Recordings
   @tag taxonomy_file: TestHelpers.mock_file_path("mock_taxonomy")
   test "get/2",
        %{
@@ -56,16 +53,18 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
     bird = BirdSong.Repo.get_by(Bird, common_name: "Eastern Bluebird")
     assert %{data_folder_path: folder} = GenServer.call(service.whereis, :state)
     assert folder =~ tmp_dir
-    assert {:ok, %Recordings.Response{recordings: recordings}} = Recordings.get(bird, service)
+
+    assert {:ok, %MacaulayLibrary.Response{recordings: recordings}} =
+             MacaulayLibrary.Recordings.get(bird, service)
 
     # does not shut down port after receiving response
     state = GenServer.call(service.whereis, :state)
-    assert %{scraper: {Recordings.Playwright, scraper_pid}} = state
+    assert %{scraper: {MacaulayLibrary.Playwright, scraper_pid}} = state
     assert %{port: port} = GenServer.call(scraper_pid, :state)
     assert {:connected, _} = Port.info(port, :connected)
 
     assert_receive {
-      Recordings.Playwright,
+      MacaulayLibrary.Playwright,
       %DateTime{},
       {:request, %{current_request_number: 1, responses: []}}
     }
@@ -74,7 +73,7 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
     assert length(recordings) === 90
 
     for recording <- recordings do
-      assert %Recordings.Recording{asset_id: asset_id, location: location} = recording
+      assert %MacaulayLibrary.Recording{asset_id: asset_id, location: location} = recording
       assert is_integer(asset_id)
       assert is_map(location)
 
@@ -100,19 +99,19 @@ defmodule BirdSong.Services.Ebird.RecordingsTest do
     base_url = TestHelpers.mock_url(bypass)
 
     {:ok, playwright} =
-      Playwright.start_link(
+      MacaulayLibrary.Playwright.start_link(
         base_url: base_url,
         listeners: [self()],
         throttle_ms: 0
       )
 
     {:ok, throttler} =
-      MacaulayLibrary.start_link(
+      MacaulayLibrary.RequestThrottler.start_link(
         base_url: base_url,
         throttle_ms: 0,
-        scraper: {Playwright, playwright}
+        scraper: {MacaulayLibrary.Playwright, playwright}
       )
 
-    {:ok, throttler: throttler, scraper: {Playwright, playwright}}
+    {:ok, throttler: throttler, scraper: {MacaulayLibrary.Playwright, playwright}}
   end
 end

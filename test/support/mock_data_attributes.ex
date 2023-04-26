@@ -10,6 +10,7 @@ defmodule BirdSong.MockDataAttributes do
         Bird,
         Services.Ebird,
         Services.Flickr,
+        Services.MacaulayLibrary,
         Services.XenoCanto
       }
 
@@ -36,7 +37,7 @@ defmodule BirdSong.MockDataAttributes do
                                  Ebird.Observations,
                                  {:recent_observations, ":region"}
                                )
-      @ebird_recordings_path BirdSong.MockDataAttributes.endpoint(Ebird.Recordings)
+      @macaulay_library_path BirdSong.MockDataAttributes.endpoint(MacaulayLibrary.Recordings)
     end
   end
 end
