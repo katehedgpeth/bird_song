@@ -1,10 +1,9 @@
 defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
-  use BirdSong.TestSetup, [:setup_bypass, :start_service_supervisor!]
+  use BirdSong.SupervisedCase
 
   alias BirdSong.Services.{
     Ebird,
-    Ebird.RegionSpeciesCodes,
-    TestSetup
+    Ebird.RegionSpeciesCodes
   }
 
   @moduletag service: :Ebird
@@ -15,17 +14,26 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
     {:ok, raw_codes: File.read!("test/mock_data/region_species_codes/" <> @region <> ".json")}
   end
 
+  setup tags do
+    {:ok, get_worker_setup(Ebird, :RegionSpeciesCodes, tags)}
+  end
+
   describe "&get/1" do
     test "returns a list of species codes when API returns a successful response", %{
       bypass: bypass,
       raw_codes: raw_codes,
-      test: test
+      worker: worker
     } do
-      service = Ebird.get_instance_child(test, :RegionSpeciesCodes)
       Bypass.expect(bypass, &success_response(&1, raw_codes))
 
-      assert {:ok, %RegionSpeciesCodes.Response{region: @region, codes: ["bbwduc" | _]}} =
-               RegionSpeciesCodes.get({:region_species_codes, @region}, service)
+      assert {:ok, response} =
+               RegionSpeciesCodes.get(
+                 {:region_species_codes, @region},
+                 worker
+               )
+
+      assert %RegionSpeciesCodes.Response{region: @region, codes: codes} = response
+      assert ["bbwduc" | _] = codes
     end
   end
 

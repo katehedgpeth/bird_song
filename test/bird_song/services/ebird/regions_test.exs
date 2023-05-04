@@ -1,26 +1,25 @@
 defmodule BirdSong.Services.Ebird.RegionsTest do
-  use ExUnit.Case, async: true
-  import BirdSong.TestSetup
+  use BirdSong.SupervisedCase, async: true
 
   alias BirdSong.{
     Services.Ebird,
     Services.Ebird.Regions,
-    Services.Ebird.Regions.Region
+    Services.Ebird.Regions.Region,
+    Services.Worker
   }
 
-  @moduletag :tmp_dir
   @moduletag throttle_ms: 3_000
   @moduletag service: :Ebird
 
-  setup [:setup_bypass, :setup_route_mocks, :start_service_supervisor!]
+  @tag :tmp_dir
+  test "&get_countries/1", tags do
+    %{
+      worker: worker,
+      bypass: bypass
+    } = get_worker_setup(Ebird, :Regions, tags)
 
-  setup %{test: test} do
-    {:ok, regions: Ebird.get_instance_child(test, :Regions)}
-  end
-
-  @tag expect: &__MODULE__.success_response/1
-  test "&get_countries/1", %{regions: service} do
-    assert {:ok, regions} = Regions.get_countries(service)
+    Bypass.expect(bypass, &__MODULE__.success_response/1)
+    assert {:ok, regions} = Regions.get_countries(worker)
 
     assert regions === [
              %Region{name: "Afghanistan", code: "AF", level: :country},
@@ -30,10 +29,16 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
            ]
   end
 
+  @tag use_bypass?: false
   @tag tmp_dir: false
-  @tag use_mock_routes?: false
-  test "&get_subregions/3", %{regions: service} do
-    assert {:ok, [_ | _] = countries} = Regions.get_countries(service)
+  test "&get_subregions/3", tags do
+    assert %{
+             worker: worker
+           } = get_worker_setup(Ebird, :Regions, tags)
+
+    assert Worker.full_data_folder_path(worker) === {:ok, "data/regions/ebird"}
+
+    assert {:ok, [_ | _] = countries} = Regions.get_countries(worker)
     countries_len = length(countries)
 
     has_sub1_pct = MapSet.size(has_sub1()) / countries_len
@@ -50,7 +55,7 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
       assert %Region{name: country_name, code: country_code} = country
       record = country_code <> " " <> country_name
 
-      sub1_response = Regions.get_subregions(country, service, :subnational1)
+      sub1_response = Regions.get_subregions(country, worker, :subnational1)
 
       case MapSet.member?(has_sub1(), record) do
         true ->
@@ -67,7 +72,7 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
                    {:error, {:no_subregions, level: :subnational1, parent: country_code}}
       end
 
-      sub2_response = Regions.get_subregions(country, service, :subnational2)
+      sub2_response = Regions.get_subregions(country, worker, :subnational2)
 
       case MapSet.member?(has_sub2(), record) do
         true ->

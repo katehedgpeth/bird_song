@@ -8,7 +8,7 @@ defmodule BirdSongWeb.QuizLive.NewTest do
     MockServer,
     Services,
     Services.Ebird,
-    Services.Service
+    Services.Worker
   }
 
   @moduletag :capture_log
@@ -31,7 +31,6 @@ defmodule BirdSongWeb.QuizLive.NewTest do
 
   setup [
     :seed_from_mock_taxonomy,
-    :start_throttler,
     :start_services,
     :start_view,
     :setup_listeners
@@ -117,13 +116,11 @@ defmodule BirdSongWeb.QuizLive.NewTest do
   def setup_listeners(%{
         view: view,
         services: %Services{
-          region_species_codes: %Service{
-            whereis: codes_service_pid
-          }
+          region_species_codes: %Worker{} = worker
         }
       }) do
     send(view.pid, {:register_render_listener, self()})
-    Ebird.RegionSpeciesCodes.register_request_listener(codes_service_pid)
+    Ebird.RegionSpeciesCodes.register_request_listener(worker)
   end
 
   def empty_response(conn) do

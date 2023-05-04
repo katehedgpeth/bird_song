@@ -29,34 +29,38 @@ defmodule BirdSong.MockApiCase do
 
   using opts do
     quote location: :keep, bind_quoted: [opts: opts] do
-      import BirdSong.TestSetup
+      raise BirdSong.DeprecatedFunctionError.exception(
+              deprecated: "use MockApiCase",
+              replacement: "use SupervisedCase"
+            )
 
-      @moduletag seed_services?: Keyword.get(opts, :seed_services?, false)
+      # import BirdSong.TestSetup
 
-      if Keyword.get(opts, :use_data_case, true) do
-        use BirdSong.DataCase
-        setup [:seed_from_mock_taxonomy]
-      end
+      # @moduletag seed_services?: Keyword.get(opts, :seed_services?, false)
 
-      setup [
-        :start_throttler,
-        :start_services,
-        :setup_route_mocks,
-        :listen_to_services,
-        :clean_up_tmp_folder_on_exit
-      ]
+      # if Keyword.get(opts, :use_data_case, true) do
+      #   use BirdSong.DataCase
+      #   setup [:seed_from_mock_taxonomy]
+      # end
 
-      require Logger
-      use BirdSong.MockDataAttributes
+      # setup [
+      #   :start_services,
+      #   :setup_route_mocks,
+      #   :listen_to_services,
+      #   :clean_up_tmp_folder_on_exit
+      # ]
 
-      alias BirdSong.{
-        Bird,
-        MockServer,
-        TestHelpers,
-        Services.Ebird
-      }
+      # require Logger
+      # use BirdSong.MockDataAttributes
 
-      # @moduletag seed_services?: false
+      # alias BirdSong.{
+      #   Bird,
+      #   MockServer,
+      #   TestHelpers,
+      #   Services.Ebird
+      # }
+
+      # # @moduletag seed_services?: false
     end
   end
 end

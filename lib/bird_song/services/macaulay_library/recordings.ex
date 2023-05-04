@@ -1,31 +1,25 @@
 defmodule BirdSong.Services.MacaulayLibrary.Recordings do
   use BirdSong.Services.ThrottledCache,
-    data_folder_path: "data/recordings/macaulay_library",
     ets_opts: [],
-    ets_name: :macaulay_library_recordings,
-    throttler: BirdSong.Services.MacaulayLibrary.RequestThrottler,
-    scraper: __MODULE__.Playwright
+    ets_name: :macaulay_library_recordings
 
   alias BirdSong.{
     Bird,
     Data.Scraper.TimeoutError,
     Data.Scraper.BadResponseError,
-    Services.Helpers,
-    Services.MacaulayLibrary
+    Services.MacaulayLibrary,
+    Services.ThrottledCache
   }
 
   alias BirdSong.Services.ThrottledCache, as: TC
-
   @type raw_response() :: {:ok, [Map.t()]} | {:error, any()}
 
-  def base_url() do
-    Helpers.get_env(__MODULE__, :base_url)
-  end
-
+  @impl ThrottledCache
   def endpoint(%Bird{}) do
     "catalog"
   end
 
+  @impl ThrottledCache
   def params(%Bird{species_code: code}) do
     %{
       "taxonCode" => code,
@@ -33,22 +27,12 @@ defmodule BirdSong.Services.MacaulayLibrary.Recordings do
     }
   end
 
+  @impl ThrottledCache
   def response_module() do
     MacaulayLibrary.Response
   end
 
-  def handle_call(:state, _from, state) do
-    {:reply, state, state}
-  end
-
-  def handle_call(:scraper_info, _from, %TC.State{scraper: scraper} = state) do
-    {:reply, scraper, state}
-  end
-
-  def handle_call(msg, from, state) do
-    super(msg, from, state)
-  end
-
+  @impl GenServer
   def handle_info({ref, {:error, %BadResponseError{status: 404, url: url}}}, state)
       when is_reference(ref) do
     super({ref, {:error, {:not_found, url}}}, state)

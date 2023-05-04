@@ -7,13 +7,12 @@ defmodule BirdSong.MockServer do
 
   alias BirdSong.{
     Bird,
-    Services.Service
+    Services.Worker
   }
 
   @ebird_token :bird_song
                |> Application.compile_env(BirdSong.Services.Ebird)
                |> Keyword.fetch!(:token)
-  @ebird_api_path_info ["api", "v2", "search"]
 
   # defguard is_ebird_observation_path(info) when match?(["v2", "data", "obs", _, "recent"], info)
   defguardp is_ebird_obs_3(info) when tl(info) === ["recent"]
@@ -33,7 +32,7 @@ defmodule BirdSong.MockServer do
           params: %{"query" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, XenoCanto, String.replace(sci_name, "+", " "))
+    do_success_response(conn, {XenoCanto, :Recordings}, String.replace(sci_name, "+", " "))
   end
 
   def success_response(
@@ -42,7 +41,7 @@ defmodule BirdSong.MockServer do
           params: %{"text" => sci_name}
         } = conn
       ) do
-    do_success_response(conn, Flickr, sci_name)
+    do_success_response(conn, {Flickr, :PhotoSearch}, sci_name)
   end
 
   def success_response(
@@ -51,16 +50,6 @@ defmodule BirdSong.MockServer do
         } = conn
       ) do
     Conn.resp(conn, 200, File.read!("test/mock_data/region_species_codes/US-NC-067.json"))
-  end
-
-  def success_response(%Conn{request_path: "/" <> @macaulay_library_path} = conn) do
-    {:ok, body} = File.read("test/mock_data/ebird_recordings.html")
-    Conn.resp(conn, 200, body)
-  end
-
-  def success_response(%Conn{path_info: @ebird_api_path_info} = conn) do
-    {:ok, body} = File.read("test/mock_data/ebird_recordings.json")
-    Conn.resp(conn, 200, body)
   end
 
   def success_response(
@@ -96,24 +85,20 @@ defmodule BirdSong.MockServer do
     Conn.resp(conn, 200, ~s({"mocked_data": true}))
   end
 
-  def success_response(%Conn{path_info: ["_nuxt", _]} = conn) do
-    Conn.resp(conn, 200, "{}")
-  end
-
   def success_response(%Conn{req_headers: headers} = conn) when is_list(headers) do
     conn
     |> Map.replace!(:req_headers, Enum.into(headers, %{}))
     |> success_response()
   end
 
-  defp do_success_response(%Conn{} = conn, service, "" <> sci_name)
-       when is_atom(service) do
+  defp do_success_response(%Conn{} = conn, worker_tuple, "" <> sci_name)
+       when is_tuple(worker_tuple) do
     {:ok, %Bird{} = bird} = Bird.get_by_sci_name(sci_name)
 
     service_response(
       conn,
       bird,
-      Service.ensure_started(%Service{module: service})
+      worker_tuple
     )
   end
 
@@ -129,13 +114,15 @@ defmodule BirdSong.MockServer do
 
   def error_response(conn), do: Plug.Conn.resp(conn, 500, "there was an error")
 
-  defp service_response(%Conn{} = conn, %Bird{} = bird, %Service{} = service) do
-    case Service.read_from_disk(service, bird) do
+  defp service_response(%Conn{} = conn, %Bird{} = bird, {service, worker_atom}) do
+    worker = service.get_instance_child(service, worker_atom)
+
+    case Worker.read_from_disk(worker, bird) do
       {:ok, "" <> body} ->
         Helpers.log(
           %{
             response_mocked: true,
-            service: service.module,
+            worker: worker.instance_name,
             bird: bird.common_name
           },
           __MODULE__
@@ -147,7 +134,7 @@ defmodule BirdSong.MockServer do
         logged_not_found_response(conn, %{
           error: :file_not_found,
           bird: bird.common_name,
-          service: service.module,
+          worker: worker.instance_name,
           path: path
         })
     end

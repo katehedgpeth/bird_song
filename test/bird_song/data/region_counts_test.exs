@@ -3,19 +3,21 @@ defmodule BirdSong.Data.RegionCountsTest do
 
   alias BirdSong.{
     Data.RegionCounts,
-    Services.Ebird.Regions,
+    Services,
+    Services.Ebird,
     Services.Ebird.Regions.Region,
-    Services.Service
+    Services.Worker
   }
 
   setup do
-    {:ok, service: Service.ensure_started!(%Service{module: Regions})}
+    assert %Services{ebird: %Ebird{Regions: %Worker{} = regions}} = Services.all()
+    {:ok, service: regions}
   end
 
   describe "&get_region_counts/3 for all regions" do
     test "returns the total number of known countries and subregions", %{service: service} do
       raw_countries =
-        "data/regions/all-countries.json"
+        "data/regions/ebird/all-countries.json"
         |> File.read!()
         |> Jason.decode!()
 

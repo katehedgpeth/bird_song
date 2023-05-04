@@ -75,13 +75,13 @@ defmodule BirdSongWeb.QuizLive.Current do
        when is_resource_key(resource_key) do
     plural = :"#{resource_key}s"
 
-    %Service{module: module, whereis: whereis} =
+    %Service{module: module, name: name} =
       socket
       |> get_assign(:services)
       |> Map.fetch!(plural)
 
     resource =
-      case apply(module, :get, [bird, whereis]) do
+      case apply(module, :get, [bird, name]) do
         {:ok, saved_response} ->
           saved_response
           |> Map.fetch!(plural)

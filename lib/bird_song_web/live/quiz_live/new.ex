@@ -59,7 +59,7 @@ defmodule BirdSongWeb.QuizLive.New do
     |> assign_new(:birds, fn -> [] end)
     |> assign_new(:render_listeners, fn -> [] end)
     |> assign_new(:filters, &Quiz.default_changeset/0)
-    |> assign_new(:services, fn -> Services.ensure_started() end)
+    |> assign_new(:services, fn -> Services.all() end)
     |> assign_new(:asset_cdn, fn -> @asset_cdn end)
     |> EtsTables.assign_tables()
   end

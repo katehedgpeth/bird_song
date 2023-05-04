@@ -1,12 +1,10 @@
 defmodule BirdSong.Services.Ebird.Observations do
   use BirdSong.Services.ThrottledCache,
-    base_url: BirdSong.Services.Ebird.base_url(),
-    data_folder_path: "data/observations/ebird",
     ets_opts: [],
-    ets_name: :throttled_cache
+    ets_name: :ebird_observations
 
   require Logger
-  alias BirdSong.{Services.Ebird, Services.Helpers}
+  alias BirdSong.{Services.Ebird, Services.Helpers, Services.Worker}
 
   @type request_data() :: {:recent_observations, String.t()}
 
@@ -16,7 +14,7 @@ defmodule BirdSong.Services.Ebird.Observations do
 
   def ets_key({:recent_observations, region}), do: region
 
-  @spec get_recent_observations(String.t(), GenServer.server()) ::
+  @spec get_recent_observations(String.t(), Worker.t()) ::
           Helpers.api_response(Response.t())
   def get_recent_observations("" <> region, server) do
     get({:recent_observations, region}, server)

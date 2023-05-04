@@ -1,17 +1,26 @@
 defmodule BirdSong.Services.MacaulayLibrary.Playwright do
-  use GenServer
+  use BirdSong.Services.Worker,
+    option_keys: [
+      :base_url,
+      :listeners,
+      :throttle_ms,
+      :timeout
+    ]
 
   alias BirdSong.{
+    Data.Scraper,
     Data.Scraper.BadResponseError,
     Data.Scraper.ConnectionError,
     Data.Scraper.JsonParseError,
     Data.Scraper.TimeoutError,
     Data.Scraper.UnknownMessageError,
-    Services.ThrottledCache,
-    Services.Helpers
+    Services.Helpers,
+    Services.Supervisor.ForbiddenExternalURLError,
+    Services.Worker,
+    Services.ThrottledCache
   }
 
-  @behaviour BirdSong.Data.Scraper
+  @behaviour Scraper
 
   @throttle_ms :bird_song
                |> Application.compile_env!(ThrottledCache)
@@ -29,7 +38,7 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
 
   @max_requests 3
 
-  @enforce_keys [:base_url]
+  @enforce_keys [:base_url, :throttle_ms]
 
   defstruct [
     :base_url,
@@ -37,6 +46,7 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
     :port,
     :reply_to,
     :request,
+    :worker,
     current_request_number: 0,
     listeners: [],
     ready?: false,
@@ -59,13 +69,19 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
           timeout: integer()
         }
 
-  @spec run(GenServer.server(), HTTPoison.Request.t()) :: BirdSong.Data.Scraper.response()
+  @impl Scraper
+  @spec run(Worker.t(), HTTPoison.Request.t(), integer() | :infinity) ::
+          BirdSong.Data.Scraper.response()
   def run(
-        whereis,
+        %Worker{instance_name: whereis},
         %HTTPoison.Request{params: %{"taxonCode" => _}} = request,
         timeout \\ :infinity
       ) do
     GenServer.call(whereis, {:run, request}, timeout)
+  end
+
+  def register_listener(%Worker{instance_name: name}) do
+    GenServer.cast(name, {:register_listener, self()})
   end
 
   #########################################################
@@ -75,26 +91,29 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
   ##
   #########################################################
 
-  def start_link(opts) do
-    GenServer.start_link(
-      __MODULE__,
-      init_state(opts)
-    )
-  end
-
-  def init(%__MODULE__{} = state) do
+  @impl Worker
+  def do_init(opts) do
     Process.flag(:trap_exit, true)
-    {:ok, open_port(state)}
+
+    {:ok, init_state(opts), {:continue, {:open_port, Mix.env()}}}
   end
 
+  # Does not open the port by default during tests.
+  # Use GenServer.cast(:open_port) after the server has been started.
+  @impl GenServer
+  def handle_continue({:open_port, :test}, %__MODULE__{} = state) do
+    {:noreply, state}
+  end
+
+  def handle_continue({:open_port, env}, %__MODULE__{} = state) when env in [:dev, :prod] do
+    {:noreply, open_port(state)}
+  end
+
+  @impl GenServer
   def handle_info({port, {:data, message}}, %__MODULE__{port: port} = state) do
     with %__MODULE__{} = state <- receive_message(message, state) do
       {:noreply, state}
     end
-  end
-
-  def handle_info(:open_port, %__MODULE__{port: nil, ready?: false} = state) do
-    {:noreply, open_port(state)}
   end
 
   def handle_info(:send_request, %__MODULE__{ready?: false} = state) do
@@ -121,10 +140,20 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
     {:noreply, %{state | port: nil, ready?: false}}
   end
 
+  @impl GenServer
+  def handle_cast(:open_port, %__MODULE__{port: nil, ready?: false} = state) do
+    {:noreply, open_port(state)}
+  end
+
   def handle_cast(:shutdown_port, %__MODULE__{} = state) do
     {:noreply, shutdown_port(state, {:handle_cast, :shutdown_port})}
   end
 
+  def handle_cast({:register_listener, pid}, %__MODULE__{} = state) do
+    {:noreply, %{state | listeners: [pid | state.listeners]}}
+  end
+
+  @impl GenServer
   def handle_call({:run, request}, from, %__MODULE__{request: nil} = state) do
     send(self(), :send_request)
     {:noreply, %{state | request: request, reply_to: from}}
@@ -134,6 +163,7 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
     {:reply, state, state}
   end
 
+  @impl GenServer
   def terminate(reason, %__MODULE__{} = state) do
     shutdown_port(state, {:terminate, reason})
   end
@@ -175,11 +205,12 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
   defp init_state(opts) do
     opts
     |> Keyword.update!(:base_url, & &1)
-    |> Keyword.update!(
+    |> Keyword.put_new(:throttle_ms, @throttle_ms)
+    |> __struct__()
+    |> Map.update!(
       :throttle_ms,
       &ensure_throttled_ms/1
     )
-    |> __struct__()
   end
 
   defp log_external_api_call(%__MODULE__{base_url: "http://localhost" <> _}) do
@@ -194,7 +225,9 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
     Enum.each(listeners, &send(&1, {__MODULE__, DateTime.now!("Etc/UTC"), message}))
   end
 
-  defp open_port(%__MODULE__{base_url: base_url, timeout: timeout} = state) do
+  defp open_port(%__MODULE__{base_url: %URI{} = uri, timeout: timeout} = state) do
+    base_url = URI.to_string(uri)
+
     port =
       Port.open({:spawn_executable, @node_path}, [
         :binary,
@@ -204,8 +237,19 @@ defmodule BirdSong.Services.MacaulayLibrary.Playwright do
 
     Port.monitor(port)
     Port.command(port, "connect")
-    Helpers.log([message: "port_started", port: port, base_url: base_url], __MODULE__, :warning)
+    Helpers.log([message: "port_started", port: port, base_url: uri], __MODULE__, :warning)
     %{state | port: port}
+  end
+
+  defp open_port(%__MODULE__{base_url: {:error, %ForbiddenExternalURLError{} = error}} = state) do
+    Helpers.log([message: "skipping_port_start", error: error], __MODULE__, :warning)
+    state
+  end
+
+  if Mix.env() === :test do
+    def open_port___test(state) do
+      open_port(state)
+    end
   end
 
   defp parse_error_message(%{"error" => "timeout", "message" => js_message}, %__MODULE__{}) do

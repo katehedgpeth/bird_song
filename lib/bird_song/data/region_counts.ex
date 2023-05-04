@@ -1,6 +1,6 @@
 defmodule BirdSong.Data.RegionCounts do
   alias BirdSong.{
-    Services.Service,
+    Services.Worker,
     Services.Ebird.Regions,
     Services.Ebird.Regions.Region
   }
@@ -27,9 +27,9 @@ defmodule BirdSong.Data.RegionCounts do
           total_subnational2: integer() | :not_calculated
         }
 
-  @spec get(Service.t(), %{optional(:region) => String.t()}) ::
+  @spec get(Worker.t(), %{optional(:region) => String.t()}) ::
           Regions.region_response()
-  def get(%Service{module: Regions} = service, %{
+  def get(%Worker{module: Regions} = service, %{
         region: "" <> parent_region
       }) do
     %{"code" => parent_region, "name" => :unknown}
@@ -38,7 +38,7 @@ defmodule BirdSong.Data.RegionCounts do
     |> do_get()
   end
 
-  def get(%Service{module: Regions} = service, %{}) do
+  def get(%Worker{module: Regions} = service, %{}) do
     service
     |> Regions.get_all()
     |> do_get()
@@ -113,28 +113,28 @@ defmodule BirdSong.Data.RegionCounts do
     {country_code, Enum.group_by(regions, & &1.level)}
   end
 
-  @spec load_subregions(Region.t() | {:error, any()}, Service.t()) :: Regions.regions_response()
-  defp load_subregions({:error, error}, %Service{}) do
+  @spec load_subregions(Region.t() | {:error, any()}, Worker.t()) :: Regions.regions_response()
+  defp load_subregions({:error, error}, %Worker{}) do
     {:error, error}
   end
 
-  defp load_subregions(%Region{code: "world"}, %Service{} = service) do
+  defp load_subregions(%Region{code: "world"}, %Worker{} = service) do
     Regions.get_all(service)
   end
 
-  defp load_subregions(%Region{level: :country} = country, %Service{} = service) do
+  defp load_subregions(%Region{level: :country} = country, %Worker{} = service) do
     country
     |> Regions.get_country(service)
     |> do_load_subregions(country)
   end
 
-  defp load_subregions(%Region{level: :subnational1} = region, %Service{} = service) do
+  defp load_subregions(%Region{level: :subnational1} = region, %Worker{} = service) do
     region
     |> Regions.get_subregions(service, :subnational2)
     |> do_load_subregions(region)
   end
 
-  defp load_subregions(%Region{level: :subnational2} = region, %Service{}) do
+  defp load_subregions(%Region{level: :subnational2} = region, %Worker{}) do
     {:ok, [region]}
   end
 

@@ -1,5 +1,11 @@
 defmodule BirdSong.Data.Scraper do
-  @type response :: {:ok, [Map.t()]} | {:error, BadResponseError} | {:error, TimeoutError}
+  @type error() ::
+          __MODULE__.BadResponseError
+          | __MODULE__.TimeoutError
+          | __MODULE__.ConnectionError
+          | __MODULE__.JsonParseError
+          | __MODULE__.UnknownMessageError
+  @type response :: {:ok, [Map.t()]} | {:error, error()}
 
-  @callback run(GenServer.server(), any()) :: response()
+  @callback run(BirdSong.Services.Worker.t(), any(), integer()) :: response()
 end

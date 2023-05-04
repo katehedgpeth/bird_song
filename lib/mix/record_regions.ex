@@ -3,19 +3,20 @@ defmodule Mix.Tasks.BirdSong.RecordRegions do
   @requirements ["app.config", "app.start"]
 
   alias BirdSong.{
+    Services.Ebird,
     Services.Ebird.Regions.Region,
     Services.Ebird.Regions,
     Services.Ebird.RegionInfo,
-    Services.Service
+    Services.Worker
   }
 
   def run(
         args,
-        regions_service \\ Service.ensure_started(%Service{module: Regions}),
-        region_info_service \\ Service.ensure_started(%Service{module: RegionInfo})
+        %Worker{} = regions_service \\ Ebird.get_instance_child(:Regions),
+        %Worker{} = region_info_service \\ Ebird.get_instance_child(:RegionInfo)
       ) do
-    GenServer.cast(regions_service.whereis, {:update_write_config, true})
-    GenServer.cast(region_info_service.whereis, {:update_write_config, true})
+    GenServer.cast(regions_service.instance_name, {:update_write_config, true})
+    GenServer.cast(region_info_service.instance_name, {:update_write_config, true})
 
     args
     |> parse_region()
@@ -25,17 +26,17 @@ defmodule Mix.Tasks.BirdSong.RecordRegions do
     |> get_regions_info(region_info_service)
   end
 
-  defp get_regions_info({:error, error}, %Service{}) do
+  defp get_regions_info({:error, error}, %Worker{}) do
     raise error
   end
 
-  defp get_regions_info({:ok, [%Region{} | _] = regions}, %Service{} = service) do
+  defp get_regions_info({:ok, [%Region{} | _] = regions}, %Worker{} = service) do
     regions
     |> Task.async_stream(&get_region_info!(&1, service), timeout: :infinity)
     |> Enum.map(fn {:ok, info} -> info end)
   end
 
-  defp get_region_info!(%Region{} = region, %Service{} = service) do
+  defp get_region_info!(%Region{} = region, %Worker{} = service) do
     case RegionInfo.get_info(region, service) do
       {:ok, %RegionInfo{} = info} -> info
       {:error, error} -> raise error

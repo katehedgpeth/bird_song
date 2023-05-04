@@ -1,21 +1,36 @@
 defmodule BirdSong.Services.ThrottledCache do
+  alias BirdSong.Services.DataFile
+
   alias BirdSong.{
     Bird,
     Services.Ebird,
     Services.Helpers,
-    Services.RequestThrottler
+    Services.RequestThrottler,
+    Services.Service,
+    Services.Worker
   }
+
+  alias __MODULE__.State
 
   @type request_data() ::
           Bird.t()
           | Ebird.request_data()
+  @type response_struct() :: struct()
 
+  @callback build_request(request_data, State.t()) :: HTTPoison.Request.t()
   @callback endpoint(request_data()) :: String.t()
   @callback ets_key(request_data()) :: String.t()
   @callback headers(request_data()) :: HTTPoison.headers()
   @callback params(request_data()) :: HTTPoison.params()
   @callback message_details(request_data()) :: Map.t()
   @callback response_module() :: module()
+  @callback read_from_disk(request_data(), Worker.t()) ::
+              {:ok, String.t()} | {:error, {:enoent, String.t()}}
+  @callback parse_from_disk(request_data(), Worker.t()) ::
+              {:ok, response_struct()} | :not_found
+
+  @callback successful_response?(RequestThrottler.Response.t()) :: boolean()
+
   @optional_callbacks [response_module: 0]
 
   @env Application.compile_env(:bird_song, __MODULE__)
@@ -29,6 +44,34 @@ defmodule BirdSong.Services.ThrottledCache do
     common_name
     |> String.replace(" ", "_")
     |> String.replace("/", "\\")
+  end
+
+  @type decoded_json() :: list() | map()
+  @spec parse_response(
+          State.t() | Worker.t(),
+          decoded_json() | {:ok, decoded_json()} | {:error, any()},
+          request_data()
+        ) :: {:ok, response_struct()} | {:error, any()}
+  def parse_response(_, {:error, error}, _) do
+    {:error, error}
+  end
+
+  def parse_response(%State{} = state, decoded_response, request_data) do
+    parse_response(state.worker, decoded_response, request_data)
+  end
+
+  def parse_response(%Worker{} = worker, {:ok, decoded_json}, request_data) do
+    parse_response(worker, decoded_json, request_data)
+  end
+
+  def parse_response(%Worker{} = worker, decoded_json, request_data)
+      when is_map(decoded_json) or is_list(decoded_json) do
+    parsed =
+      worker
+      |> Worker.response_module()
+      |> apply(:parse, [decoded_json, request_data])
+
+    {:ok, parsed}
   end
 
   # dialyzer thinks this will only ever match the string
@@ -49,9 +92,9 @@ defmodule BirdSong.Services.ThrottledCache do
             module_opts: module_opts,
             env: @env
           ] do
-      @behaviour BirdSong.Services.ThrottledCache
       require Logger
-      use GenServer
+      use Worker, option_keys: State.start_link_option_keys()
+
       alias BirdSong.{Bird, Services}
 
       alias Services.ThrottledCache, as: TC
@@ -60,10 +103,28 @@ defmodule BirdSong.Services.ThrottledCache do
         Ebird,
         Helpers,
         ThrottledCache.State,
-        Service
+        Service,
+        Worker
       }
 
       alias __MODULE__.Response
+
+      @overridable [
+        build_request: 2,
+        data_file_name: 1,
+        endpoint: 1,
+        ets_key: 1,
+        headers: 1,
+        message_details: 1,
+        params: 1,
+        parse_from_disk: 2,
+        read_from_disk: 2,
+        successful_response?: 1,
+        handle_info: 2,
+        handle_call: 3
+      ]
+
+      @behaviour TC
 
       @backlog_timeout_ms Keyword.fetch!(env, :backlog_timeout_ms)
       @throttle_ms Keyword.fetch!(env, :throttle_ms)
@@ -74,66 +135,33 @@ defmodule BirdSong.Services.ThrottledCache do
         GenServer.cast(server, :clear_cache)
       end
 
-      def data_file_instance(%Service{whereis: pid}) do
-        GenServer.call(pid, :data_file_instance)
+      def data_folder_path(%Worker{instance_name: name}) do
+        GenServer.call(name, :data_folder_path)
       end
 
-      def data_folder_path(%Service{whereis: pid}) when is_pid(pid) do
-        GenServer.call(pid, :data_folder_path)
-      end
-
-      def data_folder_path(%Service{module: module} = service) do
-        case GenServer.whereis(module) do
-          nil ->
-            raise Service.NotStartedError.exception(module: module)
-
-          pid ->
-            data_folder_path(%{service | whereis: pid})
-        end
-      end
-
-      @spec get(TC.request_data(), Service.t() | GenServer.server()) ::
+      @spec get(TC.request_data(), Worker.t()) ::
               Helpers.api_response(Response.t())
-      def get(data, %Service{whereis: pid}) do
-        get(data, pid)
-      end
 
-      def get(data, server) when is_pid(server) or is_atom(server) do
-        with :not_found <- get_from_cache(data, server),
-             :not_found <- parse_from_disk(data, server) do
-          GenServer.call(server, {:get_from_api, data}, :infinity)
+      def get(data, %Worker{} = worker) do
+        with :not_found <- get_from_cache(data, worker),
+             :not_found <- parse_from_disk(data, worker) do
+          GenServer.call(worker.instance_name, {:get_from_api, data}, :infinity)
         end
       end
 
-      @spec get_from_cache(TC.request_data(), GenServer.server()) ::
+      @spec get_from_cache(TC.request_data(), Worker.t()) ::
               {:ok, Response.t()} | :not_found
-      def get_from_cache(_data, nil) do
-        raise "SERVER CANNOT BE NIL!!!"
-      end
-
-      def get_from_cache(data, server) do
+      def get_from_cache(data, %Worker{instance_name: server}) do
         GenServer.call(server, {:get_from_cache, data})
       end
 
-      @spec has_data?(TC.request_data(), GenServer.server()) :: boolean()
-      def has_data?(request_data, server) do
+      @spec has_data?(TC.request_data(), Worker.t()) :: boolean()
+      def has_data?(request_data, %Worker{instance_name: server}) do
         GenServer.call(server, {:has_data?, request_data})
       end
 
-      def parse_response(response, request, state) do
-        response
-        |> Helpers.parse_api_response(url(state, request))
-        |> case do
-          {:ok, raw} ->
-            {:ok, Response.parse(raw, request)}
-
-          {:error, error} ->
-            {:error, error}
-        end
-      end
-
-      @spec register_request_listener(GenServer.server()) :: :ok
-      def register_request_listener(server) do
+      @spec register_request_listener(Worker.t()) :: :ok
+      def register_request_listener(%Worker{instance_name: server}) do
         GenServer.cast(server, {:register_request_listener, self()})
       end
 
@@ -154,18 +182,15 @@ defmodule BirdSong.Services.ThrottledCache do
       end
 
       def data_file_name({:recent_observations, region}), do: region
-      defoverridable(data_file_name: 1)
 
-      @spec endpoint(TC.request_data()) :: String.t()
+      @impl TC
       def endpoint(_), do: raise("ThrottledCache module must define a &endpoint/1 method")
-      defoverridable(endpoint: 1)
 
-      @spec ets_key(any()) :: String.t()
+      @impl TC
       def ets_key(%Bird{sci_name: sci_name}), do: sci_name
-      defoverridable(ets_key: 1)
 
-      @spec build_request(TC.request_data(), State.t()) :: HTTPoison.Request.t()
-      def build_request(request_data, %State{} = state) do
+      @impl TC
+      def build_request(request_data, _ \\ %{}) do
         %HTTPoison.Request{
           headers: headers(request_data),
           method: :get,
@@ -174,30 +199,24 @@ defmodule BirdSong.Services.ThrottledCache do
         }
       end
 
-      defoverridable(build_request: 2)
-
-      @spec headers(TC.request_data()) :: HTTPoison.headers()
+      @impl TC
       def headers(%Bird{}), do: user_agent()
-      defoverridable(headers: 1)
 
-      @spec message_details(TC.request_data()) :: Map.t()
+      @impl TC
       def message_details(%Bird{} = bird), do: %{bird: bird}
-      defoverridable(message_details: 1)
 
-      @spec params(TC.request_data()) :: HTTPoison.params()
+      @impl TC
       def params(%Bird{}), do: []
-      defoverridable(params: 1)
 
-      @spec read_from_disk(TC.request_data(), GenServer.server()) ::
-              {:ok, String.t()} | {:error, {:enoent, String.t()}}
-      def read_from_disk(data, server), do: GenServer.call(server, {:read_from_disk, data})
-      defoverridable(read_from_disk: 2)
+      @impl TC
+      def read_from_disk(data, %Worker{instance_name: server}),
+        do: GenServer.call(server, {:read_from_disk, data})
 
-      @spec parse_from_disk(TC.request_data(), GenServer.server()) ::
-              {:ok, Response.t()} | :not_found
-      def parse_from_disk(data, server), do: GenServer.call(server, {:parse_from_disk, data})
-      defoverridable(parse_from_disk: 2)
+      @impl TC
+      def parse_from_disk(data, %Worker{instance_name: server}),
+        do: GenServer.call(server, {:parse_from_disk, data})
 
+      @impl TC
       def successful_response?(%RequestThrottler.Response{response: {:ok, _}}),
         do: true
 
@@ -206,8 +225,6 @@ defmodule BirdSong.Services.ThrottledCache do
           }),
           do: false
 
-      defoverridable(successful_response?: 1)
-
       #########################################################
       #########################################################
       ##
@@ -215,36 +232,23 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      def start_link(opts) do
-        {name, opts} =
-          @module_opts
-          |> Keyword.merge(opts)
-          |> Keyword.put_new(:throttle_ms, @throttle_ms)
-          |> Keyword.pop(:name)
-
-        GenServer.start_link(__MODULE__, opts, name: name)
-      end
-
-      def init(opts) do
-        send(self(), :create_data_folder)
-
+      @impl Worker
+      def do_init(opts) do
         {:ok,
-         opts
-         |> Keyword.put(:service, %Service{module: __MODULE__, whereis: self()})
-         |> State.new()}
+         @module_opts
+         |> Keyword.merge(opts)
+         |> State.new(), {:continue, :create_data_folder}}
       end
 
+      @impl GenServer
       def handle_call(
             {:get_from_api, request_data},
             from,
-            %State{throttler: throttler} = state
+            %State{} = state
           ) do
         State.notify_listeners(state, request_data, :start)
 
-        request_data
-        |> build_request(state)
-        |> State.save_request_to_ets(from, request_data, state)
-        |> RequestThrottler.add_to_queue(throttler)
+        :ok = State.add_request_to_queue(state, from: from, request_data: request_data)
 
         {:noreply, state}
       end
@@ -261,18 +265,6 @@ defmodule BirdSong.Services.ThrottledCache do
         {:reply, State.data_folder_path(state), state}
       end
 
-      def handle_call(:data_file_instance, _from, %State{} = state) do
-        {:reply, state.data_file_instance, state}
-      end
-
-      def handle_call(
-            {:parse_response, request: request, response: response},
-            _from,
-            %State{} = state
-          ) do
-        {:reply, parse_response(response, request, state), state}
-      end
-
       def handle_call({:read_from_disk, request}, _from, %State{} = state) do
         {:reply, State.read_from_disk(state, request), state}
       end
@@ -285,6 +277,7 @@ defmodule BirdSong.Services.ThrottledCache do
         {:reply, state, state}
       end
 
+      @impl GenServer
       def handle_cast(
             %RequestThrottler.Response{} = response,
             state
@@ -304,17 +297,32 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, State.register_request_listener(state, pid)}
       end
 
-      def handle_info(:create_data_folder, state) do
-        :ok =
-          state
-          |> State.data_folder_path()
-          |> File.mkdir_p()
+      @impl GenServer
+      def handle_continue(:create_data_folder, state) do
+        _ = DataFile.create_data_folder(state.worker)
 
         {:noreply, state}
       end
 
+      def handle_continue(message, state) do
+        raise RuntimeError.exception(
+                message: """
+
+                Unexpected handle_continue message:
+                #{inspect(message)}
+
+                state:
+                #{inspect(state)}
+
+                """
+              )
+
+        {:noreply, state}
+      end
+
+      @impl GenServer
       def handle_info({:save, data}, %State{} = state) do
-        State.save_response(state, data)
+        State.maybe_save_response(state, data)
         {:noreply, state}
       end
 
@@ -338,9 +346,6 @@ defmodule BirdSong.Services.ThrottledCache do
         {:noreply, State.forget_task(state, ref)}
       end
 
-      defoverridable(handle_info: 2)
-      defoverridable(handle_call: 3)
-
       #########################################################
       #########################################################
       ##
@@ -348,13 +353,15 @@ defmodule BirdSong.Services.ThrottledCache do
       ##
       #########################################################
 
-      defp url(%State{throttler: throttler}, request_data) do
-        throttler
-        |> RequestThrottler.base_url()
+      defp url(%State{} = state, request_data) do
+        state
+        |> State.base_url()
         |> Path.join(endpoint(request_data))
       end
 
       defp user_agent(), do: BirdSong.Services.ThrottledCache.user_agent()
+
+      defoverridable @overridable
     end
   end
 end

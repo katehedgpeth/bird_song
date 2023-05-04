@@ -1,12 +1,10 @@
 defmodule BirdSong.Services.Ebird.ObservationsTest do
-  use ExUnit.Case, async: true
-  import BirdSong.TestSetup
+  use BirdSong.SupervisedCase, async: true
   alias BirdSong.MockServer
 
   alias BirdSong.{
     Services.Ebird,
-    Services.Ebird.Observations,
-    TestHelpers
+    Services.Ebird.Observations
   }
 
   @moduletag service: :Ebird
@@ -23,61 +21,67 @@ defmodule BirdSong.Services.Ebird.ObservationsTest do
     {:ok, recent_observations: recent_observations}
   end
 
-  setup [:setup_bypass, :setup_route_mocks, :start_service_supervisor!]
-
-  setup %{test: test} do
-    {:ok, instance: Ebird.get_instance_child(test, :Observations)}
-  end
-
-  @tag use_mock_routes?: false
+  @tag start_services?: false
+  @tag use_bypass?: false
   test "&endpoint/1 returns the correct endpoint", %{} do
     assert Observations.endpoint({:recent_observations, @forsyth_county}) ===
              Path.join(["v2/data/obs/", @forsyth_county, "recent"])
   end
 
   describe "get_recent_observations" do
-    @tag expect_once: &MockServer.success_response/1
+    setup tags do
+      {:ok, get_worker_setup(Ebird, :Observations, tags)}
+    end
+
     test "returns a list of recent observations", %{
-      recent_observations: recent_observations,
-      instance: instance
+      bypass: bypass,
+      worker: worker,
+      recent_observations: recent_observations
     } do
+      Bypass.expect_once(bypass, &MockServer.success_response/1)
+
       expected =
         recent_observations
         |> Jason.decode!()
         |> Observations.Response.parse({:recent_observations, @forsyth_county})
 
-      assert Observations.get_recent_observations(@forsyth_county, instance) ===
+      assert Observations.get_recent_observations(
+               @forsyth_county,
+               worker
+             ) ===
                {:ok, expected}
     end
 
-    @tag expect_once: &MockServer.not_found_response/1
     test "returns {:error, {:not_found, $URL}} for 404 response", %{
       bypass: bypass,
-      instance: instance
+      mock_url: mock_url,
+      worker: worker
     } do
-      assert Observations.get_recent_observations(@forsyth_county, instance) ==
+      Bypass.expect_once(bypass, &MockServer.not_found_response/1)
+
+      assert Observations.get_recent_observations(@forsyth_county, worker) ==
                {:error,
-                {:not_found,
-                 TestHelpers.mock_url(bypass) <> "/v2/data/obs/" <> @forsyth_county <> "/recent"}}
+                {:not_found, Path.join([mock_url, "/v2/data/obs/", @forsyth_county, "/recent"])}}
     end
 
-    @tag expect_once: &MockServer.error_response/1
     test "returns {:error, {:bad_response, %HTTPoison.Response{}}} for bad status code", %{
-      instance: instance
+      bypass: bypass,
+      worker: worker
     } do
+      Bypass.expect_once(bypass, &MockServer.error_response/1)
+
       assert {:error, {:bad_response, %HTTPoison.Response{status_code: 500}}} =
-               Observations.get_recent_observations(@forsyth_county, instance)
+               Observations.get_recent_observations(@forsyth_county, worker)
     end
 
-    @tag use_mock_routes?: false
     test "returns {:error, %HTTPoison.Error{}} for all other errors", %{
       bypass: bypass,
-      instance: instance
+      worker: worker
     } do
       Bypass.down(bypass)
 
       assert {:error, %HTTPoison.Error{reason: :econnrefused}} =
-               Observations.get_recent_observations(@forsyth_county, instance)
+               Observations.get_recent_observations(@forsyth_county, worker)
     end
   end
 end

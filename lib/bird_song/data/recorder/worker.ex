@@ -5,7 +5,7 @@ defmodule BirdSong.Data.Recorder.Worker do
     Services,
     Services.Flickr,
     Services.MacaulayLibrary,
-    Services.Service
+    Services.Worker
   }
 
   @timeout :bird_song
@@ -16,8 +16,8 @@ defmodule BirdSong.Data.Recorder.Worker do
     :bird,
     :__from,
     :services,
-    :images,
-    :recordings,
+    :images_response,
+    :recordings_response,
     overwrite?: false,
     timeout: @timeout,
     __tasks: []
@@ -26,8 +26,8 @@ defmodule BirdSong.Data.Recorder.Worker do
   @type t() :: %__MODULE__{
           bird: Bird.t(),
           services: Services.t(),
-          images: Flickr.t(),
-          recordings: Service.t(),
+          images_response: Map.t(),
+          recordings_response: Map.t(),
           timeout: integer(),
           __tasks: [{reference(), atom()}],
           __from: GenServer.from()
@@ -61,8 +61,8 @@ defmodule BirdSong.Data.Recorder.Worker do
 
   def maybe_start_task(key, %__MODULE__{bird: bird, overwrite?: false} = state) do
     key
-    |> get_service_for_task(state)
-    |> Service.parse_from_disk(bird)
+    |> get_endpoint_for_task(state)
+    |> Services.Worker.parse_from_disk(bird)
     |> case do
       :not_found ->
         start_task(key, state)
@@ -70,16 +70,16 @@ defmodule BirdSong.Data.Recorder.Worker do
       {:ok, _} = response ->
         # overwrite? is false and a data file exists for this bird,
         # so do not call the service.
-        Map.update!(state, key, &use_response_from_disk(&1, response))
+        Map.replace!(state, :"#{key}_response", response)
     end
   end
 
-  def start_task(key, %__MODULE__{bird: bird, timeout: timeout} = state) do
-    service = Map.fetch!(state, key)
-    %Service{module: module} = service
+  def start_task(key, %__MODULE__{bird: bird, timeout: timeout, services: services} = state) do
+    worker = Map.fetch!(services, key)
+    %Services.Worker{module: module} = worker
 
     %Task{ref: task_ref} =
-      Task.Supervisor.async_nolink(__MODULE__.Tasks, module, :get, [bird, service],
+      Task.Supervisor.async_nolink(__MODULE__.Tasks, module, :get, [bird, worker],
         timeout: timeout
       )
 
@@ -99,14 +99,16 @@ defmodule BirdSong.Data.Recorder.Worker do
      |> maybe_reply()}
   end
 
-  defp get_service_for_task(:images, %__MODULE__{
-         images: %Flickr{PhotoSearch: %Service{} = service}
+  defp get_endpoint_for_task(:images, %__MODULE__{
+         services: %Services{images: %Flickr{PhotoSearch: %Worker{} = images}}
        }) do
-    service
+    images
   end
 
-  defp get_service_for_task(:recordings, %__MODULE__{
-         recordings: %Service{} = recordings
+  defp get_endpoint_for_task(:recordings, %__MODULE__{
+         services: %Services{
+           recordings: %MacaulayLibrary{Recordings: %Worker{} = recordings}
+         }
        }) do
     recordings
   end
@@ -147,30 +149,16 @@ defmodule BirdSong.Data.Recorder.Worker do
     %__MODULE__{
       __from: from,
       bird: bird,
-      images: images,
-      recordings: recordings
+      images_response: images,
+      recordings_response: recordings
     } = state
 
     GenServer.reply(from, %__MODULE__{
       bird: bird,
-      images: images,
-      recordings: recordings
+      images_response: images,
+      recordings_response: recordings
     })
 
     state
-  end
-
-  defp use_response_from_disk(
-         %Flickr{PhotoSearch: %Service{} = endpoint} = service,
-         {:ok, %Flickr.Response{}} = response
-       ) do
-    %{service | PhotoSearch: %{endpoint | response: response}}
-  end
-
-  defp use_response_from_disk(
-         %Service{module: MacaulayLibrary.Recordings} = service,
-         {:ok, %MacaulayLibrary.Response{}} = response
-       ) do
-    %{service | response: response}
   end
 end

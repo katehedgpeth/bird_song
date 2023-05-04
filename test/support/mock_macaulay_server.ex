@@ -1,4 +1,11 @@
 defmodule BirdSong.MockMacaulayServer do
+  require ExUnit.Assertions
+
+  alias BirdSong.{
+    Services.MacaulayLibrary,
+    SupervisedCase
+  }
+
   alias Plug.Conn
 
   @ebird_login_html File.read!("test/mock_data/ebird_login.html")
@@ -7,7 +14,24 @@ defmodule BirdSong.MockMacaulayServer do
   @ebird_username System.get_env("EBIRD_USERNAME")
   @ebird_password System.get_env("EBIRD_PASSWORD")
 
-  def setup(%{bypass: %Bypass{} = bypass} = tags) do
+  @spec setup(SupervisedCase.tags()) :: :ok
+  def setup(%{use_bypass?: false}), do: :ok
+  def setup(%{start_services?: false}), do: :ok
+
+  def setup(%{} = tags) do
+    bypass =
+      tags
+      |> Map.fetch!(:bypasses)
+      |> Map.fetch!(MacaulayLibrary)
+      |> Map.fetch!(:bypass)
+
+    ExUnit.Assertions.assert(%Bypass{} = bypass)
+
+    MacaulayLibrary
+    |> SupervisedCase.get_worker(:Playwright, tags)
+    |> Map.fetch!(:instance_name)
+    |> GenServer.cast(:open_port)
+
     recordings_response = Map.get(tags, :recordings_response, &ebird_recordings_get/1)
     list_html_response = Map.get(tags, :list_html_response, &ebird_list_get/1)
     expect_api_call? = Map.get(tags, :expect_api_call?, true)
@@ -24,6 +48,8 @@ defmodule BirdSong.MockMacaulayServer do
       Bypass.expect(bypass, "POST", "/cassso/login", &ebird_login_post/1)
       Bypass.expect(bypass, &asset_response/1)
     end
+
+    :ok
   end
 
   def asset_response(%Conn{path_info: ["gtm.js"]} = conn) do

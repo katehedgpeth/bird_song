@@ -1,26 +1,34 @@
+defmodule BirdSong.Services.XenoCanto do
+  use BirdSong.Services.Supervisor,
+    base_url: "https://xeno-canto.org",
+    caches: [:Recordings],
+    use_data_folder?: true
+end
+
 defmodule BirdSong.Services.XenoCantoTest do
   use BirdSong.DataCase
   use BirdSong.MockDataAttributes
-  import BirdSong.TestSetup
+
+  use BirdSong.SupervisedCase,
+    services: [
+      BirdSong.Services.XenoCanto,
+      BirdSong.Services.Flickr,
+      BirdSong.Services.Ebird
+    ]
 
   alias BirdSong.{
     Bird,
-    Services.Ebird,
     Services.Service,
+    Services.Ebird,
+    Services.Worker,
     Services.XenoCanto.Response,
-    Services.XenoCanto.Recording,
-    TestHelpers
+    Services.XenoCanto.Recording
   }
 
   @moduletag bird: @eastern_bluebird
   @moduletag :tmp_dir
-  @moduletag seed_services?: false
 
-  setup [:setup_bypass, :start_throttler]
-
-  setup %{
-          bypass: bypass
-        } = tags do
+  setup tags do
     Ebird.Taxonomy.seed([
       %{
         "sciName" => "Sialia sialis",
@@ -42,26 +50,42 @@ defmodule BirdSong.Services.XenoCantoTest do
       }
     ])
 
-    %Service{whereis: whereis} = TestHelpers.start_service_supervised(XenoCanto, tags)
+    # pid =
+    #   start_link_supervised!(
+    #     {XenoCanto, [service_name: instance_name, base_url: TestHelpers.mock_url(bypass)]}
+    #   )
+
+    assert %{worker: worker, bypass: bypass} = get_worker_setup(XenoCanto, :Recordings, tags)
+
     Bypass.expect(bypass, "GET", "/api/2/recordings", &success_response/1)
-    {:ok, whereis: whereis}
+    {:ok, worker: worker}
   end
 
-  describe "&get/1" do
+  @moduletag opts: [service_modules: [Ebird, XenoCanto, Flickr]]
+
+  describe "&Recordings.get/1" do
     test "returns a response object when request is successful", %{
       bird: %Bird{} = bird,
-      whereis: whereis
+      worker: worker,
+      test: test
     } do
-      assert XenoCanto.get_from_cache(bird, whereis) === :not_found
-      assert {:ok, response} = XenoCanto.get(bird, whereis)
+      assert %Worker{} = worker
+      assert worker.instance_name === Module.concat([test, :XenoCanto, :Recordings])
+      assert worker.module === XenoCanto.Recordings
+      assert %Service{} = worker.parent
+      assert worker.parent.name === Module.concat(test, :XenoCanto)
+      assert worker.parent.module === XenoCanto
+
+      assert XenoCanto.Recordings.get_from_cache(bird, worker) === :not_found
+      assert {:ok, response} = XenoCanto.Recordings.get(bird, worker)
       assert %Response{recordings: recordings} = response
       assert length(recordings) == 153
       assert [%Recording{} | _] = recordings
     end
 
     @tag :skip
-    test "changes :also to common names when found", %{bird: bird, whereis: whereis} do
-      assert {:ok, %Response{recordings: recordings}} = XenoCanto.get(bird, whereis)
+    test "changes :also to common names when found", %{bird: bird, worker: worker} do
+      assert {:ok, %Response{recordings: recordings}} = XenoCanto.Recordings.get(bird, worker)
 
       assert %Recording{
                also: [

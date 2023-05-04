@@ -1,13 +1,19 @@
 defmodule BirdSong.Services.Ebird.RegionETS do
-  alias BirdSong.Services.Ebird.Regions.Region
-  use GenServer
+  use BirdSong.Services.Worker, option_keys: [:seed_folder]
 
-  @enforce_keys [:ets, :seed_folder]
-  defstruct [:ets, :seed_folder]
+  alias BirdSong.{
+    Services.Ebird,
+    Services.Ebird.Regions.Region,
+    Services.Worker
+  }
+
+  @enforce_keys [:ets, :worker]
+  defstruct [:ets, :worker, seed_folder: :not_set]
 
   @type t() :: %__MODULE__{
           ets: :ets.table(),
-          seed_folder: String.t()
+          seed_folder: String.t() | :not_set,
+          worker: Worker.t()
         }
 
   @type search_result() :: {:ok, %Region{}} | {:error, :not_found}
@@ -19,12 +25,19 @@ defmodule BirdSong.Services.Ebird.RegionETS do
   ##
   #########################################################
 
-  def get("" <> code, server \\ __MODULE__) do
-    GenServer.call(server, {:get, code})
+  def get("" <> code, %Worker{instance_name: name}) do
+    GenServer.call(name, {:get, code})
   end
 
-  def save(%Region{} = region, server \\ __MODULE__) do
-    GenServer.cast(server, {:save, region})
+  def get!("" <> code, %Worker{} = worker) do
+    case get(code, worker) do
+      {:ok, region} -> region
+      {:error, error} -> raise error
+    end
+  end
+
+  def save(%Region{} = region, %Worker{instance_name: name}) do
+    GenServer.cast(name, {:save, region})
   end
 
   #########################################################
@@ -34,32 +47,33 @@ defmodule BirdSong.Services.Ebird.RegionETS do
   ##
   #########################################################
 
-  def start_link(name: name) do
-    GenServer.start_link(__MODULE__, [], name: name)
+  @impl Worker
+  def do_init(opts) do
+    {:ok, build_state(opts), {:continue, :seed}}
   end
 
-  def init(opts) do
-    send(self(), :seed)
-
-    {:ok,
-     %__MODULE__{
-       ets: :ets.new(__MODULE__, []),
-       seed_folder: Keyword.get(opts, :seed_folder, "data/regions")
-     }}
-  end
-
+  @impl GenServer
   def handle_call({:get, code}, _from, %__MODULE__{} = state) do
     {:reply, get_from_ets(state, code), state}
   end
 
+  @impl GenServer
   def handle_cast({:save, %Region{} = region}, %__MODULE__{} = state) do
     true = do_save(state, region)
     {:noreply, state}
   end
 
-  def handle_info(:seed, %__MODULE__{} = state) do
-    seed_cache(state)
+  @impl GenServer
+  def handle_continue(:set_seed_folder, %__MODULE__{} = state) do
+    {:noreply, set_seed_folder(state), {:continue, :seed}}
+  end
 
+  def handle_continue(:seed, %__MODULE__{seed_folder: :not_set} = state) do
+    {:noreply, state, {:continue, :set_seed_folder}}
+  end
+
+  def handle_continue(:seed, %__MODULE__{seed_folder: "" <> _} = state) do
+    :ok = seed_cache(state)
     {:noreply, state}
   end
 
@@ -69,6 +83,23 @@ defmodule BirdSong.Services.Ebird.RegionETS do
   ##  PRIVATE METHODS
   ##
   #########################################################
+
+  defp build_state(opts) do
+    opts
+    |> Keyword.put_new(:seed_folder, :not_set)
+    |> Keyword.put_new_lazy(:ets, fn -> :ets.new(__MODULE__, []) end)
+    |> __struct__()
+  end
+
+  @spec set_seed_folder(t()) :: t()
+  defp set_seed_folder(%__MODULE__{} = state) do
+    {:ok, path} =
+      :Regions
+      |> Ebird.get_instance_child()
+      |> Worker.full_data_folder_path()
+
+    %{state | seed_folder: path}
+  end
 
   defp do_save(%__MODULE__{ets: ets}, %Region{code: code} = region) do
     :ets.insert(ets, {code, region})

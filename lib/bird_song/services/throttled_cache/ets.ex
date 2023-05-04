@@ -28,26 +28,24 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
   alias BirdSong.{
     Bird,
     Services.DataFile,
-    Services.Service,
-    Services.ThrottledCache
+    Services.ThrottledCache,
+    Services.Worker
   }
 
   @type t() :: %__MODULE__{
-          data_file_instance: pid(),
           ets_name: atom(),
           ets_table: :ets.table(),
           listeners: [pid()],
-          service: Service.t(),
+          worker: Worker.t(),
           tasks: %{reference() => Bird.t()}
         }
 
-  @enforce_keys [:data_file_instance, :ets_name, :service]
+  @enforce_keys [:ets_name, :worker]
   defstruct [
-    :data_file_instance,
     :ets_name,
     :ets_opts,
     :ets_table,
-    :service,
+    :worker,
     listeners: [],
     tasks: %{}
   ]
@@ -75,12 +73,12 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     GenServer.call(pid, {:read_from_disk, request})
   end
 
-  @spec save_response({ThrottledCache.request_data(), response :: any()}, pid()) :: :ok
-  def save_response({request_data, {:ok, response}}, pid) do
+  @spec maybe_save_response({ThrottledCache.request_data(), response :: any()}, pid()) :: :ok
+  def maybe_save_response({request_data, {:ok, response}}, pid) do
     GenServer.call(pid, {:save_response, request_data, response})
   end
 
-  def save_response({_request_info, {:error, _error}}, _pid) do
+  def maybe_save_response({_request_info, {:error, _error}}, _pid) do
     # don't save error responses
     {:error, :bad_response}
   end
@@ -94,13 +92,13 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
 
   def do_parse_from_disk(
         request,
-        %__MODULE__{service: service} = state,
+        %__MODULE__{worker: worker} = state,
         # using parent instead of self() here to enable this to be called from a task
         parent
       )
       when is_pid(parent) do
     with {:ok, raw} <- do_read_from_disk(request, state) do
-      parsed = Service.parse_response(service, Jason.decode!(raw), request)
+      {:ok, parsed} = ThrottledCache.parse_response(worker, Jason.decode!(raw), request)
 
       send(parent, {:save, {request, {:ok, parsed}}})
 
@@ -192,13 +190,13 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
   end
 
   defp do_read_from_disk(request, %__MODULE__{
-         data_file_instance: df_instance,
-         service: service
+         worker: worker
        }) do
-    DataFile.read(%DataFile.Data{request: request, service: service}, df_instance)
+    %DataFile.Data{request: request, worker: worker}
+    |> DataFile.read()
   end
 
-  defp ets_key(%__MODULE__{service: %Service{module: module}}, request_data) do
+  defp ets_key(%__MODULE__{worker: %Worker{module: module}}, request_data) do
     apply(module, :ets_key, [request_data])
   end
 
@@ -226,18 +224,21 @@ defmodule BirdSong.Services.ThrottledCache.ETS do
     %{state | ets_table: nil}
   end
 
-  defp verify_response_struct!(%__MODULE__{service: %Service{} = service}, response) do
-    expected = Service.response_module(service)
+  defp verify_response_struct!(%__MODULE__{worker: worker}, response) do
+    expected_struct = Worker.response_module(worker)
 
     case response do
-      %{__struct__: ^expected} ->
+      %{__struct__: ^expected_struct} ->
         :ok
 
-      {:ok, %{__struct__: ^expected}} ->
+      {:ok, %{__struct__: ^expected_struct}} ->
         :ok
 
       other ->
-        raise __MODULE__.ResponseError.exception(expected: expected, received: other)
+        raise __MODULE__.ResponseError.exception(
+                expected: expected_struct,
+                received: other
+              )
     end
   end
 end

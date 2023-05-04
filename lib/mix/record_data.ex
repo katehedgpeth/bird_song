@@ -6,7 +6,7 @@ defmodule Mix.Tasks.BirdSong.RecordData do
 
   @requirements ["app.config", "app.start"]
 
-  def run(args, services \\ BirdSong.Services.ensure_started()) do
+  def run(args, services \\ BirdSong.Services.all()) do
     BirdSong.Data.Recorder.record(args, services)
   end
 end

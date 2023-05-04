@@ -1,12 +1,19 @@
 defmodule BirdSong.Services.Supervisor do
+  @moduledoc """
+  Supervisor for a service and all its children. Starts a RequestThrottler for all services,
+  and any additional children indicated in the `:other_children` option passed to
+  `use BirdSong.Services.Supervisor`.
+
+  To provide custom options to a child worker during tests, send it in the supervisor's
+  init options as `[{:ChildName, [option1: :foo]} | supervisor_opts]`.
+  """
   alias BirdSong.{
     Services,
-    Services.Service
+    Services.Service,
+    Services.Worker
   }
 
-  alias __MODULE__.NotStartedError
-
-  # @type module() :: Atom.module_info(:module)
+  alias __MODULE__.{NotStartedError, ForbiddenExternalURLError}
 
   @typedoc """
   The atomized name of an ExUnit test, i.e. `:"test lorem ipsum dolor sit amet"`
@@ -57,22 +64,13 @@ defmodule BirdSong.Services.Supervisor do
   @type instance_worker_name(name_atom) :: Module.concat(service_instance_name(), name_atom)
   @type instance_worker_name() :: instance_worker_name(instance_worker_atom())
 
-  @type instance_worker_info(instance, worker_atom) :: %Service{
-          name: instance_worker_name(worker_atom),
-          module: instance_worker_module(instance, worker_atom),
-          whereis: pid()
-        }
-
-  @type instance_worker_info() ::
-          instance_worker_info(service_instance_name(), instance_worker_atom())
-
-  @type service_struct(instance, service_mod, worker_atom) :: %{
+  @type service_struct(service_mod, worker_atom) :: %{
           required(:__struct__) => service_mod,
-          required(worker_atom) => instance_worker_info(instance, worker_atom)
+          required(worker_atom) => Worker.t()
         }
 
   @type service_struct() ::
-          service_struct(service_instance_name(), service_module(), instance_worker_atom())
+          service_struct(service_module(), instance_worker_atom())
 
   @typedoc """
   The name of the actual supervisor instance that is supervising all of the service's workers.
@@ -108,7 +106,22 @@ defmodule BirdSong.Services.Supervisor do
   @callback get_instance_child(
               service_instance_name(),
               instance_worker_atom()
-            ) :: instance_worker_info()
+            ) :: Worker.t()
+
+  def build_worker_info(service_module, child_atom) do
+    build_worker_info(service_module, child_atom, service_module)
+  end
+
+  def build_worker_info(service_module, child_atom, service_instance) do
+    instance_name = Module.concat(service_instance, child_atom)
+
+    struct(Worker,
+      instance_name: instance_name,
+      module: Module.concat(service_module, child_atom),
+      atom: child_atom,
+      parent: struct(Service, name: service_instance, module: service_module)
+    )
+  end
 
   defmacro __using__(use_opts) do
     use_opts = Map.new(use_opts)
@@ -163,17 +176,25 @@ defmodule BirdSong.Services.Supervisor do
           []
       end
 
-    quote location: :keep,
-          bind_quoted: [
+    struct = [:name | caches]
+
+    quote bind_quoted: [
             base_url: base_url,
             caches: caches,
             custom_options: custom_options,
-            other_children: other_children
+            other_children: other_children,
+            struct: struct
           ] do
       use Elixir.Supervisor
 
       require BirdSong.Services.Supervisor
-      import BirdSong.Services.Supervisor
+
+      import BirdSong.Services.Supervisor,
+        except: [
+          build_worker_info: 2,
+          build_worker_info: 3
+        ]
+
       @behaviour BirdSong.Services.Supervisor
 
       alias BirdSong.Services.Supervisor, as: Sup
@@ -184,6 +205,8 @@ defmodule BirdSong.Services.Supervisor do
         Services.RequestThrottler
       }
 
+      @overridable [child_module: 1, do_opts_for_child: 2]
+
       #########################################################
       #########################################################
       ##
@@ -191,7 +214,8 @@ defmodule BirdSong.Services.Supervisor do
       ##
       #########################################################
 
-      @type this_instance_name() :: BirdSong.Services.Supervisor.service_instance_name(__MODULE__)
+      @type this_instance_name() ::
+              BirdSong.Services.Supervisor.service_instance_name(__MODULE__)
       @type option() ::
               {:base_url, String.t()}
               | {:service_name, this_instance_name()}
@@ -201,7 +225,7 @@ defmodule BirdSong.Services.Supervisor do
       #########################################################
       #########################################################
       ##
-      ##  GUARDS
+      ##  ATTRIBUTES
       ##
       #########################################################
 
@@ -219,16 +243,19 @@ defmodule BirdSong.Services.Supervisor do
       ]
 
       @opt_keys [
-        :base_url,
-        :allow_external_calls?,
-        :service_name,
-        :throttle_ms | custom_options
-      ]
+                  :base_url,
+                  :allow_external_calls?,
+                  :service_name,
+                  :throttle_ms
+                ] ++ @child_names ++ custom_options
 
       @opt_keys_set MapSet.new(@opt_keys)
 
-      @enforce_keys @caches
-      defstruct @caches
+      @enforce_keys Enum.map(struct, fn
+                      {key, _} -> key
+                      key -> key
+                    end)
+      defstruct struct
 
       #########################################################
       #########################################################
@@ -251,9 +278,9 @@ defmodule BirdSong.Services.Supervisor do
       @spec base_url(this_instance_name()) :: String.t()
       def base_url(instance_name) do
         when_service_instance_name instance_name, __MODULE__ do
-          %{RequestThrottler: %Service{whereis: whereis}} = map_of_child_pids(instance_name)
-
-          GenServer.call(whereis, :base_url)
+          instance_name
+          |> child_name(:RequestThrottler)
+          |> GenServer.call(:base_url)
         end
       end
 
@@ -275,9 +302,7 @@ defmodule BirdSong.Services.Supervisor do
 
       # @impl Sup
       @spec child_module(Sup.instance_worker_atom()) :: Sup.instance_worker_module()
-      def child_module(:RequestThrottler), do: RequestThrottler
       def child_module(child) when is_child_name(child), do: concat_name(__MODULE__, child)
-      defoverridable(child_module: 1)
 
       # @impl Sup
       @spec default_service_name() :: module()
@@ -285,10 +310,11 @@ defmodule BirdSong.Services.Supervisor do
         Keyword.fetch!(@default_opts, :service_name)
       end
 
+      defdelegate fetch(map, key), to: Map
+
       # @impl Sup
-      @spec get_instance_child(this_instance_name(), module()) ::
-              Sup.instance_worker_info(this_instance_name(), Sup.instance_worker_atom())
-      def get_instance_child(service_instance, child) do
+      @spec get_instance_child(this_instance_name(), module()) :: Worker.t()
+      def get_instance_child(service_instance \\ __MODULE__, child) do
         when_service_instance_name service_instance, __MODULE__ do
           service_instance
           |> map_of_child_pids()
@@ -303,16 +329,17 @@ defmodule BirdSong.Services.Supervisor do
       end
 
       # @impl Sup
-      def services(service) do
-        when_service_instance_name service, __MODULE__ do
+      def services(instance_name) do
+        when_service_instance_name instance_name, __MODULE__ do
           @caches
           |> Enum.map(
             &{&1,
-             service
+             instance_name
              |> map_of_child_pids()
-             |> get_instance_child(service, &1)}
+             |> get_instance_child(instance_name, &1)}
           )
           |> Keyword.new()
+          |> Keyword.put(:name, instance_name)
           |> __struct__()
         end
       end
@@ -342,6 +369,7 @@ defmodule BirdSong.Services.Supervisor do
         |> Sup.start_link(__MODULE__)
       end
 
+      @impl Supervisor
       def init(opts) do
         opts
         |> child_specs()
@@ -367,8 +395,12 @@ defmodule BirdSong.Services.Supervisor do
              }
 
       @spec add_child_pid_to_map(which_children_item(), child_pid_map()) :: child_pid_map()
-      defp(add_child_pid_to_map({module, pid, :worker, [module]}, acc)) do
+      defp add_child_pid_to_map({module, pid, :worker, [module]}, acc) do
         Map.put(acc, module, pid)
+      end
+
+      defp add_worker_to_child_opts(child_opts, parent_opts, child_name) do
+        Keyword.put(child_opts, :worker, build_worker_info(parent_opts, child_name))
       end
 
       @spec child_specs(Sup.supervisor_options()) :: [Supervisor.child_spec()]
@@ -376,7 +408,15 @@ defmodule BirdSong.Services.Supervisor do
         opts
         |> with_default_opts()
         |> raise_unused_opts()
+        |> Sup.parse_base_url()
         |> do_child_specs()
+      end
+
+      # make public function available only for tests
+      if Mix.env() === :test do
+        def child_specs___test(opts) do
+          child_specs(opts)
+        end
       end
 
       @spec do_child_specs(Sup.supervisor_options()) :: [Supervisor.child_spec()]
@@ -390,45 +430,74 @@ defmodule BirdSong.Services.Supervisor do
         )
       end
 
-      defp concat_name(parent, child) when is_atom(parent) and is_child_name(child) do
+      defp concat_name(parent, child) when is_atom(parent) and is_atom(child) do
         Module.concat(parent, child)
       end
 
       defp get_instance_child(%{} = supervisor_children, service_instance, child)
            when is_child_name(child) do
-        supervisor_children
-        |> Map.fetch!(child_module(child))
-        |> do_get_instance_child(service_instance, child)
+        expected_pid = Map.fetch!(supervisor_children, child_module(child))
+        worker = build_worker_info(service_instance, child)
+        worker_pid = GenServer.whereis(worker.instance_name)
+
+        if worker_pid !== expected_pid do
+          raise RuntimeError.exception(
+                  message: """
+                  PID of worker instance name does not match supervisor child PID!
+
+
+                  expected: #{inspect(expected_pid)}
+                  got: #{inspect(worker_pid)}
+                  worker: #{inspect(worker)}
+                  supervisor_children: #{inspect(supervisor_children)}
+                  """
+                )
+        end
+
+        worker
       end
 
-      defp do_get_instance_child(child_pid, service_instance, child)
-           when is_child_name(child) do
-        %Service{
-          whereis: child_pid,
-          name: child_name(service_instance, child),
-          module: child_module(child)
-        }
+      defp build_service_info(service_instance) do
+        struct(Service,
+          name: service_instance,
+          module: __MODULE__
+        )
+      end
+
+      defp build_worker_info(opts, child_atom) when is_list(opts) do
+        opts
+        |> Keyword.fetch!(:service_name)
+        |> build_worker_info(child_atom)
+      end
+
+      defp build_worker_info(service_instance, child_atom)
+           when is_child_name(child_atom) do
+        instance_name = child_name(service_instance, child_atom)
+
+        struct(Worker,
+          atom: child_atom,
+          instance_name: instance_name,
+          module: child_module(child_atom),
+          name: child_atom,
+          parent: build_service_info(service_instance)
+        )
       end
 
       defp opts_for_child(opts, child) when is_child_name(child) do
+        child_keys =
+          child
+          |> child_module()
+          |> apply(:start_link_option_keys, [])
+
         opts
-        |> Keyword.put(:name, child_name(opts, child))
+        |> Keyword.merge(Keyword.get(opts, child, []))
+        |> add_worker_to_child_opts(opts, child)
         |> do_opts_for_child(child)
-        |> Keyword.drop([:service_name])
+        |> Keyword.take([:worker | child_keys])
       end
 
-      defp do_opts_for_child(opts, :RegionETS) do
-        Keyword.take(opts, [:name])
-      end
-
-      defp do_opts_for_child(opts, :RequestThrottler) do
-        Keyword.drop(opts, [:data_folder_path, :throttler])
-      end
-
-      defp do_opts_for_child(opts, child) when child in @caches do
+      defp do_opts_for_child(opts, child) when is_child_name(child) do
         opts
-        |> Keyword.put(:throttler, child_name(opts, :RequestThrottler))
-        |> Keyword.drop([:throttle_ms, :allow_external_calls?])
       end
 
       defp raise_unused_opts(opts) do
@@ -450,6 +519,8 @@ defmodule BirdSong.Services.Supervisor do
         @default_opts
         |> Keyword.merge(opts)
       end
+
+      defoverridable(@overridable)
     end
   end
 
@@ -499,6 +570,17 @@ defmodule BirdSong.Services.Supervisor do
     )
   end
 
+  @spec parse_base_url([{:base_url, String.t()} | {atom(), any()}]) :: [
+          {:base_url, URI.t() | ForbiddenExternalURLError.t()}
+        ]
+  def parse_base_url(opts) do
+    Keyword.update!(opts, :base_url, &(opts |> Map.new() |> uri_or_error(Mix.env(), &1)))
+  end
+
+  def whereis!(%Service{name: instance_name, module: module}) do
+    whereis!(instance_name, module)
+  end
+
   def whereis!(service_instance_name, module) do
     supervisor = instance_name(service_instance_name, module)
 
@@ -515,5 +597,44 @@ defmodule BirdSong.Services.Supervisor do
       pid when is_pid(pid) ->
         pid
     end
+  end
+
+  @spec uri_or_error(
+          %{
+            required(:base_url) => String.t(),
+            optional(:allow_external_calls?) => boolean()
+          },
+          :dev | :test | :prod,
+          String.t()
+        ) :: URI.t() | ForbiddenExternalURLError.t()
+  defp uri_or_error(%{}, _env, {:error, error}) do
+    {:error, error}
+  end
+
+  defp uri_or_error(%{} = opts, env, %URI{} = uri) do
+    uri_or_error(opts, env, URI.to_string(uri))
+  end
+
+  # use whatever is provided in dev and prod
+  defp uri_or_error(%{}, env, "http" <> _ = base_url) when env in [:dev, :prod] do
+    URI.new!(base_url)
+  end
+
+  # localhost URLs are always allowed in test
+  defp uri_or_error(%{}, :test, "http://localhost" <> _ = localhost) do
+    URI.new!(localhost)
+  end
+
+  # anything else can only be used if explictly indicated
+  defp uri_or_error(
+         %{allow_external_calls?: true},
+         :test,
+         "https://" <> _ = external_url
+       ) do
+    URI.new!(external_url)
+  end
+
+  defp uri_or_error(%{} = opts, :test, "http" <> _) do
+    {:error, ForbiddenExternalURLError.exception(opts: Keyword.new(opts))}
   end
 end

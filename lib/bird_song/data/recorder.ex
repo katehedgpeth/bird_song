@@ -3,6 +3,7 @@ defmodule BirdSong.Data.Recorder do
 
   @moduledoc "Fetches data for any birds that exist in the database but do not have recordings or images."
 
+  alias BirdSong.Services.MacaulayLibrary
   alias BirdSong.Services.Helpers
 
   alias BirdSong.{
@@ -11,8 +12,7 @@ defmodule BirdSong.Data.Recorder do
     Order,
     Services,
     Services.Ebird.Taxonomy,
-    Services.Flickr,
-    Services.Service
+    Services.Flickr
   }
 
   alias __MODULE__.{
@@ -20,7 +20,7 @@ defmodule BirdSong.Data.Recorder do
     Worker
   }
 
-  def record(args, injected_services \\ Services.ensure_started()) do
+  def record(args, injected_services \\ Services.all()) do
     config = Config.parse(args, injected_services)
 
     setup(config)
@@ -63,12 +63,16 @@ defmodule BirdSong.Data.Recorder do
     Enum.each([images, recordings], &update_write_config/1)
   end
 
-  defp update_write_config(%Flickr{PhotoSearch: service}) do
-    update_write_config(service)
+  defp update_write_config(%Flickr{PhotoSearch: worker}) do
+    update_write_config(worker)
   end
 
-  defp update_write_config(%Service{whereis: whereis}) do
-    GenServer.cast(whereis, {:update_write_config, true})
+  defp update_write_config(%MacaulayLibrary{Recordings: worker}) do
+    update_write_config(worker)
+  end
+
+  defp update_write_config(%Services.Worker{instance_name: name}) do
+    GenServer.cast(name, {:update_write_config, true})
   end
 
   defp get_birds_to_fetch(%Config{birds: [%Bird{} | _]} = config) do
@@ -141,9 +145,6 @@ defmodule BirdSong.Data.Recorder do
       end
     catch
       error ->
-        {_, pid} = GenServer.call(current.recordings.whereis, :scraper_info)
-        GenServer.stop(pid)
-
         Helpers.log(
           [
             message: "exited_before_finish",

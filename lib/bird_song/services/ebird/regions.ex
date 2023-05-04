@@ -3,12 +3,15 @@ defmodule BirdSong.Services.Ebird.Regions do
 
   use BirdSong.Services.ThrottledCache,
     ets_name: :ebird_regions,
-    ets_opts: [],
-    base_url: "https://api.ebird.org",
-    data_folder_path: "data/regions",
-    throttler: BirdSong.Services.RequestThrottler.EbirdAPI
+    ets_opts: []
 
-  alias BirdSong.{Services.Ebird, Services.Helpers}
+  alias BirdSong.{
+    Services.Ebird,
+    Services.Helpers,
+    Services.ThrottledCache,
+    Services.Worker
+  }
+
   alias __MODULE__.{Region, Response}
 
   @type exception() :: %{
@@ -31,44 +34,45 @@ defmodule BirdSong.Services.Ebird.Regions do
   ##
   #########################################################
 
-  @spec get_all(Service.t()) :: Helpers.api_response([Region.t()])
-  def get_all!(service) do
-    case get_all(service) do
+  @spec get_all!(Worker.t()) :: {:ok, [Region.t()]}
+  def get_all!(worker) do
+    case get_all(worker) do
       {:ok, [%Region{} | _] = regions} -> {:ok, regions}
       {:error, %{__exception__: true} = error} -> raise error
     end
   end
 
-  def get_all(service) do
-    with {:ok, countries} <- get_countries(service) do
-      do_get_all(countries, [], service)
+  @spec get_all(Worker.t()) :: Helpers.api_response([Region.t()])
+  def get_all(worker) do
+    with {:ok, countries} <- get_countries(worker) do
+      do_get_all(countries, [], worker)
     end
   end
 
-  @spec get_countries(atom | pid | BirdSong.Services.Service.t()) ::
+  @spec get_countries(Worker.t()) ::
           Helpers.api_response([Region.t()])
-  def get_countries(server) do
-    return_regions([level: :country, parent: "world"], server)
+  def get_countries(worker) do
+    return_regions([level: :country, parent: "world"], worker)
   end
 
-  @spec get_subregions(Region.t(), Service.t(), Region.level()) :: regions_response()
+  @spec get_subregions(Region.t(), Worker.t(), Region.level()) :: regions_response()
   def get_subregions(
         %Region{code: "" <> region_code, level: :country},
-        service,
+        worker,
         level
       )
       when is_child_level(level) do
-    return_regions([level: level, parent: region_code], service)
+    return_regions([level: level, parent: region_code], worker)
   end
 
   def get_subregions(
         %Region{code: sub1_code, level: :subnational1} = sub1_region,
-        service,
+        worker,
         :subnational2
       ) do
     "" <> country_code = Region.parse_parent_code(sub1_region)
 
-    with {:ok, regions} <- return_regions([level: :subnational2, parent: country_code], service) do
+    with {:ok, regions} <- return_regions([level: :subnational2, parent: country_code], worker) do
       case Enum.filter(regions, &is_sub2_of_sub1(&1, sub1_code)) do
         [] -> {:error, {:no_subregions, level: :subnational2, parent: sub1_code}}
         [%Region{} | _] = sub2 -> {:ok, sub2}
@@ -76,31 +80,31 @@ defmodule BirdSong.Services.Ebird.Regions do
     end
   end
 
-  @spec get_country(Region.t(), Service.t()) :: {:ok, [Region.t()]} | {:error, exception()}
-  def get_country(%Region{level: :country} = country, service) do
+  @spec get_country(Region.t(), Worker.t()) :: {:ok, [Region.t()]} | {:error, exception()}
+  def get_country(%Region{level: :country} = country, worker) do
     country
-    |> get_subregions(service, :subnational1)
-    |> get_country_subnational2(country, service)
+    |> get_subregions(worker, :subnational1)
+    |> get_country_subnational2(country, worker)
   end
 
   defp get_country_subnational2(
          {:error, {:no_subregions, level: :subnational1, parent: _}},
          %Region{},
-         %Service{}
+         %Worker{}
        ) do
     {:ok, []}
   end
 
-  defp get_country_subnational2({:error, %{__exception__: true} = error}, %Region{}, %Service{}) do
+  defp get_country_subnational2({:error, %{__exception__: true} = error}, %Region{}, %Worker{}) do
     {:error, error}
   end
 
   defp get_country_subnational2(
          {:ok, subnat_1},
          %Region{level: :country} = country,
-         %Service{} = service
+         %Worker{} = worker
        ) do
-    case get_subregions(country, service, :subnational2) do
+    case get_subregions(country, worker, :subnational2) do
       {:ok, subnat_2} ->
         {:ok, List.flatten([subnat_1, subnat_2])}
 
@@ -123,18 +127,27 @@ defmodule BirdSong.Services.Ebird.Regions do
     ets_key(request)
   end
 
+  @impl ThrottledCache
   def endpoint({:regions, level: level, parent: parent}) do
     Path.join(["v2", "ref", "region", "list", Atom.to_string(level), parent])
   end
 
+  @impl ThrottledCache
   def ets_key({:regions, level: :country, parent: "world"}), do: "all-countries"
 
   def ets_key({:regions, level: level, parent: parent}) do
     Enum.join([parent, Atom.to_string(level)], "-")
   end
 
+  @impl ThrottledCache
+  def message_details({:regions, opts}) do
+    Map.new(opts)
+  end
+
+  @impl ThrottledCache
   def params({:regions, _}), do: [{"format", "json"}]
 
+  @impl ThrottledCache
   def headers({:regions, _}), do: [Ebird.token_header() | user_agent()]
 
   #########################################################
@@ -144,27 +157,27 @@ defmodule BirdSong.Services.Ebird.Regions do
   ##
   #########################################################
 
-  @spec return_regions(request_args(), Service.t()) ::
+  @spec return_regions(request_args(), Worker.t()) ::
           regions_response()
-  defp return_regions(args, service) do
-    case get({:regions, args}, service) do
+  defp return_regions(args, worker) do
+    case get({:regions, args}, worker) do
       {:ok, %Response{regions: [%Region{} | _] = regions}} -> {:ok, regions}
       {:ok, %Response{regions: []}} -> {:error, {:no_subregions, args}}
       {:error, %{__exception__: true} = error} -> {:error, error}
     end
   end
 
-  defp do_get_all([], [%Region{} | _] = results, %Service{}) do
+  defp do_get_all([], [%Region{} | _] = results, %Worker{}) do
     {:ok, results}
   end
 
-  defp do_get_all([%Region{} = region | rest], acc, %Service{} = service) do
-    case get_country(region, service) do
+  defp do_get_all([%Region{} = region | rest], acc, %Worker{} = worker) do
+    case get_country(region, worker) do
       {:ok, []} ->
-        do_get_all(rest, [region | acc], service)
+        do_get_all(rest, [region | acc], worker)
 
       {:ok, regions} when is_list(regions) ->
-        do_get_all(rest, Enum.reduce(regions, acc, &[&1 | &2]), service)
+        do_get_all(rest, Enum.reduce(regions, acc, &[&1 | &2]), worker)
 
       {:error, %{__exception__: true} = error} ->
         {:error, error}

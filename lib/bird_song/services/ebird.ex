@@ -7,10 +7,7 @@ defmodule BirdSong.Services.Ebird do
 
   alias BirdSong.Services.Supervisor, as: Sup
 
-  alias BirdSong.Services.{
-    RequestThrottler,
-    Service
-  }
+  alias BirdSong.Services.Service
 
   alias __MODULE__.{
     Observations,
@@ -24,7 +21,6 @@ defmodule BirdSong.Services.Ebird do
   ##  TYPESPECS
   ##
   #########################################################
-
   @type request_data() ::
           Observations.request_data()
           | Regions.request_data()
@@ -58,19 +54,6 @@ defmodule BirdSong.Services.Ebird do
   @token :bird_song
          |> Application.compile_env(__MODULE__)
          |> Keyword.fetch!(:token)
-
-  #########################################################
-  #########################################################
-  ##
-  ##  SUPERVISOR CALLBACKS
-  ##
-  #########################################################
-
-  if Mix.env() === :test do
-    def child_specs___test(opts) do
-      child_specs(opts)
-    end
-  end
 
   #########################################################
   #########################################################

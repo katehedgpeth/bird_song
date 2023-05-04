@@ -1,52 +1,47 @@
 defmodule BirdSong.Services.EbirdTest do
-  use ExUnit.Case
+  use BirdSong.SupervisedCase, async: true
 
-  alias BirdSong.Services.RequestThrottler.ForbiddenExternalURLError
-  alias BirdSong.Services.Supervisor.UnknownOptionKeyError
+  alias BirdSong.MockEbirdServer
 
   alias BirdSong.{
-    MockServer,
+    Services,
     Services.Ebird,
-    Services.Service,
-    Services.RequestThrottler,
-    TestHelpers,
-    TestSetup
+    Services.Supervisor.ForbiddenExternalURLError,
+    Services.Supervisor.UnknownOptionKeyError,
+    Services.Worker
   }
 
-  describe "opts_for_child" do
+  describe "child_specs" do
+    @describetag use_bypass?: false
+    @describetag start_services?: false
     test "with default options" do
       assert [
                {
-                 RequestThrottler,
-                 name: Ebird.RequestThrottler, base_url: "https://api.ebird.org"
+                 Ebird.RequestThrottler,
+                 worker: %Worker{instance_name: Ebird.RequestThrottler},
+                 base_url:
+                   {:error,
+                    %ForbiddenExternalURLError{opts: [{:base_url, "https://api.ebird.org"} | _]}}
                },
                {
                  Ebird.RegionETS,
-                 name: Ebird.RegionETS
+                 worker: %Worker{instance_name: Ebird.RegionETS}
                },
                {
                  Ebird.Observations,
-                 throttler: Ebird.RequestThrottler,
-                 name: Ebird.Observations,
-                 base_url: "https://api.ebird.org"
+                 worker: %Worker{instance_name: Ebird.Observations}
                },
                {
                  Ebird.RegionSpeciesCodes,
-                 throttler: Ebird.RequestThrottler,
-                 name: Ebird.RegionSpeciesCodes,
-                 base_url: "https://api.ebird.org"
+                 worker: %Worker{instance_name: Ebird.RegionSpeciesCodes}
                },
                {
                  Ebird.Regions,
-                 throttler: Ebird.RequestThrottler,
-                 name: Ebird.Regions,
-                 base_url: "https://api.ebird.org"
+                 worker: %Worker{instance_name: Ebird.Regions}
                },
                {
                  Ebird.RegionInfo,
-                 throttler: Ebird.RequestThrottler,
-                 name: Ebird.RegionInfo,
-                 base_url: "https://api.ebird.org"
+                 worker: %Worker{instance_name: Ebird.RegionInfo}
                }
              ] = Ebird.child_specs___test([])
     end
@@ -55,12 +50,16 @@ defmodule BirdSong.Services.EbirdTest do
     test "with overriding options", %{tmp_dir: tmp_dir, test: test} do
       base_url = "http://localhost:9000"
 
+      parent = %Services.Service{name: test, module: Ebird}
+
       expected_cache_opts = fn name ->
         [
-          throttler: Module.concat(test, :RequestThrottler),
-          name: Module.concat(test, name),
-          base_url: base_url,
-          data_folder_path: tmp_dir
+          worker: %Worker{
+            atom: name,
+            parent: parent,
+            instance_name: Module.concat(test, name),
+            module: Module.concat(Ebird, name)
+          }
         ]
       end
 
@@ -73,15 +72,25 @@ defmodule BirdSong.Services.EbirdTest do
                )
 
       assert throttler === {
-               RequestThrottler,
-               name: Module.concat(test, :RequestThrottler),
-               base_url: base_url,
+               Ebird.RequestThrottler,
+               worker: %Worker{
+                 atom: :RequestThrottler,
+                 instance_name: Module.concat(test, :RequestThrottler),
+                 module: Ebird.RequestThrottler,
+                 parent: parent
+               },
+               base_url: URI.new!(base_url),
                throttle_ms: 5_000
              }
 
       assert region_ets === {
                Ebird.RegionETS,
-               name: Module.concat(test, :RegionETS)
+               worker: %Worker{
+                 instance_name: Module.concat(test, :RegionETS),
+                 parent: parent,
+                 module: Ebird.RegionETS,
+                 atom: :RegionETS
+               }
              }
 
       assert observations === {Ebird.Observations, expected_cache_opts.(:Observations)}
@@ -91,6 +100,32 @@ defmodule BirdSong.Services.EbirdTest do
 
       assert regions === {Ebird.Regions, expected_cache_opts.(:Regions)}
       assert region_info === {Ebird.RegionInfo, expected_cache_opts.(:RegionInfo)}
+    end
+
+    test "with external url and allow_external_calls?: true", %{test: test} do
+      base_url = "https://google.com"
+
+      specs =
+        [
+          service_name: test,
+          base_url: base_url,
+          allow_external_calls?: true
+        ]
+        |> Ebird.child_specs___test()
+        |> Map.new()
+
+      throttler_specs = specs[Ebird.RequestThrottler]
+
+      assert Ebird.RequestThrottler.start_link_option_keys() === [
+               :base_url,
+               :name,
+               :throttle_ms
+             ]
+
+      assert [
+               worker: %Services.Worker{},
+               base_url: %URI{scheme: "https", host: "google.com", port: 443}
+             ] = throttler_specs
     end
 
     test "with unknown options" do
@@ -111,19 +146,14 @@ defmodule BirdSong.Services.EbirdTest do
   end
 
   @tag :tmp_dir
-  test "start_link", %{test: test} do
-    bypass = Bypass.open()
-    Bypass.expect(bypass, &MockServer.success_response/1)
+  test "start_link", %{test: test} = tags do
+    MockEbirdServer.setup(tags)
+    service_name = get_service_name(Ebird, tags)
 
-    opts = [
-      service_name: test,
-      base_url: TestHelpers.mock_url(bypass)
-    ]
-
-    start_supervised!({Ebird, opts})
+    assert service_name === Module.concat(test, :Ebird)
 
     children =
-      test
+      service_name
       |> Ebird.whereis_supervisor!()
       |> Supervisor.which_children()
       |> Enum.map(&elem(&1, 0))
@@ -134,18 +164,27 @@ defmodule BirdSong.Services.EbirdTest do
              Ebird.RegionSpeciesCodes,
              Ebird.Observations,
              Ebird.RegionETS,
-             RequestThrottler
+             Ebird.RequestThrottler
            ]
 
-    throttler = Ebird.child_name(opts, :RequestThrottler)
-    throttler_pid = GenServer.whereis(throttler)
-    assert is_pid(throttler_pid)
-    assert GenServer.call(throttler, :base_url) === TestHelpers.mock_url(bypass)
+    assert %{worker: mocked_throttler, mock_url: mock_url} =
+             get_worker_setup(Ebird, :RequestThrottler, tags)
+
+    assert Ebird.RequestThrottler.base_url(mocked_throttler) === mock_url
+
+    real_throttler = Ebird.get_instance_child(:RequestThrottler)
+
+    assert %Worker{} = real_throttler
+
+    assert {:error, %ForbiddenExternalURLError{}} =
+             Ebird.RequestThrottler.base_url(real_throttler)
+
+    regions_ets = get_worker(Ebird, :RegionETS, tags)
 
     assert {:ok, %Ebird.Regions.Region{} = region} =
              Ebird.RegionETS.get(
                "US-NC",
-               Ebird.child_name(opts, :RegionETS)
+               regions_ets
              )
 
     [observations, regions, _region_info, _region_species_codes] =
@@ -155,94 +194,54 @@ defmodule BirdSong.Services.EbirdTest do
             :RegionInfo,
             :RegionSpeciesCodes
           ] do
-        service = Ebird.get_instance_child(test, child)
-        assert %Service{} = service
+        worker = Ebird.get_instance_child(service_name, child)
+        assert %Worker{} = worker
 
-        assert service.module |> GenServer.whereis() |> is_pid(),
-               "#{inspect(service)} is not started"
+        assert worker.instance_name |> GenServer.whereis() |> is_pid(),
+               "#{inspect(worker.instance_name)} is not started"
 
-        assert service.module === Module.concat(Ebird, child)
-        refute is_nil(service.whereis)
-        refute GenServer.whereis(service.module) === service.whereis
+        assert worker.module === Module.concat(Ebird, child)
+        refute GenServer.whereis(worker.module) === GenServer.whereis(worker.instance_name)
 
-        assert %{throttler: ^throttler_pid} = GenServer.call(service.whereis, :state)
-
-        assert %{throttler: real_throttler_pid} = GenServer.call(service.module, :state)
-        refute real_throttler_pid === throttler_pid
-
-        bypass_url = TestHelpers.mock_url(bypass)
-
-        refute GenServer.call(real_throttler_pid, :base_url) === bypass_url
-
-        assert {:error, %ForbiddenExternalURLError{}} =
-                 GenServer.call(real_throttler_pid, :base_url)
-
-        assert GenServer.call(throttler_pid, :base_url) === bypass_url
-
-        service
+        worker
       end
 
-    assert {:error, %ForbiddenExternalURLError{}} =
-             Ebird.Observations.get_recent_observations("US-NC-067", observations.module)
+    real_observations = Ebird.get_instance_child(:Observations)
 
-    # cache is warmed on startup
+    assert {:error, %ForbiddenExternalURLError{}} =
+             Ebird.Observations.get_recent_observations("US-NC-067", real_observations)
+
     assert {:ok, [%Ebird.Regions.Region{} | _]} =
              Ebird.Regions.get_subregions(
                region,
-               regions.module,
+               regions,
                :subnational2
              )
 
-    for name_or_pid <- [:name, :whereis] do
-      assert {:ok, %Ebird.Observations.Response{}} =
-               Ebird.Observations.get_recent_observations(
-                 "US-NC-067",
-                 Map.fetch!(observations, name_or_pid)
-               )
-
-      assert {:ok, [%Ebird.Regions.Region{} | _]} =
-               Ebird.Regions.get_subregions(
-                 region,
-                 Map.fetch!(regions, name_or_pid),
-                 :subnational2
-               )
-    end
-
-    # for name_or_pid <- region_info do
-    # end
-
-    # for name_or_pid <- region_species_codes do
-    #   assert {:ok, %Ebird.RegionSpeciesCodes.Response{}} =
-    #            Ebird.RegionSpeciesCodes.get_codes(region, name_or_pid)
-    # end
+    assert {:ok, %Ebird.Observations.Response{}} =
+             Ebird.Observations.get_recent_observations(
+               "US-NC-067",
+               observations
+             )
   end
 
   describe "services/1" do
     @describetag :tmp_dir
     @describetag service: :Ebird
 
-    use TestSetup, [:setup_bypass, :start_service_supervisor!]
-
-    test "returns a struct with all Ebird service instances", %{
-      test: test,
-      supervisor: supervisor
-    } do
-      assert %Service{name: instance_name} = supervisor
-      services = Ebird.services(instance_name)
-
-      assert %Ebird{} = services
+    test "returns a struct with all Ebird service instances", tags do
+      assert %Services{ebird: services} = Services.all(tags[:test])
+      assert %Ebird{name: instance_name} = services
+      assert instance_name === get_service_name(Ebird, tags)
 
       keys = services |> Map.from_struct() |> Map.keys()
 
-      assert keys === [:Observations, :RegionInfo, :RegionSpeciesCodes, :Regions]
+      assert keys === [:Observations, :RegionInfo, :RegionSpeciesCodes, :Regions, :name]
 
-      for key <- keys do
-        assert %Service{name: name, module: module, whereis: whereis} = Map.fetch!(services, key)
-        refute name === nil
+      for key <- Enum.reject(keys, &(&1 === :name)) do
+        assert %Worker{instance_name: name, module: module} = Map.fetch!(services, key)
         assert module === Module.concat(Ebird, key)
-        assert name === Module.concat(test, key)
-        assert is_pid(whereis)
-        assert whereis === GenServer.whereis(name)
+        assert name === Module.concat([tags[:test], :Ebird, key])
       end
     end
   end

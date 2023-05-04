@@ -1,49 +1,88 @@
 defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
+  use BirdSong.SupervisedCase, async: true
   use BirdSong.DataCase, async: true
-  import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1, setup_bypass: 1]
+  import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1]
 
   alias BirdSong.{
     Bird,
     Data.Scraper.TimeoutError,
     Data.Scraper.BadResponseError,
     MockMacaulayServer,
+    Services.MacaulayLibrary,
     Services.MacaulayLibrary.Playwright,
-    TestHelpers
+    Services.ThrottledCache,
+    Services.Worker
   }
 
   @moduletag :capture_log
   @moduletag :slow_test
-  @throttle_ms 100
-  @timeout_ms 500
 
-  setup [:seed_from_mock_taxonomy, :setup_bypass]
+  @timeout_ms :bird_song
+              |> Application.compile_env!(Playwright)
+              |> Keyword.fetch!(:default_timeout)
 
-  setup %{bypass: bypass} = tags do
-    MockMacaulayServer.setup(tags)
-    base_url = TestHelpers.mock_url(bypass)
+  @throttle_ms :bird_song
+               |> Application.compile_env!(ThrottledCache)
+               |> Keyword.fetch!(:throttle_ms)
+
+  setup [:seed_from_mock_taxonomy]
+
+  setup tags do
+    assert %{
+             bypass: %Bypass{} = bypass,
+             mock_url: "" <> mock_url,
+             worker: %Worker{} = worker
+           } = get_worker_setup(MacaulayLibrary, :Playwright, tags)
+
+    unless tags[:expect_request?] === false do
+      MockMacaulayServer.setup(tags)
+    end
+
     {:ok, %Bird{species_code: code}} = Bird.get_by_sci_name("Sialia sialis")
 
-    request = %HTTPoison.Request{
-      url: Path.join(base_url, "api/v2/search"),
-      params: %{"taxonCode" => code}
-    }
+    {:ok,
+     [
+       bypass: bypass,
+       base_url: mock_url,
+       worker: worker,
+       request: %HTTPoison.Request{
+         url: Path.join(mock_url, "api/v2/search"),
+         params: %{"taxonCode" => code}
+       }
+     ]}
+  end
 
-    {:ok, server} =
-      Playwright.start_link(
-        base_url: base_url,
-        listeners: [self()],
-        throttle_ms: @throttle_ms,
-        timeout: @timeout_ms
-      )
+  describe "open_port" do
+    @describetag expect_api_call?: false
+    setup tags do
+      {:ok, state: %Playwright{base_url: URI.new!(tags[:base_url]), throttle_ms: 0}}
+    end
 
-    {:ok, bypass: bypass, server: server, request: request}
+    @tag :slow_test
+    test "opens a port", %{state: state} do
+      state = Playwright.open_port___test(state)
+      assert %Playwright{port: port, ready?: false} = state
+      assert is_port(port)
+      assert_receive {^port, message}, 2_000
+      assert message === {:data, "message=ready_for_requests\n"}
+
+      assert {:noreply, new_state} = Playwright.handle_info({port, message}, state)
+      assert %Playwright{ready?: true} = new_state
+    end
   end
 
   describe "MacaulayLibrary.Playwright.run/1 - success response" do
-    test "opens a port and returns a response", %{request: request, server: server} do
-      response = Playwright.run(server, request)
+    test "opens a port and returns a response", tags do
+      assert %{
+               request: request,
+               worker: worker
+             } = Map.take(tags, [:request, :worker])
 
-      assert %{port: port} = GenServer.call(server, :state)
+      assert %HTTPoison.Request{params: %{"taxonCode" => species_code}} = request
+
+      response = Playwright.run(worker, request)
+
+      assert %{port: port} = GenServer.call(worker.instance_name, :state)
       assert {:connected, _pid} = Port.info(port, :connected)
 
       assert {:ok, data} = response
@@ -83,8 +122,6 @@ defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
                  "width" => _
                } = recording
 
-        assert %HTTPoison.Request{params: %{"taxonCode" => species_code}} = request
-
         assert Map.keys(taxonomy) === [
                  "category",
                  "comName",
@@ -99,8 +136,17 @@ defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
       end
     end
 
-    test "sends 3 throttled requests", %{request: request, server: server} do
-      Playwright.run(server, request)
+    @tag :slow_test
+    @tag opts: [{MacaulayLibrary, [throttle_ms: 75]}]
+    test "sends 3 throttled requests", tags do
+      assert %{request: request, worker: %Worker{} = worker} = Map.take(tags, [:request, :worker])
+
+      Playwright.register_listener(worker)
+
+      state = GenServer.call(worker.instance_name, :state)
+      assert state.throttle_ms === 75
+
+      Playwright.run(worker, request)
 
       refute_receive {Playwright, %DateTime{}, {:request, %{current_request_number: 0}}}
       refute_receive {Playwright, %DateTime{}, {:request, %{current_request_number: 4}}}
@@ -130,23 +176,47 @@ defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
     end
   end
 
+  describe "handle_continue({:open_port, Mix.Env()})" do
+    @describetag state: %Playwright{base_url: %URI{}, throttle_ms: 0}
+    @describetag expect_request?: false
+    test "does not open the port when env is :test", %{state: state} do
+      assert {:noreply, %Playwright{port: nil}} =
+               Playwright.handle_continue({:open_port, :test}, state)
+    end
+
+    test "does open the port when env is :dev or :prod", %{state: state} do
+      assert {:noreply, %Playwright{port: dev}} =
+               Playwright.handle_continue({:open_port, :dev}, state)
+
+      assert is_port(dev)
+
+      assert {:noreply, %Playwright{port: prod}} =
+               Playwright.handle_continue({:open_port, :prod}, state)
+
+      assert is_port(prod)
+    end
+  end
+
   describe "MacaulayLibrary.Playwright.run/1 - error responses" do
     @tag expect_api_call?: false
     @tag expect_login?: false
     @tag list_html_response: &MockMacaulayServer.not_found_response/1
-    test "returns an error response without crashing when HTML page returns a bad response", %{
-      bypass: bypass,
-      request: request,
-      server: server
-    } do
+    test "returns an error response without crashing when HTML page returns a bad response",
+         tags do
+      assert %{
+               request: request,
+               worker: %Worker{} = worker,
+               base_url: base_url
+             } = Map.take(tags, [:request, :base_url, :worker])
+
       assert {:error,
               %BadResponseError{
                 response_body: "That page does not exist",
                 status: 404,
                 url: url
-              }} = Playwright.run(server, request)
+              }} = Playwright.run(worker, request)
 
-      assert url === bypass |> TestHelpers.mock_url() |> Path.join("/catalog?view=list")
+      assert url === Path.join(base_url, "/catalog?view=list")
 
       refute_receive {
         Playwright,
@@ -154,18 +224,20 @@ defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
         {:request, %{current_request_number: 1, responses: []}}
       }
 
-      assert %{port: port} = GenServer.call(server, :state)
+      assert %{port: port} = GenServer.call(worker.instance_name, :state)
       assert {:connected, _pid} = Port.info(port, :connected)
     end
 
     @tag list_html_response: &MockMacaulayServer.bad_structure_response/1
     @tag expect_api_call?: false
     @tag expect_login?: false
-    test "returns an error when sign in link is not found", %{
-      request: request,
-      server: server
-    } do
-      assert Playwright.run(server, request) ===
+    test "returns an error when sign in link is not found", tags do
+      assert %{
+               worker: %Worker{} = worker,
+               request: request
+             } = Map.take(tags, [:worker, :request])
+
+      assert Playwright.run(worker, request) ===
                {:error,
                 %TimeoutError{
                   timeout_message:
@@ -186,27 +258,30 @@ defmodule BirdSong.Services.MacaulayLibrary.PlaywrightTest do
         {:request, %{current_request_number: 1, responses: []}}
       }
 
-      assert %{port: port} = GenServer.call(server, :state)
+      assert %{port: port} = GenServer.call(worker.instance_name, :state)
       assert {:connected, _pid} = Port.info(port, :connected)
     end
 
     @tag recordings_response: &MockMacaulayServer.not_authorized_response/1
-    test "returns an error response without crashing when API request returns a bad response", %{
-      request: request,
-      bypass: bypass,
-      server: server
-    } do
-      assert Playwright.run(server, request, 3_000) === {
+    test "returns an error response without crashing when API request returns a bad response",
+         tags do
+      assert %{
+               request: request,
+               worker: %Worker{} = worker,
+               base_url: base_url
+             } = Map.take(tags, [:request, :worker, :base_url])
+
+      assert Playwright.run(worker, request, 3_000) === {
                :error,
                %BadResponseError{
                  __exception__: true,
                  response_body: "{\"error\": \"You are not authorized to perform this action\"}",
                  status: 403,
-                 url: bypass |> TestHelpers.mock_url() |> Path.join("/api/v2/search")
+                 url: Path.join(base_url, "/api/v2/search")
                }
              }
 
-      assert %{port: port} = GenServer.call(server, :state)
+      assert %{port: port} = GenServer.call(worker.instance_name, :state)
       assert {:connected, _pid} = Port.info(port, :connected)
     end
   end

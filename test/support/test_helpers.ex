@@ -116,18 +116,11 @@ defmodule BirdSong.TestHelpers do
     socket
   end
 
-  def start_service_supervised(module, %{} = tags) do
-    pid =
-      []
-      |> get_base_url(tags)
-      |> get_data_folder_path_opt(tags, module)
-      |> get_scraper_opt(tags, module)
-      |> get_service_name_opt(tags, module)
-      |> get_throttler_opt(tags)
-      |> get_throttle_ms_opt(tags)
-      |> start_cache(module)
-
-    %Service{module: module, whereis: pid}
+  def start_service_supervised(_module, %{}) do
+    raise BirdSong.DeprecatedFunctionError.exception(
+            deprecated: "TestHelpers.start_service_supervised/2",
+            replacement: "use BirdSong.SupervisedCase"
+          )
   end
 
   def module_alias(module) do
@@ -148,76 +141,7 @@ defmodule BirdSong.TestHelpers do
     Keyword.put(opts, :base_url, mock_url(bypass))
   end
 
-  def get_base_url([], %{}) do
+  def get_base_url(opts, %{}) when is_list(opts) do
     raise "Bypass must be initialized in order to use services in tests"
-  end
-
-  defp get_data_folder_path_opt(opts, %{tmp_dir: "" <> tmp_dir}, module) do
-    subfolder = module |> Service.data_type() |> Atom.to_string()
-
-    Keyword.put(
-      opts,
-      :data_folder_path,
-      Path.join([tmp_dir, subfolder])
-    )
-  end
-
-  defp get_data_folder_path_opt(opts, %{}, _module) do
-    opts
-  end
-
-  defp get_scraper_opt(
-         opts,
-         %{inject_playwright?: true, playwright_response: maybe_response},
-         MacaulayLibrary.Recordings
-       ) do
-    scraper_module = MockJsScraper
-    response = verify_playwright_response_format(maybe_response)
-    {:ok, pid} = ExUnit.Callbacks.start_supervised({scraper_module, response: response})
-    Keyword.put(opts, :scraper, {scraper_module, pid})
-  end
-
-  defp get_scraper_opt(opts, %{scraper: scraper}, MacaulayLibrary.Recordings) do
-    Keyword.put(opts, :scraper, scraper)
-  end
-
-  defp get_scraper_opt(opts, %{}, _) do
-    opts
-  end
-
-  defp get_service_name_opt(opts, %{test: test}, module) do
-    Keyword.put(opts, :name, Module.concat(test, module_alias(module)))
-  end
-
-  defp get_throttler_opt(opts, tags) do
-    Keyword.put(
-      opts,
-      :throttler,
-      Map.get(tags, :throttler, :throttler_not_set)
-    )
-  end
-
-  def get_throttle_ms_opt(opts, %{throttle_ms: throttle_ms}) do
-    Keyword.put(opts, :throttle_ms, throttle_ms)
-  end
-
-  def get_throttle_ms_opt(opts, %{}), do: opts
-
-  defp verify_playwright_response_format(maybe_response) do
-    case maybe_response do
-      {:file, "" <> _} ->
-        maybe_response
-
-      {:ok, [%{} | _]} ->
-        maybe_response
-
-      {:error, %BadResponseError{}} ->
-        maybe_response
-
-      _ ->
-        raise """
-        Invalid playwright response format: #{inspect(maybe_response)}
-        """
-    end
   end
 end

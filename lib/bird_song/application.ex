@@ -5,42 +5,12 @@ defmodule BirdSong.Application do
 
   use Application
 
-  alias BirdSong.Services.Helpers
-
-  alias BirdSong.Services
-
-  @macaulay_base_url Helpers.get_env(Services.MacaulayLibrary, :base_url)
-
-  @supervisors [
-    # supervisors for external API requests
-    {Task.Supervisor, name: Services.Tasks},
-    {Task.Supervisor, name: Services.RequestThrottler.TaskSupervisor},
-    {DynamicSupervisor, name: Services.GenServers}
-  ]
-
-  @throttlers [
-    {Services.MacaulayLibrary.RequestThrottler,
-     base_url: @macaulay_base_url,
-     name: BirdSong.Services.MacaulayLibrary.RequestThrottler,
-     scraper: Services.MacaulayLibrary.Playwright}
-  ]
-
-  @services [
-    Services.Ebird,
-    Services.Flickr,
-    {Services.MacaulayLibrary.Recordings,
-     name: Services.MacaulayLibrary.Recordings, base_url: @macaulay_base_url}
-  ]
-
   @children List.flatten([
               # Start the Ecto repository
               BirdSong.Repo,
-              @supervisors,
-              @throttlers,
-              @services,
               [
+                BirdSong.Services,
                 BirdSongWeb.QuizLive.EtsTables,
-                # {BirdSongWeb.QuizLive.EtsTables, name: BirdSongWeb.QuizLive.EtsTables},
                 # Start the Telemetry supervisor
                 BirdSongWeb.Telemetry,
                 # Start the PubSub system

@@ -180,7 +180,7 @@ defmodule BirdSong.Services.Ebird.Regions.RegionTest do
   end
 
   defp read_region_file(%Region{} = region, acc) do
-    "data/regions"
+    "data/regions/ebird"
     |> Path.join(region_file_name(region) <> ".json")
     |> File.read()
     |> case do
