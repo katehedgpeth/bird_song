@@ -92,10 +92,12 @@ defmodule BirdSong.Services.DataFile do
 
   def log_level(%{written?: false}), do: :warning
 
-  @spec read(Data.t()) ::
+  @type read_response() ::
           {:ok, String.t()}
           | {:error, {:file.posix(), String.t()}}
           | Worker.data_folder_error()
+
+  @spec read(Data.t()) :: read_response()
   def read(%Data{} = data) do
     with_full_file_path(data, &do_read/2)
   end
