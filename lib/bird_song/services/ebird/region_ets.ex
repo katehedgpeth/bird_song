@@ -3,7 +3,7 @@ defmodule BirdSong.Services.Ebird.RegionETS do
 
   alias BirdSong.{
     Services.Ebird,
-    Services.Ebird.Regions.Region,
+    Services.Ebird.Region,
     Services.Worker
   }
 

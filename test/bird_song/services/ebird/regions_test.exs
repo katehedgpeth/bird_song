@@ -4,7 +4,7 @@ defmodule BirdSong.Services.Ebird.RegionsTest do
   alias BirdSong.{
     Services.Ebird,
     Services.Ebird.Regions,
-    Services.Ebird.Regions.Region,
+    Services.Ebird.Region,
     Services.Worker
   }
 

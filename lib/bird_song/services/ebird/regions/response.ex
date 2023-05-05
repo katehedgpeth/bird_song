@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.Ebird.Regions.Response do
-  alias BirdSong.Services.Ebird.Regions.Region
+  alias BirdSong.Services.Ebird.Region
 
   defstruct [:level, :country, regions: []]
 

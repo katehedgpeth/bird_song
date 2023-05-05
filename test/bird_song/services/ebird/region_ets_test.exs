@@ -11,7 +11,7 @@ defmodule BirdSong.Services.Ebird.RegionETSTest do
 
     assert RegionETS.get("US-NC-067", worker) ===
              {:ok,
-              %Ebird.Regions.Region{
+              %Ebird.Region{
                 code: "US-NC-067",
                 name: "Forsyth",
                 level: :subnational2

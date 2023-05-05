@@ -1,9 +1,9 @@
-defmodule BirdSong.Services.Ebird.Regions.RegionTest do
+defmodule BirdSong.Services.Ebird.RegionTest do
   require Logger
-  use ExUnit.Case
-  alias BirdSong.Services.Ebird.Regions.Region.MalformedRegionCodeError
+  use BirdSong.SupervisedCase, async: true
+  alias BirdSong.Services.Ebird.Region.MalformedRegionCodeError
   alias BirdSong.Services.Ebird
-  alias BirdSong.Services.Ebird.Regions.Region
+  alias BirdSong.Services.Ebird.Region
 
   setup_all [:get_countries, :get_subnat1, :get_subnat2]
 
@@ -12,8 +12,8 @@ defmodule BirdSong.Services.Ebird.Regions.RegionTest do
 
   describe "&parse/1" do
     test "parses a subnational2 region code" do
-      assert Ebird.Regions.Region.parse(%{"code" => "US-NC-067", "name" => "Forsyth"}) ===
-               %Ebird.Regions.Region{
+      assert Ebird.Region.parse(%{"code" => "US-NC-067", "name" => "Forsyth"}) ===
+               %Ebird.Region{
                  code: "US-NC-067",
                  level: :subnational2,
                  name: "Forsyth"
@@ -21,8 +21,8 @@ defmodule BirdSong.Services.Ebird.Regions.RegionTest do
     end
 
     test "parses a subnational1 region code" do
-      assert Ebird.Regions.Region.parse(%{"code" => "US-NC", "name" => "North Carolina"}) ===
-               %Ebird.Regions.Region{
+      assert Ebird.Region.parse(%{"code" => "US-NC", "name" => "North Carolina"}) ===
+               %Ebird.Region{
                  code: "US-NC",
                  level: :subnational1,
                  name: "North Carolina"
@@ -30,8 +30,8 @@ defmodule BirdSong.Services.Ebird.Regions.RegionTest do
     end
 
     test "parses a country region code" do
-      assert Ebird.Regions.Region.parse(%{"code" => "US", "name" => "United States"}) ===
-               %Ebird.Regions.Region{
+      assert Ebird.Region.parse(%{"code" => "US", "name" => "United States"}) ===
+               %Ebird.Region{
                  code: "US",
                  level: :country,
                  name: "United States"

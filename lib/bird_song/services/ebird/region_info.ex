@@ -4,7 +4,7 @@ defmodule BirdSong.Services.Ebird.RegionInfo do
     ets_opts: []
 
   alias BirdSong.{
-    Services.Ebird.Regions.Region,
+    Services.Ebird.Region,
     Services.ThrottledCache,
     Services.Worker
   }

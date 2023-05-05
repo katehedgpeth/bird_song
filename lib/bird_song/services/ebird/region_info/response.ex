@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.Ebird.RegionInfo.Response do
-  alias BirdSong.Services.Ebird.{Regions.Region, RegionInfo}
+  alias BirdSong.Services.Ebird.{Region, RegionInfo}
   defstruct [:data]
 
   def parse(

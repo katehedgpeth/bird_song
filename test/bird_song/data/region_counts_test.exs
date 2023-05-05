@@ -5,7 +5,7 @@ defmodule BirdSong.Data.RegionCountsTest do
     Data.RegionCounts,
     Services,
     Services.Ebird,
-    Services.Ebird.Regions.Region,
+    Services.Ebird.Region,
     Services.Worker
   }
 

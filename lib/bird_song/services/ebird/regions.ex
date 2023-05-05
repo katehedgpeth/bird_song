@@ -1,18 +1,19 @@
 defmodule BirdSong.Services.Ebird.Regions do
-  import __MODULE__.Region, only: [is_child_level: 1]
-
   use BirdSong.Services.ThrottledCache,
     ets_name: :ebird_regions,
     ets_opts: []
 
   alias BirdSong.{
     Services.Ebird,
+    Services.Ebird.Region,
     Services.Helpers,
     Services.ThrottledCache,
     Services.Worker
   }
 
-  alias __MODULE__.{Region, Response}
+  alias __MODULE__.Response
+
+  import Region, only: [is_child_level: 1]
 
   @type exception() :: %{
           required(:__struct__) => atom(),

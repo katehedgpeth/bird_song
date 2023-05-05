@@ -4,7 +4,7 @@ defmodule Mix.Tasks.BirdSong.RecordRegions do
 
   alias BirdSong.{
     Services.Ebird,
-    Services.Ebird.Regions.Region,
+    Services.Ebird.Region,
     Services.Ebird.Regions,
     Services.Ebird.RegionInfo,
     Services.Worker

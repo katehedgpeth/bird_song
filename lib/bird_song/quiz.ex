@@ -1,6 +1,7 @@
 defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
+  alias BirdSong.Services.Ebird.Region
   alias Ecto.InvalidChangesetError
   alias Ecto.Changeset
 

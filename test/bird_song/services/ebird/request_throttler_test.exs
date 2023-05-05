@@ -103,13 +103,13 @@ defmodule BirdSong.Services.Ebird.RequestThrottlerTest do
         |> List.flatten()
 
       assert [
-               {Ebird.Regions, _, [%Ebird.Regions.Region{code: "IL"} | _]},
+               {Ebird.Regions, _, [%Ebird.Region{code: "IL"} | _]},
                {Ebird.Observations, _, ["IL" | _]},
-               {Ebird.Regions, _, [%Ebird.Regions.Region{code: "AG"} | _]},
+               {Ebird.Regions, _, [%Ebird.Region{code: "AG"} | _]},
                {Ebird.Observations, _, ["AG" | _]},
-               {Ebird.Regions, _, [%Ebird.Regions.Region{code: "GB"} | _]},
+               {Ebird.Regions, _, [%Ebird.Region{code: "GB"} | _]},
                {Ebird.Observations, _, ["GB" | _]},
-               {Ebird.Regions, _, [%Ebird.Regions.Region{code: "BG"} | _]},
+               {Ebird.Regions, _, [%Ebird.Region{code: "BG"} | _]},
                {Ebird.Observations, _, ["BG" | _]}
              ] = requests
 
@@ -119,7 +119,7 @@ defmodule BirdSong.Services.Ebird.RequestThrottlerTest do
         |> Enum.into([])
         |> Enum.map(fn {:ok, {:ok, response}} -> response end)
         |> Enum.map(fn
-          [%Ebird.Regions.Region{code: code} | _] -> {:Regions, String.slice(code, 0..1)}
+          [%Ebird.Region{code: code} | _] -> {:Regions, String.slice(code, 0..1)}
           %Ebird.Observations.Response{region: region} -> {:Observations, region}
         end)
 
@@ -146,7 +146,7 @@ defmodule BirdSong.Services.Ebird.RequestThrottlerTest do
              ] =
                requests
                |> Enum.map(fn
-                 {Ebird.Regions, _, [%Ebird.Regions.Region{code: code} | _]} ->
+                 {Ebird.Regions, _, [%Ebird.Region{code: code} | _]} ->
                    assert_receive {:end_request, %{parent: ^code, response: response}}
                    {Ebird.Regions, code, response}
 

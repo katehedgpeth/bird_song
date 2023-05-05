@@ -1,8 +1,8 @@
 defmodule BirdSong.Data.RegionCounts do
   alias BirdSong.{
     Services.Worker,
-    Services.Ebird.Regions,
-    Services.Ebird.Regions.Region
+    Services.Ebird.Region,
+    Services.Ebird.Regions
   }
 
   defstruct country_counts: %{},

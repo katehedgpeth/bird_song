@@ -181,7 +181,7 @@ defmodule BirdSong.Services.EbirdTest do
 
     regions_ets = get_worker(Ebird, :RegionETS, tags)
 
-    assert {:ok, %Ebird.Regions.Region{} = region} =
+    assert {:ok, %Ebird.Region{} = region} =
              Ebird.RegionETS.get(
                "US-NC",
                regions_ets
@@ -211,7 +211,7 @@ defmodule BirdSong.Services.EbirdTest do
     assert {:error, %ForbiddenExternalURLError{}} =
              Ebird.Observations.get_recent_observations("US-NC-067", real_observations)
 
-    assert {:ok, [%Ebird.Regions.Region{} | _]} =
+    assert {:ok, [%Ebird.Region{} | _]} =
              Ebird.Regions.get_subregions(
                region,
                regions,
