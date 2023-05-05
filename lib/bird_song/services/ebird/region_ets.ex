@@ -16,7 +16,7 @@ defmodule BirdSong.Services.Ebird.RegionETS do
           worker: Worker.t()
         }
 
-  @type search_result() :: {:ok, %Region{}} | {:error, :not_found}
+  @type search_result() :: {:ok, Region.t()} | {:error, Region.NotFoundError.t()}
 
   #########################################################
   #########################################################
@@ -25,8 +25,11 @@ defmodule BirdSong.Services.Ebird.RegionETS do
   ##
   #########################################################
 
+  @spec get(String.t(), Worker.t()) :: search_result()
   def get("" <> code, %Worker{instance_name: name}) do
-    GenServer.call(name, {:get, code})
+    with {:error, :not_found} <- GenServer.call(name, {:get, code}) do
+      {:error, Region.NotFoundError.exception(code: code)}
+    end
   end
 
   def get!("" <> code, %Worker{} = worker) do
@@ -105,6 +108,7 @@ defmodule BirdSong.Services.Ebird.RegionETS do
     :ets.insert(ets, {code, region})
   end
 
+  @spec get_from_ets(t(), String.t()) :: search_result()
   defp get_from_ets(%__MODULE__{ets: ets}, "" <> code) do
     case :ets.lookup(ets, code) do
       [{^code, %Region{} = region}] -> {:ok, region}

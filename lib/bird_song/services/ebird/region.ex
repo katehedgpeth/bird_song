@@ -1,25 +1,14 @@
-defmodule BirdSong.Services.Ebird.Region.MalformedRegionCodeError do
-  defexception [:code]
-
-  @type t() :: %__MODULE__{
-          code: String.t()
-        }
-
-  def message(%__MODULE__{code: code}) do
-    """
-    Malformed region code: #{code}
-
-    Expected region code to be in one of these forms:
-      country -> XX
-      subnational1 -> XX-XX or XX-XXX
-      subnational2 -> XX-XX-XXX or XX-XXX-XXX
-    """
-  end
-end
-
 defmodule BirdSong.Services.Ebird.Region do
-  alias __MODULE__.MalformedRegionCodeError
-  alias BirdSong.Services.Ebird.RegionETS
+  alias BirdSong.{
+    Services,
+    Services.Ebird,
+    Services.Ebird.RegionETS
+  }
+
+  alias __MODULE__.{
+    MalformedRegionCodeError,
+    NotFoundError
+  }
 
   defstruct [:code, :name, :level]
 
@@ -36,23 +25,45 @@ defmodule BirdSong.Services.Ebird.Region do
     subnational1: :subnational2
   }
 
-  @type get_parent_return() :: {:ok, t()} | {:error, any()}
+  @type get_response() :: {:ok, t()} | {:error, NotFoundError.t()}
 
   defguard is_region_level(level) when level in [:country, :subnational1, :subnational2]
   defguard is_child_level(level) when level in [:subnational1, :subnational2]
   defguard is_parent_level(level) when level in [:country, :subnational1]
 
-  @spec get_parent(t()) :: get_parent_return()
+  @spec from_code(String.t(), Worker.t()) :: RegionETS.search_result()
+  def from_code(
+        "" <> code,
+        ets_worker \\ Services.Supervisor.build_worker_info(Ebird, :RegionETS)
+      ) do
+    RegionETS.get(code, ets_worker)
+  end
+
+  @spec from_code!(String.t(), Worker.t()) :: t()
+  def from_code!(
+        "" <> code,
+        ets_worker \\ Services.Supervisor.build_worker_info(Ebird, :RegionETS)
+      ) do
+    RegionETS.get!(code, ets_worker)
+  end
+
+  @spec get_parent(BirdSong.Services.Ebird.Region.t()) :: RegionETS.search_result()
   def get_parent(%__MODULE__{} = region) do
     get_parent(region, :country)
   end
 
-  @spec get_parent(t(), level()) :: get_parent_return()
+  @spec get_parent(BirdSong.Services.Ebird.Region.t(), level()) ::
+          get_response()
   def get_parent(%__MODULE__{} = region, level) when level in [:country, :subnational1] do
-    get_parent(region, level, RegionETS)
+    get_parent(
+      region,
+      level,
+      Services.Supervisor.build_worker_info(Ebird, :RegionETS)
+    )
   end
 
-  @spec get_parent(t(), level(), GenServer.server()) :: get_parent_return()
+  @spec get_parent(BirdSong.Services.Ebird.Region.t(), level(), Worker.t()) ::
+          get_response()
   def get_parent(%__MODULE__{level: :country}, _parent_level, _) do
     {:error, :no_parent}
   end
@@ -70,7 +81,9 @@ defmodule BirdSong.Services.Ebird.Region do
     |> RegionETS.get(ets_server)
   end
 
-  @spec get_parent!(t()) :: t()
+  @spec get_parent!(BirdSong.Services.Ebird.Region.t()) ::
+          BirdSong.Services.Ebird.Region.t()
+
   def get_parent!(%__MODULE__{} = region, level \\ :country, server \\ RegionETS) do
     region
     |> get_parent(level, server)

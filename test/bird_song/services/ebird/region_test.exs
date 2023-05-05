@@ -1,14 +1,42 @@
 defmodule BirdSong.Services.Ebird.RegionTest do
   require Logger
-  use BirdSong.SupervisedCase, async: true
-  alias BirdSong.Services.Ebird.Region.MalformedRegionCodeError
-  alias BirdSong.Services.Ebird
-  alias BirdSong.Services.Ebird.Region
+  use ExUnit.Case, async: true
+
+  alias BirdSong.Services.{
+    Ebird,
+    Ebird.Region,
+    Ebird.Region.MalformedRegionCodeError,
+    Ebird.Region.NotFoundError
+  }
 
   setup_all [:get_countries, :get_subnat1, :get_subnat2]
 
   @integers ~s(1234567890) |> String.split("", trim: true)
   @uppercase ~s(ABCDEFGHIJKLMNOPQRSTUVWXYZ) |> String.split("", trim: true)
+
+  describe "from_code" do
+    test "returns {:ok, %Region{}} if code is valid" do
+      assert Region.from_code("US-NC-067") ===
+               {:ok, %Region{code: "US-NC-067", level: :subnational2, name: "Forsyth"}}
+    end
+
+    test "returns {:error, %Region.NotFoundError{}} if code is invalid" do
+      assert Region.from_code("US-BLAH") === {:error, %NotFoundError{code: "US-BLAH"}}
+    end
+  end
+
+  describe "from_code!" do
+    test "returns %Region{} if code is valid" do
+      assert Region.from_code!("US-NC-067") ===
+               %Region{code: "US-NC-067", level: :subnational2, name: "Forsyth"}
+    end
+
+    test "returns {:error, %Region.NotFoundError{}} if code is invalid" do
+      assert_raise NotFoundError, fn ->
+        Region.from_code!("US-BLAH")
+      end
+    end
+  end
 
   describe "&parse/1" do
     test "parses a subnational2 region code" do
