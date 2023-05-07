@@ -50,10 +50,13 @@ defmodule BirdSong.Services do
 
   @type service_opts() :: {module(), Keyword.t()}
 
+  defguard is_service_key(atom) when atom in [:ebird, :images, :recordings]
+
   def all() do
     all(__MODULE__)
   end
 
+  @spec all(Worker.t() | Service.t() | module() | pid()) :: t() | {:error, :not_alive}
   def all(%Worker{parent: %Service{} = parent}) do
     all(parent)
   end
@@ -66,10 +69,14 @@ defmodule BirdSong.Services do
 
   def all(instance) when is_atom(instance) or is_pid(instance) do
     instance
-    |> Supervisor.which_children()
+    |> GenServer.whereis()
     |> case do
-      children when is_list(children) ->
-        children
+      nil ->
+        {:error, :not_alive}
+
+      pid when is_pid(pid) ->
+        pid
+        |> Supervisor.which_children()
         |> Enum.map(&do_all(&1, instance))
         |> __struct__()
     end

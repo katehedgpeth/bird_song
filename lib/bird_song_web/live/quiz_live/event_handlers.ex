@@ -1,14 +1,20 @@
 defmodule BirdSongWeb.QuizLive.EventHandlers do
   use BirdSongWeb.QuizLive.Assign
   alias Phoenix.LiveView
-  alias BirdSongWeb.QuizLive.EtsTables
   alias Ecto.Changeset
   alias BirdSong.Quiz
-  alias BirdSongWeb.{QuizLive, QuizLive.Current}
 
-  def handle_event("set_region", %{"value" => value}, %Socket{} = socket) do
-    send(self(), :get_region_species_codes)
-    {:noreply, set_region(socket, value)}
+  alias BirdSongWeb.{
+    QuizLive,
+    QuizLive.Current,
+    QuizLive.EtsTables
+  }
+
+  # defdelegated from QuizLive
+  @spec handle_event(String.t(), Map.t(), Socket.t()) ::
+          {:noreply, Socket.t()} | {:reply, map(), Socket.t()}
+  def handle_event("set_region", %{}, %Socket{} = socket) do
+    {:noreply, set_region_and_get_codes(socket)}
   end
 
   def handle_event("set_species_category", params, socket) do
@@ -93,8 +99,8 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     selected_birds =
       assigns
       |> Map.fetch!(:species_categories)
-      |> Enum.filter(&elem(&1, 1))
-      |> Enum.map(&elem(&1, 0))
+      |> Enum.filter(fn {_name, selected?} -> selected? end)
+      |> Enum.map(fn {name, true} -> name end)
       |> case do
         [] -> Map.fetch!(assigns, :birds)
         [_ | _] = selected -> filter_birds(assigns, MapSet.new(selected))
@@ -104,10 +110,31 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     assign(socket, :quiz, %{quiz | birds: selected_birds})
   end
 
-  defp set_region(%Socket{} = socket, ""), do: socket
+  defp set_region_and_get_codes(%Socket{} = socket) do
+    case socket.assigns[:filters] do
+      %Changeset{
+        valid?: true,
+        data: %Quiz{
+          region: "" <> _
+        }
+      } ->
+        QuizLive.Services.assign_region_species_codes(socket)
 
-  defp set_region(%Socket{} = socket, "" <> region) do
-    assign(socket, :filters, update_filters(socket, %{"region" => region}))
+      %Changeset{
+        changes: %{region: region},
+        valid?: false,
+        errors: [{:region, {"unknown" <> _, []}} | _]
+      } ->
+        LiveView.put_flash(socket, "error", region <> " is not a known birding region")
+
+      %Changeset{
+        errors: [{:region, {"Can't be blank", _}} | []]
+      } ->
+        LiveView.put_flash(socket, "error", "Please enter a region")
+
+      _ ->
+        socket
+    end
   end
 
   @spec maybe_start_quiz(Socket.t(), Map.t()) :: Socket.t()

@@ -1,4 +1,7 @@
 defmodule BirdSongWeb.QuizLive.Services do
+  require BirdSong.Services
+
+  alias BirdSong.Services.Worker
   alias Phoenix.LiveView.Socket
 
   alias BirdSong.{
@@ -6,6 +9,7 @@ defmodule BirdSongWeb.QuizLive.Services do
     Quiz,
     Services,
     Services.Ebird,
+    Services.Ebird.Region,
     Services.Helpers
   }
 
@@ -14,10 +18,19 @@ defmodule BirdSongWeb.QuizLive.Services do
   Please choose a different or broader region.
   "
 
-  def get_region_species_codes(%Socket{} = socket) do
-    socket
-    |> get_region()
-    |> do_get_region_species_codes(socket)
+  @spec assign_region_species_codes(Socket.t()) :: Socket.t()
+  def assign_region_species_codes(%Socket{} = socket) do
+    case get_region(socket) do
+      {:ok, %Region{} = region} ->
+        worker = get_worker(socket, :ebird, :RegionSpeciesCodes)
+
+        region
+        |> Ebird.RegionSpeciesCodes.get_codes(worker)
+        |> do_assign_region_species_codes(socket)
+
+      {:error, :not_set} ->
+        socket
+    end
   end
 
   defp build_species_category_dict(birds_by_category) do
@@ -26,24 +39,40 @@ defmodule BirdSongWeb.QuizLive.Services do
     |> Enum.into(%{})
   end
 
-  defp do_get_region_species_codes({:ok, "" <> region}, socket) do
-    region
-    |> Ebird.RegionSpeciesCodes.get_codes(get_server(socket, :region_species_codes))
-    |> case do
-      {:error, _} ->
-        Phoenix.LiveView.put_flash(
-          socket,
-          :error,
-          "We're sorry, but our service is not available at the moment. Please try again later."
-        )
+  defp do_assign_region_species_codes(
+         {:ok, %Ebird.RegionSpeciesCodes.Response{codes: [], region: region}},
+         socket
+       ) do
+    Helpers.log([message: "no_species_codes_returned", region: region], __MODULE__, :warning)
+    Phoenix.LiveView.put_flash(socket, :error, @no_birds_error)
+  end
 
-      {:ok, %Ebird.RegionSpeciesCodes.Response{codes: [], region: region}} ->
-        Helpers.log([message: "no_species_codes_returned", region: region], __MODULE__, :warning)
-        Phoenix.LiveView.put_flash(socket, :error, @no_birds_error)
+  defp do_assign_region_species_codes(
+         {:ok, %Ebird.RegionSpeciesCodes.Response{codes: codes}},
+         socket
+       ) do
+    get_birds_from_codes(socket, codes)
+  end
 
-      {:ok, %Ebird.RegionSpeciesCodes.Response{codes: codes}} ->
-        get_birds_from_codes(socket, codes)
-    end
+  defp do_assign_region_species_codes(
+         {:error, {:bad_response, %HTTPoison.Response{status_code: 400}}},
+         socket
+       ) do
+    Phoenix.LiveView.put_flash(
+      socket,
+      :error,
+      "That is not a valid region code"
+
+      # "We're sorry, but our service is not available at the moment. Please try again later."
+    )
+  end
+
+  defp do_assign_region_species_codes({:error, _}, socket) do
+    Phoenix.LiveView.put_flash(
+      socket,
+      :error,
+      "We're sorry, but our service is not available at the moment. Please try again later."
+    )
   end
 
   defp do_get_region_species_codes({:error, :not_set}, socket) do
@@ -72,16 +101,18 @@ defmodule BirdSongWeb.QuizLive.Services do
     end
   end
 
+  @spec get_region(Socket.t()) :: {:ok, Region.t()} | {:error, :not_set}
   defp get_region(%Socket{assigns: assigns}) do
     assigns
     |> Map.fetch!(:filters)
     |> Quiz.get_region()
   end
 
-  defp get_server(%Socket{assigns: %{services: %Services{} = services}}, service_name)
-       when is_atom(service_name) do
+  @spec get_worker(Socket.t(), Services.service_key(), atom()) :: Worker.t()
+  defp get_worker(%Socket{assigns: %{services: %Services{} = services}}, service_key, worker_atom)
+       when BirdSong.Services.is_service_key(service_key) do
     services
-    |> Map.fetch!(service_name)
-    |> Map.fetch!(:whereis)
+    |> Map.fetch!(service_key)
+    |> Map.fetch!(worker_atom)
   end
 end

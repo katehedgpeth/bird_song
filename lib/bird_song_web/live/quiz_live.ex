@@ -16,11 +16,10 @@ defmodule BirdSongWeb.QuizLive do
 
   alias BirdSong.Bird
 
-  def mount(params, session, socket) do
+  def mount(_params, session, socket) do
     socket =
       socket
       |> Assign.assign_session_id(session)
-      |> EtsTables.assign_tables(EtsTables.get_ets_server_name(params))
       |> EtsTables.Assigns.lookup_session()
       |> case do
         {:ok, %{} = assigns} ->
@@ -34,11 +33,13 @@ defmodule BirdSongWeb.QuizLive do
     {:ok, socket}
   end
 
-  def handle_info(message, socket),
-    do: MessageHandlers.handle_info(message, socket)
+  defdelegate handle_info(message, socket), to: MessageHandlers
 
-  def handle_event(message, payload, socket),
-    do: EventHandlers.handle_event(message, payload, socket)
+  defdelegate handle_event(message, payload, socket), to: EventHandlers
+
+  if Mix.env() === :test do
+    defdelegate handle_call(message, payload, socket), to: MessageHandlers
+  end
 
   def render(assigns) do
     Enum.each(assigns[:render_listeners], &send(&1, {:render, assigns}))

@@ -1,6 +1,7 @@
 defmodule BirdSongWeb.QuizLive.Current do
   require Logger
   use BirdSongWeb.QuizLive.Assign
+  alias BirdSong.Services.MacaulayLibrary
   alias Phoenix.LiveView.Socket
 
   alias BirdSong.{
@@ -9,7 +10,7 @@ defmodule BirdSongWeb.QuizLive.Current do
     Services.Flickr,
     Services.Flickr.Photo,
     Services.MacaulayLibrary.Recording,
-    Services.Service
+    Services.Worker
   }
 
   alias BirdSongWeb.QuizLive
@@ -75,13 +76,10 @@ defmodule BirdSongWeb.QuizLive.Current do
        when is_resource_key(resource_key) do
     plural = :"#{resource_key}s"
 
-    %Service{module: module, name: name} =
-      socket
-      |> get_assign(:services)
-      |> Map.fetch!(plural)
+    worker = get_worker(socket, plural)
 
     resource =
-      case apply(module, :get, [bird, name]) do
+      case apply(worker.module, :get, [bird, worker]) do
         {:ok, saved_response} ->
           saved_response
           |> Map.fetch!(plural)
@@ -106,4 +104,14 @@ defmodule BirdSongWeb.QuizLive.Current do
     |> get_current()
     |> Map.fetch!(key)
   end
+
+  defp get_worker(%Socket{assigns: assigns}, key) do
+    assigns
+    |> Map.fetch!(:services)
+    |> Map.fetch!(key)
+    |> Map.fetch!(get_worker_key(key))
+  end
+
+  defp get_worker_key(:images), do: :PhotoSearch
+  defp get_worker_key(:recordings), do: :Recordings
 end

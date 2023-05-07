@@ -18,8 +18,11 @@ defmodule BirdSongWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :index
-    live "/quiz/new", QuizLive.New
-    live "/quiz", QuizLive
+
+    live_session :quiz do
+      live "/quiz/new", QuizLive.New
+      live "/quiz", QuizLive
+    end
   end
 
   # Other scopes may use custom stacks.

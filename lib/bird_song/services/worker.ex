@@ -7,6 +7,8 @@ defmodule BirdSong.Services.Worker do
 
   @callback do_init(Keyword.t()) :: {:ok, struct()} | {:ok, struct(), {:continue, any()}}
 
+  @derive {Inspect, only: [:instance_name, :module]}
+
   @struct_keys [
     :instance_name,
     :atom,

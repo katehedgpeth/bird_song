@@ -87,7 +87,7 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   end
 
   defp possible_bird_button(%Bird{common_name: name, species_code: code}) do
-    %GroupButton{text: name, value: code}
+    %GroupButton{text: name, value: code, phx_click: ""}
   end
 
   defp rendering_module(%MacaulayLibrary.Recording{}), do: QuizLive.HTML.Recordings.Ebird

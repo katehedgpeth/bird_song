@@ -2,14 +2,17 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Assigns do
   require Logger
   alias Phoenix.LiveView.Socket
 
+  alias BirdSongWeb.QuizLive.EtsTables
+
   @spec lookup_session(Socket.t()) :: {:error, {:not_found, String.t()}} | {:ok, Map.t()}
   def lookup_session(%Socket{assigns: %{session_id: nil}}) do
     {:error, {:not_found, nil}}
   end
 
-  def lookup_session(%Socket{assigns: %{session_id: "" <> session_id}} = socket) do
-    socket
-    |> get_table()
+  def lookup_session(%Socket{assigns: assigns}) do
+    %{session_id: "" <> session_id} = Map.take(assigns, [:session_id])
+
+    get_table()
     |> :ets.lookup(session_id)
     |> case do
       [{^session_id, %{} = assigns}] -> {:ok, assigns}
@@ -19,16 +22,14 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Assigns do
 
   def remember_session(%Socket{assigns: assigns} = socket) do
     true =
-      socket
-      |> get_table()
+      get_table()
       |> :ets.insert({get_session_id(socket), assigns})
 
     socket
   end
 
   def forget_session(%Socket{} = socket) do
-    socket
-    |> get_table()
+    get_table()
     |> :ets.delete(get_session_id(socket))
 
     socket
@@ -38,9 +39,7 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Assigns do
     session_id
   end
 
-  defp get_table(%Socket{assigns: assigns}),
-    do:
-      assigns
-      |> Map.fetch!(:ets_tables)
-      |> Map.fetch!(:assigns)
+  defp get_table() do
+    EtsTables.get_tables().assigns
+  end
 end

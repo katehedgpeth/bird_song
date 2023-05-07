@@ -13,8 +13,7 @@ defmodule BirdSongWeb.QuizLive.New do
   }
 
   alias BirdSong.{
-    Quiz,
-    Services
+    Quiz
   }
 
   @asset_cdn "https://cdn.download.ams.birds.cornell.edu"
@@ -27,11 +26,12 @@ defmodule BirdSongWeb.QuizLive.New do
     disabled:italic
   )
 
-  def mount(params, session, socket) do
+  on_mount {Assign, :assign_services}
+
+  def mount(_params, session, socket) do
     {:ok,
      socket
      |> Assign.assign_session_id(session)
-     |> EtsTables.assign_tables(EtsTables.get_ets_server_name(params))
      |> EtsTables.Assigns.lookup_session()
      |> case do
        {:ok, assigns} -> %{socket | assigns: assigns}
@@ -49,7 +49,7 @@ defmodule BirdSongWeb.QuizLive.New do
     |> QuizLive.HTML.render()
   end
 
-  def assign_defaults(%Socket{} = socket, session) do
+  def assign_defaults(%Socket{} = socket, %{} = session) do
     socket
     |> Assign.assign_session_id(session)
     |> assign(:text_input_class, @text_input_class)
@@ -59,14 +59,13 @@ defmodule BirdSongWeb.QuizLive.New do
     |> assign_new(:birds, fn -> [] end)
     |> assign_new(:render_listeners, fn -> [] end)
     |> assign_new(:filters, &Quiz.default_changeset/0)
-    |> assign_new(:services, fn -> Services.all() end)
     |> assign_new(:asset_cdn, fn -> @asset_cdn end)
-    |> EtsTables.assign_tables()
   end
 
-  def handle_info(message, socket),
-    do: MessageHandlers.handle_info(message, socket)
+  defdelegate handle_info(message, socket), to: MessageHandlers
+  defdelegate handle_event(message, payload, socket), to: EventHandlers
 
-  def handle_event(message, payload, socket),
-    do: EventHandlers.handle_event(message, payload, socket)
+  if Mix.env() === :test do
+    defdelegate handle_call(message, payload, socket), to: MessageHandlers
+  end
 end

@@ -5,15 +5,15 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
 
   alias BirdSong.{
     Services.Ebird,
+    Services.Ebird.Region,
     Services.ThrottledCache
   }
 
   @type request_data() :: {:region_species_codes, String.t()}
-  @type response_data() :: [String.t()]
 
-  @spec get_codes(String.t(), Worker.t()) :: Helpers.api_response(response_data())
-  def get_codes("" <> region, worker) do
-    get({:region_species_codes, region}, worker)
+  @spec get_codes(Region.t(), Worker.t()) :: Helpers.api_response()
+  def get_codes(%Region{code: region_code}, worker) do
+    get({:region_species_codes, region_code}, worker)
   end
 
   @impl ThrottledCache

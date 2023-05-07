@@ -4,6 +4,7 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
   alias BirdSong.{
     MockEbirdServer,
     Services.Ebird,
+    Services.Ebird.Region,
     Services.Ebird.RegionSpeciesCodes
   }
 
@@ -12,7 +13,7 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodesTest do
 
     {:ok,
      [
-       region: "US-NC-067",
+       region: Region.from_code!("US-NC-067"),
        worker: get_worker(Ebird, :RegionSpeciesCodes, tags)
      ]}
   end

@@ -13,9 +13,6 @@ defmodule BirdSong.Quiz do
           region: String.t() | nil
         }
 
-  # region is temporarily hard-coded; future version will take user input
-  @default_region "US-NC-067"
-
   schema "quizzes" do
     field :birds, {:array, :string}, default: []
     field :correct_answers, :integer, default: 0
@@ -51,6 +48,7 @@ defmodule BirdSong.Quiz do
     quiz
     |> cast(changes, [:correct_answers, :incorrect_answers, :region, :quiz_length, :birds])
     |> validate_required([:region, :quiz_length])
+    |> validate_change(:region, &validate_region/2)
   end
 
   def default_changeset() do
@@ -73,9 +71,9 @@ defmodule BirdSong.Quiz do
   end
 
   @spec get_region(t()) ::
-          {:error, :not_set} | {:ok, binary}
+          {:error, :not_set} | {:ok, Region.t()}
   def get_region(%__MODULE__{region: "" <> region}) do
-    {:ok, region}
+    {:ok, Region.from_code!(region)}
   end
 
   def get_region(%__MODULE__{region: nil}) do
@@ -88,5 +86,14 @@ defmodule BirdSong.Quiz do
     changeset
     |> apply_valid_changes!()
     |> get_region()
+  end
+
+  defp validate_region(:region, "" <> region_code) do
+    region_code
+    |> Region.from_code()
+    |> case do
+      {:ok, %Region{}} -> []
+      {:error, %Region.NotFoundError{}} -> [region: "unknown: #{region_code}"]
+    end
   end
 end

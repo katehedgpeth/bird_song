@@ -5,6 +5,8 @@ defmodule BirdSong.Bird do
   alias BirdSong.Services.Ebird.RegionSpeciesCodes
   alias BirdSong.{Family, Order}
 
+  @derive {Inspect, only: [:common_name, :id, :sci_name]}
+
   @cast_keys [
     :species_code,
     :common_name,

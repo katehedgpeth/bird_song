@@ -1,9 +1,10 @@
 defmodule BirdSongWeb.Components.GroupButton do
-  @enforce_keys [:text, :value]
-  defstruct [:color, :text, :value, selected?: false]
+  @enforce_keys [:text, :value, :phx_click]
+  defstruct [:color, :phx_click, :text, :value, selected?: false]
 
   @type t() :: %__MODULE__{
           color: String.t(),
+          phx_click: String.t(),
           selected?: boolean(),
           text: String.t(),
           value: String.t()
@@ -29,7 +30,8 @@ defmodule BirdSongWeb.Components.ButtonGroup do
       Tag.content_tag(:button, text,
         type: :button,
         value: value,
-        "phx-click": "set_species_category"
+        "phx-click": props.phx_click,
+        "data-selected": props.selected?
       ),
       class:
         props
@@ -37,7 +39,8 @@ defmodule BirdSongWeb.Components.ButtonGroup do
         |> Enum.reduce(
           ["btn", "btn-xs"],
           &group_button_css/2
-        )
+        ),
+      data: [name: value]
     )
   end
 

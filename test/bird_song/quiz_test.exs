@@ -1,7 +1,12 @@
 defmodule BirdSong.QuizTest do
-  use ExUnit.Case
-  alias BirdSong.Quiz
+  use ExUnit.Case, async: true
+
   alias Ecto.Changeset
+
+  alias BirdSong.{
+    Quiz,
+    Services.Ebird.Region
+  }
 
   @default_changeset Quiz.default_changeset()
 
@@ -40,5 +45,18 @@ defmodule BirdSong.QuizTest do
     assert %Quiz{}
            |> Quiz.changeset(%{region: "US-NC"})
            |> Quiz.apply_valid_changes() === %Quiz{region: "US-NC"}
+  end
+
+  describe "get_region/1" do
+    test "returns {:ok, %Region{}} if region in struct is a string" do
+      assert {:ok, %Region{}} = Quiz.get_region(%Quiz{region: "US-NC-067"})
+    end
+
+    test "returns {:error, :not_set} if value is nil" do
+      assert Quiz.get_region(%Quiz{}) === {:error, :not_set}
+    end
+
+    test "returns {:ok, %Region{}} if given a changeset with valid changes" do
+    end
   end
 end

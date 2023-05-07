@@ -7,7 +7,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   alias BirdSongWeb.QuizLive
 
   def handle_info(:get_region_species_codes, socket) do
-    {:noreply, QuizLive.Services.get_region_species_codes(socket)}
+    {:noreply, QuizLive.Services.assign_region_species_codes(socket)}
   end
 
   def handle_info(
@@ -29,16 +29,22 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   ##  USED IN TESTS
   ##
 
-  def handle_info({:register_render_listener, pid}, socket) do
-    {:noreply,
-     assign(
-       socket,
-       :render_listeners,
-       [pid | socket.assigns[:render_listeners]]
-     )}
-  end
+  if Mix.env() === :test do
+    def handle_info({:register_render_listener, pid}, socket) do
+      {:noreply,
+       assign(
+         socket,
+         :render_listeners,
+         [pid | socket.assigns[:render_listeners]]
+       )}
+    end
 
-  def handle_info({:services, %Services{} = services}, socket) do
-    {:noreply, assign(socket, :services, services)}
+    def handle_info({:services, %Services{} = services}, socket) do
+      {:noreply, assign(socket, :services, services)}
+    end
+
+    def handle_call(:socket, _, socket) do
+      {:reply, socket, socket}
+    end
   end
 end
