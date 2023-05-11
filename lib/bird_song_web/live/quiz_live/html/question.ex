@@ -1,9 +1,11 @@
 defmodule BirdSongWeb.QuizLive.HTML.Question do
   use Phoenix.LiveComponent
-  alias Phoenix.HTML
+  alias BirdSongWeb.QuizLive.Current
+  alias BirdSongWeb.QuizLive.Visibility
 
   alias BirdSongWeb.{
     Components.ButtonGroup,
+    Components.Filters,
     Components.GroupButton,
     QuizLive
   }
@@ -15,27 +17,36 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     Services.MacaulayLibrary
   }
 
-  def render(%{current: %{bird: nil}} = assigns), do: loading(assigns)
-
-  def render(assigns) do
+  def render(%{quiz: %Quiz{}} = assigns) do
     ~H"""
-    <%= QuizLive.HTML.page_title("What bird do you hear?") %>
-    <div class="flex gap-10 flex-col">
-      <%= play_audio(assigns) %>
-      <div class="flex justify-center gap-5">
-        <button phx-click="change_recording" class="btn btn-outline">Hear a different recording of this bird</button>
-        <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
+      <%= QuizLive.HTML.page_title("What bird do you hear?") %>
+      <div class="flex gap-10 flex-col">
+        <.play_audio current={@current} asset_cdn={@asset_cdn} />
+        <div class="flex flex-wrap justify-center gap-5">
+          <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
+          <button phx-click="change" phx-value-element="recording" class="btn btn-outline">Change recording</button>
+        </div>
+        <div class="bg-slate-100 p-10 w-full">
+          <.show_answer visibility={@visibility} current={@current} />
+        </div>
+          <.show_possible_birds quiz={@quiz} />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <.show_image visibility={@visibility} current={@current} />
+          <.show_recording_details
+            visibility={@visibility}
+            asset_cdn={@asset_cdn} current={@current}
+          />
+        </div>
+
+        <.filters {assigns} />
+
       </div>
-      <div class="bg-slate-100 p-10 w-full">
-        <%= show_answer(assigns) %>
-      </div>
-      <div class="flex space-x-10">
-        <%= show_image(assigns) %>
-        <%= show_possible_birds(assigns) %>
-      </div>
-      <%= show_recording_details(assigns) %>
-      <%= QuizLive.HTML.Filters.render(assigns) %>
-    </div>
+    """
+  end
+
+  def render(%{} = assigns) do
+    ~H"""
+    <div>Loading...</div>
     """
   end
 
@@ -46,119 +57,165 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   ##
   ####################################################
 
-  defp image(%{show_image?: true, current: %{image: image}}) do
-    image
-    |> rendering_module()
-    |> apply(:src, [image])
-    |> HTML.Tag.img_tag(class: "block")
-  end
-
-  defp image(%{show_image?: false}) do
-    ""
-  end
-
-  defp image_button(%{show_image?: show?}) do
-    action = if show?, do: "change", else: "show"
-
-    HTML.Tag.content_tag(:button, String.capitalize(action) <> " Image",
-      phx: [click: action <> "_image"],
-      class: "btn btn-outline block"
-    )
-  end
-
-  defp loading(assigns) do
+  defp image(%{visibility: %Visibility{image: :hidden}} = assigns) do
     ~H"""
-    <h2>Loading...</h2>
+    <.toggle_button element="image", text="Image" />
     """
   end
 
-  defp play_audio(%{current: %{recording: recording}, asset_cdn: asset_cdn}) do
-    HTML.Tag.content_tag(:audio, [],
-      autoplay: true,
-      src: rendering_module(recording).audio_src(recording, asset_cdn)
-    )
+  defp image(%{
+         visibility: %Visibility{image: :shown},
+         current: %Current{image: image}
+       }) do
+    assigns = %{
+      btn_class: "btn btn-outline",
+      src:
+        image
+        |> rendering_module()
+        |> apply(:src, [image])
+    }
+
+    ~H"""
+      <img src={@src} class="block" />
+      <div>
+        <%= for {action, text} <- [{"change", "Change"}, {"toggle_visibility", "Hide"}] do %>
+          <button
+            class={@btn_class}
+            phx-click={action}
+            phx-value-element="image">
+            <%= text %> image
+          </button>
+        <% end %>
+      </div>
+
+    """
   end
 
-  defp possible_bird_buttons(birds) do
-    birds
-    |> Enum.sort_by(& &1.common_name)
-    |> Enum.map(&possible_bird_button/1)
-    |> ButtonGroup.render()
+  defp audio_src(recording, asset_cdn) do
+    recording
+    |> rendering_module()
+    |> apply(:audio_src, [recording, asset_cdn])
+  end
+
+  defp filters(assigns) do
+    ~H"""
+      <div class="collapse collapse-arrow" tabindex="0">
+        <div class="collapse-title">
+          Filters
+        </div>
+        <div class="collapse-content">
+          <.live_component module={Filters} id="question-filters" {assigns} />
+        </div>
+      </div>
+    """
+  end
+
+  defp play_audio(%{current: %Current{}, asset_cdn: _} = assigns) do
+    ~H"""
+      <audio autoplay={true} src={audio_src(@current.recording, @asset_cdn)} />
+    """
+  end
+
+  defp possible_bird_buttons(%{birds: birds}) do
+    assigns = %{
+      buttons: Enum.map(birds, &possible_bird_button/1)
+    }
+
+    ~H"""
+      <.live_component
+        module={ButtonGroup}
+        id="possible-birds"
+        buttons={@buttons}
+      />
+    """
   end
 
   defp possible_bird_button(%Bird{common_name: name, species_code: code}) do
-    %GroupButton{text: name, value: code, phx_click: ""}
+    %GroupButton{text: name, value: code, phx_click: "", phx_value: [bird: name]}
   end
 
   defp rendering_module(%MacaulayLibrary.Recording{}), do: QuizLive.HTML.Recordings.Ebird
   defp rendering_module(%Flickr.Photo{}), do: QuizLive.HTML.Images.Flickr
 
   defp show_answer(%{
-         show_answer?: true,
+         visibility: %Visibility{answer: :shown},
          current: %{
            bird: %Bird{common_name: name},
            recording: recording,
            image: _
          }
-       }),
-       do:
-         HTML.Tag.content_tag(
-           :div,
-           [
-             name,
-             rendering_module(recording).also_audible(recording)
-           ],
-           class: "text-center"
-         )
+       }) do
+    assigns = %{
+      name: name,
+      recording: recording
+    }
 
-  defp show_answer(%{
-         show_answer?: true,
-         current: %{bird: %Bird{common_name: name}}
-       }),
-       do: HTML.Tag.content_tag(:div, name, class: "mx-auto text-center")
-
-  defp show_answer(assigns),
-    do: ~H"""
-    <button phx-click="show_answer" class="btn btn-outline mx-auto block">Show Answer</button>
+    ~H"""
+    <div class="text-center">
+      <%= @name %>
+      <.live_component module={rendering_module(@recording)} id="also-audible" recording={@recording} />
+    </div>
     """
+  end
+
+  # defp show_answer(%{
+  #        visibility: %Visibility{answer: :shown},
+  #        current: %{bird: %Bird{common_name: name}}
+  #      }),
+  #      do: HTML.Tag.content_tag(:div, name, class: "mx-auto text-center")
+
+  defp show_answer(%{visibility: %Visibility{answer: :hidden}}),
+    do: toggle_button(%{element: "answer", text: "Answer"})
+
+  defp toggle_button(%{element: _, text: _} = assigns) do
+    ~H"""
+    <button
+      class="btn btn-outline mx-auto block"
+      phx-click="toggle_visibility"
+      phx-value-element={@element}
+    >
+      Show <%= @text %>
+    </button>
+    """
+  end
 
   defp show_image(assigns) do
     ~H"""
     <div class="flex-none">
       <%= image(assigns) %>
-      <%= image_button(assigns) %>
     </div>
     """
   end
 
-  defp show_possible_birds(%{quiz: %Quiz{birds: [%Bird{} | _] = birds}}) do
-    HTML.Tag.content_tag(:div, [
-      HTML.Tag.content_tag(:h3, "Possible Birds:"),
-      possible_bird_buttons(birds)
-    ])
-  end
-
-  defp show_possible_birds(%{}) do
-    {:safe, ""}
+  defp show_possible_birds(%{quiz: %Quiz{}} = assigns) do
+    ~H"""
+      <div>
+        <h3>Possible Birds:</h3>
+        <.possible_bird_buttons birds={@quiz.birds} />
+      </div>
+    """
   end
 
   defp show_recording_details(%{
-         show_recording_details?: true,
+         visibility: %Visibility{recording: :shown},
          current: %{recording: %{} = recording},
          asset_cdn: "" <> asset_cdn
        }) do
-    rendering_module = rendering_module(recording)
+    assigns = %{
+      asset_cdn: asset_cdn,
+      recording: recording
+    }
 
-    HTML.Tag.content_tag(:div, [
-      rendering_module.attribution(recording),
-      rendering_module.recording_type(recording),
-      rendering_module.sonogram(recording, asset_cdn)
-    ])
+    ~H"""
+      <.live_component
+        module={rendering_module(@recording)}
+        id="recording_details"
+        {assigns}
+      />
+    """
   end
 
-  defp show_recording_details(assigns) do
-    ~H"""
-    <button phx-click="show_recording_details" class="btn btn-outline">Show Recording Details</button>
-    """
+  defp show_recording_details(%{visibility: %Visibility{recording: :hidden}}) do
+    toggle_button(%{element: "recording", text: "Recording Details"})
   end
 end

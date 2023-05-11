@@ -18,14 +18,6 @@ defmodule BirdSongWeb.QuizLive.New do
 
   @asset_cdn "https://cdn.download.ams.birds.cornell.edu"
 
-  @text_input_class ~w(
-    input
-    input-bordered
-    w-full
-    disabled:text-black/40
-    disabled:italic
-  )
-
   on_mount {Assign, :assign_services}
 
   def mount(_params, session, socket) do
@@ -52,7 +44,6 @@ defmodule BirdSongWeb.QuizLive.New do
   def assign_defaults(%Socket{} = socket, %{} = session) do
     socket
     |> Assign.assign_session_id(session)
-    |> assign(:text_input_class, @text_input_class)
     |> assign(:task_timeout, 5_000)
     |> assign(:max_api_tries, 3)
     |> QuizLive.reset_state()

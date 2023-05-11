@@ -1,46 +1,44 @@
 defmodule BirdSongWeb.QuizLive.EventHandlers do
   use BirdSongWeb.QuizLive.Assign
-  alias Phoenix.LiveView
+
+  alias Phoenix.{
+    LiveView,
+    LiveView.Socket
+  }
+
   alias Ecto.Changeset
-  alias BirdSong.Quiz
+
+  alias BirdSong.{
+    Bird,
+    Quiz
+  }
 
   alias BirdSongWeb.{
     QuizLive,
     QuizLive.Current,
-    QuizLive.EtsTables
+    QuizLive.EtsTables,
+    QuizLive.Visibility
   }
 
-  # defdelegated from QuizLive
   @spec handle_event(String.t(), Map.t(), Socket.t()) ::
           {:noreply, Socket.t()} | {:reply, map(), Socket.t()}
-  def handle_event("set_region", %{}, %Socket{} = socket) do
-    {:noreply, set_region_and_get_codes(socket)}
+  def handle_event("set_region", %{} = params, %Socket{} = socket) do
+    {:noreply,
+     socket
+     |> set_region(params)
+     |> get_region_codes()}
   end
 
-  def handle_event("set_species_category", params, socket) do
+  def handle_event("include?", %{"category" => _} = params, socket) do
     {:noreply, update_species_categories(socket, params)}
   end
 
   def handle_event(
         "start",
-        %{"quiz" => changes},
+        %{},
         %Socket{} = socket
       ) do
-    {:noreply, maybe_start_quiz(socket, changes)}
-  end
-
-  def handle_event("start", %{}, %Socket{assigns: %{birds: [], quiz: %Quiz{}}} = socket) do
-    Process.send(self(), :get_region_species_codes, [])
-
-    {:noreply, socket}
-  end
-
-  def handle_event("validate", %{"quiz" => changes}, %Socket{} = socket) do
-    {:noreply, assign(socket, :filters, update_filters(socket, changes))}
-  end
-
-  def handle_event("validate", %{}, %Socket{} = socket) do
-    {:noreply, socket}
+    {:noreply, start_quiz(socket)}
   end
 
   def handle_event("next", _, %Socket{} = socket) do
@@ -50,133 +48,114 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
      |> QuizLive.assign_next_bird()}
   end
 
-  def handle_event(
-        "change_recording",
-        _,
-        %Socket{} = socket
-      ) do
-    {:noreply, Current.update_recording(socket)}
+  def handle_event("change", %{"element" => element}, %Socket{} = socket) do
+    {
+      :noreply,
+      Current.update_resource(socket, String.to_existing_atom(element))
+    }
   end
 
-  def handle_event("show_answer", _, %Socket{} = socket) do
+  def handle_event("toggle_visibility", %{"element" => "answer"}, %Socket{} = socket) do
     {:noreply,
      socket
-     |> assign(:show_image?, true)
-     |> assign(:show_answer?, true)}
+     |> Visibility.toggle(:image)
+     |> Visibility.toggle(:answer)}
   end
 
-  def handle_event("show_recording_details", _, %Socket{} = socket) do
-    {:noreply, assign(socket, :show_recording_details?, true)}
+  def handle_event("toggle_visibility", %{"element" => element}, %Socket{} = socket) do
+    {:noreply, Visibility.toggle(socket, String.to_existing_atom(element))}
   end
 
-  def handle_event("show_image", _, %Socket{} = socket) do
-    {:noreply, assign(socket, :show_image?, true)}
+  def handle_event("toggle_visibility", %{"category" => category}, %Socket{} = socket) do
+    {:noreply, Visibility.toggle(socket, [:category_filters, category])}
   end
-
-  def handle_event("change_image", _, %Socket{} = socket) do
-    {:noreply, Current.update_image(socket)}
-  end
-
-  defp filter_birds(assigns, selected_categories) do
-    assigns
-    |> Map.fetch!(:birds_by_category)
-    |> Enum.reduce([], &do_filter_birds(&1, &2, selected_categories))
-    |> List.flatten()
-    |> Enum.sort_by(& &1.common_name, :asc)
-  end
-
-  defp do_filter_birds({category_name, birds}, acc, selected_categories) do
-    case MapSet.member?(selected_categories, category_name) do
-      true -> [birds | acc]
-      false -> acc
-    end
-  end
-
-  defp get_quiz(%Socket{assigns: %{quiz: %Quiz{} = quiz}}), do: quiz
-  defp get_quiz(%Socket{assigns: %{filters: %Changeset{data: %Quiz{} = quiz}}}), do: quiz
 
   defp set_quiz_birds(%Socket{assigns: assigns} = socket, %Quiz{} = quiz) do
     selected_birds =
       assigns
-      |> Map.fetch!(:species_categories)
-      |> Enum.filter(fn {_name, selected?} -> selected? end)
-      |> Enum.map(fn {name, true} -> name end)
+      |> Map.fetch!(:birds_by_category)
+      |> Enum.map(fn {_category, birds} -> birds end)
+      |> List.flatten()
+      |> Enum.filter(& &1[:selected?])
+      |> Enum.map(& &1[:bird])
       |> case do
         [] -> Map.fetch!(assigns, :birds)
-        [_ | _] = selected -> filter_birds(assigns, MapSet.new(selected))
+        [_ | _] = selected -> selected
       end
       |> Enum.sort_by(& &1.common_name, :asc)
 
     assign(socket, :quiz, %{quiz | birds: selected_birds})
   end
 
-  defp set_region_and_get_codes(%Socket{} = socket) do
+  defp set_region(%Socket{} = socket, %{"quiz" => %{"region" => region}}) do
+    assign(
+      socket,
+      :filters,
+      socket.assigns[:filters]
+      |> case do
+        %Quiz{} = quiz -> quiz
+        %Changeset{data: data} -> data
+      end
+      |> Quiz.changeset(%{region: region})
+      |> Quiz.apply_valid_changes()
+      # |> IO.inspect(label: :filters_after_changes)
+    )
+  end
+
+  defp get_region_codes(%Socket{} = socket) do
     case socket.assigns[:filters] do
-      %Changeset{
-        valid?: true,
-        data: %Quiz{
-          region: "" <> _
-        }
-      } ->
+      %Quiz{} ->
         QuizLive.Services.assign_region_species_codes(socket)
 
       %Changeset{
         changes: %{region: region},
-        valid?: false,
         errors: [{:region, {"unknown" <> _, []}} | _]
       } ->
         LiveView.put_flash(socket, "error", region <> " is not a known birding region")
 
       %Changeset{
-        errors: [{:region, {"Can't be blank", _}} | []]
+        errors: [{:region, {"can't be blank", _}} | []]
       } ->
         LiveView.put_flash(socket, "error", "Please enter a region")
 
-      _ ->
-        socket
+        # _ ->
+        #   socket
     end
   end
 
-  @spec maybe_start_quiz(Socket.t(), Map.t()) :: Socket.t()
-  defp maybe_start_quiz(%Socket{} = socket, changes) do
+  @spec start_quiz(Socket.t()) :: Socket.t()
+  defp start_quiz(%Socket{} = socket) do
     socket
-    |> validate_quiz(changes)
-    |> case do
-      %Quiz{} = quiz ->
-        socket
-        |> set_quiz_birds(quiz)
-        |> EtsTables.Assigns.remember_session()
-        |> LiveView.push_redirect(to: "/quiz")
-
-      %Changeset{} = changeset ->
-        assign(socket, :filters, changeset)
-    end
+    |> set_quiz_birds(socket.assigns[:filters])
+    |> EtsTables.Assigns.remember_session()
+    |> LiveView.push_redirect(to: "/quiz")
   end
 
-  defp update_filters(%Socket{} = socket, changes) do
-    socket
-    |> validate_quiz(changes)
-    |> case do
-      # turn back into a changeset so that it works with Phoenix.HTML.FormData
-      %Quiz{} = quiz -> Quiz.changeset(quiz, %{})
-      %Changeset{} = changeset -> changeset
-    end
+  defp update_category_birds(birds, %{"bird" => name, "category" => _}) do
+    Enum.map(birds, fn
+      %{bird: %Bird{common_name: ^name}, selected?: _} = bird ->
+        %{bird | selected?: not bird[:selected?]}
+
+      %{bird: %Bird{}, selected?: _} = bird ->
+        bird
+    end)
   end
 
-  defp update_species_categories(%Socket{assigns: assigns} = socket, %{"value" => category}) do
+  defp update_category_birds(birds, %{"category" => _}) do
+    selected? = Enum.all?(birds, & &1[:selected?])
+    Enum.map(birds, &%{&1 | selected?: not selected?})
+  end
+
+  defp update_species_categories(
+         %Socket{assigns: assigns} = socket,
+         %{"category" => category} = params
+       ) do
     LiveView.assign(
       socket,
-      :species_categories,
+      :birds_by_category,
       assigns
-      |> Map.fetch!(:species_categories)
-      |> Map.update!(category, &(not &1))
+      |> Map.fetch!(:birds_by_category)
+      |> Map.update!(category, &update_category_birds(&1, params))
     )
-  end
-
-  defp validate_quiz(socket, changes) do
-    socket
-    |> get_quiz()
-    |> Quiz.changeset(changes)
-    |> Quiz.apply_valid_changes()
   end
 end

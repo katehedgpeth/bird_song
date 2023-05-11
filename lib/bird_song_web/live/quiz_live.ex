@@ -3,6 +3,7 @@ defmodule BirdSongWeb.QuizLive do
 
   use Phoenix.LiveView
 
+  alias BirdSongWeb.QuizLive.Visibility
   alias Phoenix.{LiveView, LiveView.Socket}
 
   alias __MODULE__.{
@@ -67,8 +68,6 @@ defmodule BirdSongWeb.QuizLive do
   def reset_state(%Socket{} = socket) do
     socket
     |> Current.reset()
-    |> assign(:show_answer?, false)
-    |> assign(:show_recording_details?, false)
-    |> assign(:show_image?, false)
+    |> assign(:visibility, %Visibility{})
   end
 end

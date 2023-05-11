@@ -2,7 +2,6 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
   use BirdSong.SupervisedCase, async: true
   use BirdSongWeb.LiveCase
   import BirdSong.TestSetup, only: [seed_from_mock_taxonomy: 1]
-  alias BirdSong.Services.Ebird.RegionSpeciesCodes
   alias Ecto.Changeset
   alias Phoenix.LiveView.Socket
 
@@ -31,11 +30,8 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
                   :render_listeners,
                   :services,
                   :session_id,
-                  :show_answer?,
-                  :show_image?,
-                  :show_recording_details?,
                   :task_timeout,
-                  :text_input_class
+                  :visibility
                 ])
 
   setup [:seed_from_mock_taxonomy]
@@ -43,13 +39,9 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
   describe "set_region" do
     @describetag listen_to: [{Ebird, :RegionSpeciesCodes}]
     setup tags do
-      assert %{conn: conn, test: test, region: region} = Map.take(tags, [:conn, :test, :region])
+      assert %{conn: conn, test: test} = Map.take(tags, [:conn, :test])
 
       assert {:ok, view, _html} = live(conn, "/quiz/new?service_instance_name=#{test}")
-
-      view
-      |> form("#filters", %{quiz: %{"region" => region}})
-      |> render_change()
 
       {:ok,
        Ebird
@@ -73,13 +65,13 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
 
       assert socket.assigns[:birds] === []
       assert socket.assigns[:current] === %Current{}
-      assert %Changeset{valid?: true, data: %Quiz{region: ^code}} = socket.assigns[:filters]
+      assert %Changeset{valid?: true, data: %Quiz{region: nil}} = socket.assigns[:filters]
       assert socket.assigns[:flash] === %{}
 
       assert {:noreply, %Socket{assigns: assigns}} =
                EventHandlers.handle_event(
                  "set_region",
-                 %{"value" => code},
+                 %{"quiz" => %{"region" => code}},
                  socket
                )
 
@@ -98,16 +90,17 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
 
       assert %RequestThrottler.Response{response: {:ok, ["" <> _ | _]}} = response
 
-      assert get_new_assigns(assigns) === [:birds_by_category, :species_categories]
+      assert get_new_assigns(assigns) === [:birds_by_category]
 
       assert assigns[:flash] === %{}
 
-      assert %Changeset{valid?: true, data: %Quiz{region: ^code}} = assigns[:filters]
+      assert %Quiz{region: ^code} = assigns[:filters]
       assert [%Bird{} | _] = assigns[:birds]
-      assert %{} = assigns[:species_categories]
-      assert ["Mockingbirds and Thrashers" | _] = Map.keys(assigns[:species_categories])
       assert %{} = assigns[:birds_by_category]
-      assert [%Bird{} | _] = assigns[:birds_by_category]["Mockingbirds and Thrashers"]
+      assert ["Mockingbirds and Thrashers" | _] = Map.keys(assigns[:birds_by_category])
+
+      assert [%{bird: %Bird{}, selected?: false} | _] =
+               assigns[:birds_by_category]["Mockingbirds and Thrashers"]
     end
 
     @tag region: "US-000"
@@ -117,19 +110,20 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
                region: code
              } = Map.take(tags, [:socket, :region])
 
-      assert %Changeset{errors: [region: error]} = socket.assigns[:filters]
-      assert error === {"unknown: #{code}", []}
+      assert %Changeset{errors: []} = socket.assigns[:filters]
 
       assert {:noreply, %Socket{assigns: assigns}} =
                EventHandlers.handle_event(
                  "set_region",
-                 %{},
+                 %{"quiz" => %{"region" => code}},
                  socket
                )
 
       assert get_new_assigns(assigns) === []
 
-      assert %Changeset{errors: [region: ^error]} = assigns[:filters]
+      assert %Changeset{errors: [region: error]} = assigns[:filters]
+
+      assert error === {"unknown: #{code}", []}
 
       assert assigns[:flash] === %{"error" => "US-000 is not a known birding region"}
 
@@ -139,35 +133,6 @@ defmodule BirdSongWeb.QuizLive.EventHandlersTest do
                         region: ^code
                       }},
                      300
-    end
-
-    @tag region: "US-NC-067"
-    test "does not assign region codes if API returns a bad response", tags do
-      assert %{
-               bypass: bypass,
-               socket: socket
-             } = Map.take(tags, [:bypass, :socket, :region])
-
-      Bypass.expect(bypass, &Plug.Conn.resp(&1, 404, Jason.encode!(%{error: :not_found})))
-
-      assert {:noreply, %Socket{assigns: assigns}} =
-               EventHandlers.handle_event(
-                 "set_region",
-                 %{},
-                 socket
-               )
-
-      assert_receive {:start_request, %{module: RegionSpeciesCodes, region: "US-NC-067"}}
-      assert_receive {:end_request, %{response: response}}
-      assert %RequestThrottler.Response{response: {:error, {:not_found, _}}} = response
-      assert get_new_assigns(assigns) === []
-      assert %Changeset{errors: []} = assigns[:filters]
-
-      assert assigns[:flash] === %{
-               "error" =>
-                 "We're sorry, but our service is not available at the moment. " <>
-                   "Please try again later."
-             }
     end
   end
 

@@ -4,11 +4,14 @@ defmodule BirdSongWeb.QuizLive.HTML.Recording do
   @type recording() ::
           Ebird.Recording.t() | XenoCanto.Recording.t()
 
-  @type img_tag() :: Phoenix.HTML.safe()
-  @type span_tag() :: Phoenix.HTML.safe()
+  @type also_audible() :: String.t()
+  @type recording_details() :: String.t()
 
-  @callback sonogram(recording(), String.t()) :: img_tag()
+  @type assigns() :: %{
+          id: also_audible() | recording_details(),
+          recording: recording()
+        }
+
+  @callback render(assigns()) :: Phoenix.LiveView.Rendered.t()
   @callback audio_src(recording(), String.t()) :: String.t()
-  @callback also_audible(recording()) :: span_tag()
-  @callback attribution(recording()) :: Phoenix.HTML.safe()
 end

@@ -9,8 +9,7 @@ defmodule BirdSongWeb.QuizLive.Current do
     Quiz,
     Services.Flickr,
     Services.Flickr.Photo,
-    Services.MacaulayLibrary.Recording,
-    Services.Worker
+    Services.MacaulayLibrary.Recording
   }
 
   alias BirdSongWeb.QuizLive
@@ -50,30 +49,14 @@ defmodule BirdSongWeb.QuizLive.Current do
     end
   end
 
-  def update_recording(%Socket{} = socket) do
-    update_recording(socket, get_current(socket, :bird))
-  end
-
-  def update_recording(%Socket{} = socket, %Bird{} = bird) do
-    update_resource(socket, bird, :recording)
-  end
-
-  def update_image(%Socket{} = socket) do
-    update_image(socket, get_current(socket, :bird))
-  end
-
-  def update_image(%Socket{} = socket, %Bird{} = bird) do
-    update_resource(socket, bird, :image)
-  end
-
   defguard is_resource_key(key) when key in [:recording, :image]
 
-  defp update_resource(%Socket{} = socket, resource_key) when is_resource_key(resource_key) do
+  def update_resource(%Socket{} = socket, resource_key) when is_resource_key(resource_key) do
     update_resource(socket, get_current(socket, :bird), resource_key)
   end
 
-  defp update_resource(%Socket{} = socket, %Bird{} = bird, resource_key)
-       when is_resource_key(resource_key) do
+  def update_resource(%Socket{} = socket, %Bird{} = bird, resource_key)
+      when is_resource_key(resource_key) do
     plural = :"#{resource_key}s"
 
     worker = get_worker(socket, plural)

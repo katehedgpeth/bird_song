@@ -1,36 +1,43 @@
 defmodule BirdSongWeb.QuizLive.HTML.Recordings.Ebird do
+  use Phoenix.LiveComponent
   alias Phoenix.HTML
   alias BirdSong.Services.MacaulayLibrary.Recording
 
-  @behaviour BirdSongWeb.QuizLive.HTML.Recording
+  # @behaviour BirdSongWeb.QuizLive.HTML.Recording
 
   @asset_types %{
     audio: "audio",
     spectrogram: "spectrogram_small"
   }
 
-  def audio_src(%Recording{asset_id: asset_id}, "" <> asset_cdn),
-    do: asset_src(asset_id, :audio, asset_cdn)
-
-  def attribution(%Recording{} = recording) do
-    HTML.Tag.content_tag(:div, [
-      contributor_name(recording),
-      recording_date(recording),
-      recording_location(recording),
-      link_to_recording(recording)
-    ])
+  def audio_src(%Recording{asset_id: asset_id}, asset_cdn) do
+    asset_src(asset_id, :audio, asset_cdn)
   end
 
-  def sonogram(%Recording{asset_id: _asset_id}, "" <> _asset_cdn),
-    do: {:safe, ""}
-
-  def recording_type(%Recording{}), do: ""
-
-  def also_audible(_recording) do
-    {:safe, ""}
+  def render(%{id: "also_audible"} = assigns) do
+    ~H"""
+    <span></span>
+    """
   end
 
-  defp asset_src(asset_id, type, "" <> asset_cdn) do
+  def render(%{recording: %Recording{}, id: "recording_details"} = assigns) do
+    ~H"""
+    <div>
+      <.contributor_name {@recording} />
+      <.recording_date {@recording} />
+      <.recording_location {@recording} />
+      <.link_to_recording {@recording} />
+    </div>
+    """
+  end
+
+  def render(assigns) do
+    ~H"""
+    <span></span>
+    """
+  end
+
+  def asset_src(asset_id, type, "" <> asset_cdn) do
     Path.join([
       asset_cdn,
       "api",

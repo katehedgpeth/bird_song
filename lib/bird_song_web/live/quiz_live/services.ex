@@ -1,6 +1,7 @@
 defmodule BirdSongWeb.QuizLive.Services do
   require BirdSong.Services
 
+  alias BirdSongWeb.QuizLive.Visibility
   alias BirdSong.Services.Worker
   alias Phoenix.LiveView.Socket
 
@@ -33,10 +34,15 @@ defmodule BirdSongWeb.QuizLive.Services do
     end
   end
 
-  defp build_species_category_dict(birds_by_category) do
-    birds_by_category
-    |> Enum.map(fn {category, _} -> {category, false} end)
+  defp build_category_dict(birds) do
+    birds
+    |> Enum.group_by(&Bird.family_name/1)
+    |> Enum.map(&do_build_category_dict/1)
     |> Enum.into(%{})
+  end
+
+  defp do_build_category_dict({category, birds}) do
+    {category, Enum.map(birds, &%{bird: &1, selected?: false})}
   end
 
   defp do_assign_region_species_codes(
@@ -54,19 +60,6 @@ defmodule BirdSongWeb.QuizLive.Services do
     get_birds_from_codes(socket, codes)
   end
 
-  defp do_assign_region_species_codes(
-         {:error, {:bad_response, %HTTPoison.Response{status_code: 400}}},
-         socket
-       ) do
-    Phoenix.LiveView.put_flash(
-      socket,
-      :error,
-      "That is not a valid region code"
-
-      # "We're sorry, but our service is not available at the moment. Please try again later."
-    )
-  end
-
   defp do_assign_region_species_codes({:error, _}, socket) do
     Phoenix.LiveView.put_flash(
       socket,
@@ -75,7 +68,7 @@ defmodule BirdSongWeb.QuizLive.Services do
     )
   end
 
-  defp do_get_region_species_codes({:error, :not_set}, socket) do
+  defp do_assign_region_species_codes({:error, :not_set}, socket) do
     socket
   end
 
@@ -84,12 +77,10 @@ defmodule BirdSongWeb.QuizLive.Services do
     |> Bird.get_many_by_species_code()
     |> case do
       [%Bird{} | _] = birds ->
-        by_category = Enum.group_by(birds, &Bird.family_name/1)
-
         socket
         |> Phoenix.LiveView.assign(:birds, Enum.shuffle(birds))
-        |> Phoenix.LiveView.assign(:species_categories, build_species_category_dict(by_category))
-        |> Phoenix.LiveView.assign(:birds_by_category, by_category)
+        |> Phoenix.LiveView.assign(:birds_by_category, build_category_dict(birds))
+        |> Visibility.reset_category_filters()
 
       [] ->
         socket

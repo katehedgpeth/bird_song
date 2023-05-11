@@ -2,7 +2,6 @@ defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
   alias BirdSong.Services.Ebird.Region
-  alias Ecto.InvalidChangesetError
   alias Ecto.Changeset
 
   @type t() :: %__MODULE__{
@@ -24,35 +23,33 @@ defmodule BirdSong.Quiz do
     # timestamps()
   end
 
-  def apply_valid_changes(%Changeset{
-        valid?: true,
-        changes: %{} = changes,
-        data: %__MODULE__{} = data
-      }) do
-    Map.merge(data, changes)
+  @spec apply_valid_changes(Changeset.t()) :: Changeset.t() | t()
+  def apply_valid_changes(%Changeset{} = changeset) do
+    {_, result} = apply_action(changeset, :update)
+    result
   end
 
-  def apply_valid_changes(%Changeset{valid?: false} = changeset) do
-    changeset
-  end
-
+  @spec apply_valid_changes!(Changeset.t()) :: t() | no_return()
   def apply_valid_changes!(%Changeset{} = changeset) do
-    case apply_valid_changes(changeset) do
-      %__MODULE__{} = quiz -> quiz
-      %Changeset{valid?: false} -> raise InvalidChangesetError.exception(changeset: changeset)
-    end
+    apply_action!(changeset, :update)
   end
 
   @doc false
   def changeset(%__MODULE__{} = quiz, %{} = changes) do
     quiz
-    |> cast(changes, [:correct_answers, :incorrect_answers, :region, :quiz_length, :birds])
+    |> cast(changes, [
+      :birds,
+      :correct_answers,
+      :incorrect_answers,
+      :quiz_length,
+      :region
+    ])
     |> validate_required([:region, :quiz_length])
     |> validate_change(:region, &validate_region/2)
   end
 
   def default_changeset() do
-    changeset(%__MODULE__{}, %{})
+    change(%__MODULE__{})
   end
 
   def add_bird(%__MODULE__{} = quiz, "" <> bird_id) do
