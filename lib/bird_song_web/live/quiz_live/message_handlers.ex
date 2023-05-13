@@ -4,8 +4,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   alias Phoenix.LiveView
 
   alias BirdSong.{
-    Services,
-    Services.Ebird.Region
+    Services
   }
 
   def handle_info({:start, filters}, socket) do
@@ -22,7 +21,7 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   # -------- IGNORED MESSAGES ------------
   def handle_info(:change_region, socket), do: ignore_message(socket)
   def handle_info({:quiz_created, _}, socket), do: ignore_message(socket)
-  def handle_info({:region_selected, %Region{}}, socket), do: ignore_message(socket)
+  def handle_info({:region_selected, %BirdSong.Region{}}, socket), do: ignore_message(socket)
 
   ####################################
   ####################################

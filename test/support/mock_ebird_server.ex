@@ -15,8 +15,6 @@ defmodule BirdSong.MockEbirdServer do
   alias Plug.Conn
 
   alias BirdSong.{
-    Services,
-    Services.DataFile,
     Services.Ebird
   }
 
@@ -35,13 +33,13 @@ defmodule BirdSong.MockEbirdServer do
   # Ebird.Regions
   def response(
         %Plug.Conn{
-          path_info: ["v2", "ref", "region", "list", subnational, country]
+          path_info: ["v2", "ref", "region", "list", level, country]
         } = conn
       ) do
-    send_real_data(
-      {:regions, level: String.to_existing_atom(subnational), parent: country},
-      :Regions,
-      conn
+    Plug.Conn.resp(
+      conn,
+      200,
+      File.read!("test/mock_data/regions/ebird/#{country}-#{level}.json")
     )
   end
 
@@ -85,25 +83,9 @@ defmodule BirdSong.MockEbirdServer do
     |> File.read()
   end
 
-  @spec read_real_data(atom(), Ebird.request_data()) :: DataFile.read_response()
-  defp read_real_data(worker_atom, request) do
-    %Services{ebird: %Ebird{} = ebird} = Services.all()
-
-    worker = Map.fetch!(ebird, worker_atom)
-
-    DataFile.read(%DataFile.Data{
-      worker: worker,
-      request: request
-    })
-  end
-
   @spec respond({:ok, String.t()} | {:error, File.posix()}, Conn.t()) :: Conn.t()
   defp respond({:ok, body}, conn) do
     Conn.resp(conn, 200, body)
-  end
-
-  defp respond({:error, {:not_found, "" <> path}}, %Conn{} = conn) do
-    Conn.resp(conn, 404, Jason.encode!(%{error: :not_found, path: path}))
   end
 
   defp respond!({:ok, body}, conn), do: respond({:ok, body}, conn)
@@ -115,11 +97,5 @@ defmodule BirdSong.MockEbirdServer do
     file_without_extension
     |> read_mock_data()
     |> respond!(conn)
-  end
-
-  defp send_real_data(request, worker_atom, %Conn{} = conn) do
-    worker_atom
-    |> read_real_data(request)
-    |> respond(conn)
   end
 end

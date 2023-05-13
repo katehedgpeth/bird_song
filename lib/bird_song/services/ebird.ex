@@ -2,7 +2,6 @@ defmodule BirdSong.Services.Ebird do
   use BirdSong.Services.Supervisor,
     base_url: "https://api.ebird.org",
     caches: [:Observations, :RegionSpeciesCodes, :Regions, :RegionInfo],
-    other_children: [:RegionETS],
     use_data_folder?: true
 
   alias BirdSong.Services.Supervisor, as: Sup
@@ -30,7 +29,6 @@ defmodule BirdSong.Services.Ebird do
   @type child_name() ::
           :Observations
           | :RegionInfo
-          | :RegionETS
           | :RegionSpeciesCodes
           | :Regions
           | :RequestThrottler

@@ -2,7 +2,6 @@ defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
   import Ecto.Query, only: [from: 2, last: 2]
-  alias BirdSong.Services.Ebird.Region
 
   @type t() :: %__MODULE__{
           birds: [String.t()],
@@ -34,7 +33,6 @@ defmodule BirdSong.Quiz do
     ])
     |> cast_assoc(:birds, required: true)
     |> validate_required([:region_code, :quiz_length, :session_id])
-    |> validate_change(:region_code, &validate_region/2)
   end
 
   def create!(filters) do
@@ -59,14 +57,5 @@ defmodule BirdSong.Quiz do
       from q in __MODULE__,
         where: q.session_id == ^session_id
     )
-  end
-
-  defp validate_region(:region_code, "" <> region_code) do
-    region_code
-    |> Region.from_code()
-    |> case do
-      {:ok, %Region{}} -> []
-      {:error, %Region.NotFoundError{}} -> [region_code: "unknown: #{region_code}"]
-    end
   end
 end

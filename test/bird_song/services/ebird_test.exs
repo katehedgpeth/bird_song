@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.EbirdTest do
-  use BirdSong.SupervisedCase, async: true
+  use BirdSong.SupervisedCase, async: true, use_db?: true
 
   alias BirdSong.MockEbirdServer
 
@@ -22,10 +22,6 @@ defmodule BirdSong.Services.EbirdTest do
                  base_url:
                    {:error,
                     %ForbiddenExternalURLError{opts: [{:base_url, "https://api.ebird.org"} | _]}}
-               },
-               {
-                 Ebird.RegionETS,
-                 worker: %Worker{instance_name: Ebird.RegionETS}
                },
                {
                  Ebird.Observations,
@@ -63,7 +59,7 @@ defmodule BirdSong.Services.EbirdTest do
         ]
       end
 
-      assert [throttler, region_ets, observations, region_codes, regions, region_info] =
+      assert [throttler, observations, region_codes, regions, region_info] =
                Ebird.child_specs___test(
                  service_name: test,
                  base_url: base_url,
@@ -81,16 +77,6 @@ defmodule BirdSong.Services.EbirdTest do
                },
                base_url: URI.new!(base_url),
                throttle_ms: 5_000
-             }
-
-      assert region_ets === {
-               Ebird.RegionETS,
-               worker: %Worker{
-                 instance_name: Module.concat(test, :RegionETS),
-                 parent: parent,
-                 module: Ebird.RegionETS,
-                 atom: :RegionETS
-               }
              }
 
       assert observations === {Ebird.Observations, expected_cache_opts.(:Observations)}
@@ -163,7 +149,6 @@ defmodule BirdSong.Services.EbirdTest do
              Ebird.Regions,
              Ebird.RegionSpeciesCodes,
              Ebird.Observations,
-             Ebird.RegionETS,
              Ebird.RequestThrottler
            ]
 
@@ -179,15 +164,7 @@ defmodule BirdSong.Services.EbirdTest do
     assert {:error, %ForbiddenExternalURLError{}} =
              Ebird.RequestThrottler.base_url(real_throttler)
 
-    regions_ets = get_worker(Ebird, :RegionETS, tags)
-
-    assert {:ok, %Ebird.Region{} = region} =
-             Ebird.RegionETS.get(
-               "US-NC",
-               regions_ets
-             )
-
-    [observations, regions, _region_info, _region_species_codes] =
+    [observations | _] =
       for child <- [
             :Observations,
             :Regions,
@@ -210,13 +187,6 @@ defmodule BirdSong.Services.EbirdTest do
 
     assert {:error, %ForbiddenExternalURLError{}} =
              Ebird.Observations.get_recent_observations("US-NC-067", real_observations)
-
-    assert {:ok, [%Ebird.Region{} | _]} =
-             Ebird.Regions.get_subregions(
-               region,
-               regions,
-               :subnational2
-             )
 
     assert {:ok, %Ebird.Observations.Response{}} =
              Ebird.Observations.get_recent_observations(

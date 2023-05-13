@@ -38,7 +38,7 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
 
   @assign_key :by_species
 
-  def assign_for_region(%Socket{} = socket, %Ebird.Region{} = region) do
+  def assign_for_region(%Socket{} = socket, %BirdSong.Region{} = region) do
     case build_for_region(region, socket.assigns[:services]) do
       {:ok, %{} = dict} ->
         assign(socket, @assign_key, dict)
@@ -48,9 +48,9 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
     end
   end
 
-  @spec build_for_region(Ebird.Region.t(), Services.t()) ::
+  @spec build_for_region(BirdSong.Region.t(), Services.t()) ::
           t() | {:error, :no_birds_for_region} | Helpers.api_error()
-  def build_for_region(%Ebird.Region{} = region, %Services{
+  def build_for_region(%BirdSong.Region{} = region, %Services{
         ebird: %Ebird{RegionSpeciesCodes: worker}
       }) do
     case Ebird.RegionSpeciesCodes.get_codes(region, worker) do

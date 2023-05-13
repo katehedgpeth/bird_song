@@ -17,7 +17,7 @@ defmodule BirdSong.Data.RegionCountsTest do
   describe "&get_region_counts/3 for all regions" do
     test "returns the total number of known countries and subregions", %{service: service} do
       raw_countries =
-        "data/regions/ebird/all-countries.json"
+        "data/regions/ebird/world-country.json"
         |> File.read!()
         |> Jason.decode!()
 

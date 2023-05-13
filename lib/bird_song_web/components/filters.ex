@@ -2,7 +2,6 @@ defmodule BirdSongWeb.Components.Filters do
   use Phoenix.LiveView
 
   alias BirdSong.Quiz
-  alias BirdSong.Services.Ebird
   alias BirdSongWeb.QuizLive
 
   alias Phoenix.{
@@ -32,9 +31,13 @@ defmodule BirdSongWeb.Components.Filters do
     {:noreply, socket}
   end
 
+  def handle_event("reset", _, socket) do
+    {:noreply, assign_defaults(socket)}
+  end
+
   @impl LiveView
   def handle_info(
-        {:region_selected, %Ebird.Region{} = region},
+        {:region_selected, %BirdSong.Region{} = region},
         %Socket{} = socket
       ) do
     {:noreply, __MODULE__.BySpecies.assign_for_region(socket, region)}
@@ -145,9 +148,14 @@ defmodule BirdSongWeb.Components.Filters do
         id="filter-by-species"
         by_species={@by_species}
       />
-      <button type="submit" class= "btn btn-primary block w-full" phx-click="start">
-        Let's go!
-      </button>
+      <div class="flex">
+        <button type="submit" class= "btn btn-primary" phx-click="start">
+          Let's go!
+        </button>
+        <button type="button" class="btn btn-outline btn-primary" phx-click="reset">
+          Clear all filters
+        </button>
+      </div>
     """
   end
 

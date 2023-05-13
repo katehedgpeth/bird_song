@@ -29,6 +29,7 @@ defmodule BirdSong.DataCase do
 
   setup tags do
     BirdSong.DataCase.setup_sandbox(tags)
+    Mix.Tasks.BirdSong.SeedRegions.run(["--folder=test/mock_data"])
     :ok
   end
 

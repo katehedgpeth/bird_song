@@ -35,10 +35,10 @@ defmodule BirdSong.Services.Ebird.Regions do
   ##
   #########################################################
 
-  @spec get_all!(Worker.t()) :: {:ok, [Region.t()]}
+  @spec get_all!(Worker.t()) :: [Region.t()] | no_return()
   def get_all!(worker) do
     case get_all(worker) do
-      {:ok, [%Region{} | _] = regions} -> {:ok, regions}
+      {:ok, [%Region{} | _] = regions} -> regions
       {:error, %{__exception__: true} = error} -> raise error
     end
   end
@@ -134,7 +134,7 @@ defmodule BirdSong.Services.Ebird.Regions do
   end
 
   @impl ThrottledCache
-  def ets_key({:regions, level: :country, parent: "world"}), do: "all-countries"
+  def ets_key({:regions, level: :country, parent: "world"}), do: "world-country"
 
   def ets_key({:regions, level: level, parent: parent}) do
     Enum.join([parent, Atom.to_string(level)], "-")

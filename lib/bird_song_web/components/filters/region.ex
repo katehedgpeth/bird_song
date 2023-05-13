@@ -5,10 +5,6 @@ defmodule BirdSongWeb.Components.Filters.Region do
   alias Phoenix.LiveView.Socket
   alias Phoenix.HTML
 
-  alias BirdSong.{
-    Services.Ebird
-  }
-
   @id "filter-region"
 
   defstruct id: @id,
@@ -18,13 +14,13 @@ defmodule BirdSongWeb.Components.Filters.Region do
             typed: :none
 
   @type t() :: %__MODULE__{
-          regions: [Ebird.Region.t()],
+          regions: [BirdSong.Region.t()],
           typed: String.t() | :none,
-          selected: Ebird.Region.t() | :none
+          selected: BirdSong.Region.t() | :none
         }
 
   def default_assigns() do
-    struct!(__MODULE__, regions: Ebird.RegionETS.get_all())
+    struct!(__MODULE__, regions: BirdSong.Region.all())
   end
 
   def get_selected_code(%Socket{assigns: %{region: %__MODULE__{}}} = socket) do
@@ -36,7 +32,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
   @spec load_from_quiz(Quiz.t()) :: t()
   def load_from_quiz(%Quiz{region_code: "" <> region_code}) do
     %__MODULE__{
-      selected: Ebird.Region.from_code!(region_code)
+      selected: BirdSong.Region.from_code!(region_code)
     }
   end
 
@@ -92,13 +88,13 @@ defmodule BirdSongWeb.Components.Filters.Region do
       | options:
           Enum.filter(
             state.regions,
-            &(String.downcase(&1.name) =~ downcased)
+            &(String.downcase(&1.short_name) =~ downcased)
           )
     }
   end
 
   defp set_selected(%__MODULE__{} = state, "" <> region_code, %Socket{} = socket) do
-    region = Ebird.Region.from_code!(region_code)
+    region = BirdSong.Region.from_code!(region_code)
 
     BirdSong.PubSub.broadcast(socket, {:region_selected, region})
 
@@ -132,7 +128,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
     |> render()
   end
 
-  defp do_render(%__MODULE__{selected: %Ebird.Region{} = region}) do
+  defp do_render(%__MODULE__{selected: %BirdSong.Region{} = region}) do
     selected_region_with_change_button(region)
   end
 
@@ -140,10 +136,10 @@ defmodule BirdSongWeb.Components.Filters.Region do
     region_form(assigns)
   end
 
-  defp selected_region_with_change_button(%Ebird.Region{} = assigns) do
+  defp selected_region_with_change_button(%BirdSong.Region{} = assigns) do
     ~H"""
     <div class="flex justify-between gap-3">
-      <div>Region: <%= @info.name %></div>
+      <div>Region: <%= @full_name %></div>
       <button
         type="button"
         phx-click={event_name("change")}
@@ -196,7 +192,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
     """
   end
 
-  defp input_with_dropdown(%{field: _, options: [%Ebird.Region{} | _]} = assigns) do
+  defp input_with_dropdown(%{field: _, options: [%BirdSong.Region{} | _]} = assigns) do
     ~H"""
       <div class="dropdown dropdown-open">
         <.region_input field={@field} />
@@ -223,14 +219,14 @@ defmodule BirdSongWeb.Components.Filters.Region do
         tabindex="0"
         aria-role="listbox"
       >
-        <%= for %Ebird.Region{code: code, info: info} <- @options do %>
+        <%= for region <- @options do %>
           <li
             phx-click={event_name("select")}
-            phx-value-region={code}
+            phx-value-region={region.code}
             tabindex="0"
             aria-role="option"
           >
-            <%= info.name %>
+            <%= region.full_name %>
           </li>
         <% end %>
       </ul>

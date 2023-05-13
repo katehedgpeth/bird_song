@@ -19,7 +19,6 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   }
 
   def render(%{quiz: %Quiz{}} = assigns) do
-    IO.inspect(assigns[:myself])
     assigns = Assign.assigns_to_struct(assigns)
 
     ~H"""

@@ -63,7 +63,7 @@ defmodule BirdSongWeb.Components.FiltersTest do
       type_region(view, "For")
       click_region_suggestion(view, "US-NC-067")
 
-      assert_receive {:region_selected, %Ebird.Region{code: "US-NC-067"}}
+      assert_receive {:region_selected, %BirdSong.Region{code: "US-NC-067"}}
       assert_receive {:end_request, %{module: Ebird.RegionSpeciesCodes}}, 1_000
       assert has_element?(view, "#filter-by-species")
     end

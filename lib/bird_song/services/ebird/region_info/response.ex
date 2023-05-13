@@ -26,7 +26,7 @@ defmodule BirdSong.Services.Ebird.RegionInfo.Response do
 
   defp parse_bounds(nil) do
     1..4
-    |> Enum.map(fn _ -> :unknown end)
+    |> Enum.map(fn _ -> nil end)
     |> do_parse_bounds()
   end
 
