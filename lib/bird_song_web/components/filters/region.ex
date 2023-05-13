@@ -165,9 +165,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
       <form id={@id} >
         <div>
           <.region_label field={@form[:region]} />
-          <div class="flex">
-            <.input_with_dropdown field={@form[:region]} options={@options} />
-          </div>
+          <.input_with_dropdown field={@form[:region]} options={@options} />
         </div>
       </form>
     """
@@ -217,6 +215,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
       <ul
         class={@class}
         tabindex="0"
+        style="position:static;"
         aria-role="listbox"
       >
         <%= for region <- @options do %>
