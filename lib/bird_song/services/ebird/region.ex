@@ -1,4 +1,6 @@
 defmodule BirdSong.Services.Ebird.Region do
+  alias BirdSong.Services.Ebird.RegionInfo
+
   alias BirdSong.{
     Services,
     Services.Ebird,
@@ -10,12 +12,13 @@ defmodule BirdSong.Services.Ebird.Region do
     NotFoundError
   }
 
-  defstruct [:code, :name, :level]
+  defstruct [:code, :level, name: :unknown, info: :unknown]
 
   @type level() :: :country | :subnational1 | :subnational2
 
   @type t() :: %__MODULE__{
           code: String.t(),
+          info: RegionInfo.t() | :unknown,
           name: String.t() | :unknown,
           level: level()
         }
@@ -98,16 +101,15 @@ defmodule BirdSong.Services.Ebird.Region do
 
   def parse(%{"code" => code, "name" => name}) do
     with {:ok, level} <- parse_level(code) do
-      %__MODULE__{
-        code: code,
-        level: level,
-        name: name
-      }
+      __struct__(code: code, name: name, level: level)
     end
   end
 
-  def parse!(%{"code" => code, "name" => name}) do
-    struct(__MODULE__, name: name, code: code, level: parse_level!(code))
+  def parse!(%{} = raw) do
+    case parse(raw) do
+      %__MODULE__{} = region -> region
+      {:error, error} -> raise error
+    end
   end
 
   def parse_country_code(%__MODULE__{code: code}) do

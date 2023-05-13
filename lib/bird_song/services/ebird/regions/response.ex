@@ -9,14 +9,11 @@ defmodule BirdSong.Services.Ebird.Regions.Response do
           regions: [Region.t()]
         }
 
-  def parse(raw, {:regions, level: level, parent: country}) when is_list(raw),
-    do: %__MODULE__{
+  def parse(raw, {:regions, level: level, parent: country}) when is_list(raw) do
+    %__MODULE__{
       level: level,
       country: country,
-      regions: Enum.map(raw, &parse_region(&1, level: level))
+      regions: Enum.map(raw, &Region.parse!/1)
     }
-
-  defp parse_region(%{"code" => code, "name" => name}, level: level) do
-    %Region{code: code, name: name, level: level}
   end
 end

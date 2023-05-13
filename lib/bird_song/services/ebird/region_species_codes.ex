@@ -6,12 +6,13 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
   alias BirdSong.{
     Services.Ebird,
     Services.Ebird.Region,
+    Services.Helpers,
     Services.ThrottledCache
   }
 
   @type request_data() :: {:region_species_codes, String.t()}
 
-  @spec get_codes(Region.t(), Worker.t()) :: Helpers.api_response()
+  @spec get_codes(Region.t(), Worker.t()) :: {:ok, __MODULE__.Response.t()} | Helpers.api_error()
   def get_codes(%Region{code: region_code}, worker) do
     get({:region_species_codes, region_code}, worker)
   end

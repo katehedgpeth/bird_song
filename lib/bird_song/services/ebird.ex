@@ -7,7 +7,7 @@ defmodule BirdSong.Services.Ebird do
 
   alias BirdSong.Services.Supervisor, as: Sup
 
-  alias BirdSong.Services.Service
+  alias BirdSong.Services.Worker
 
   alias __MODULE__.{
     Observations,
@@ -36,10 +36,10 @@ defmodule BirdSong.Services.Ebird do
           | :RequestThrottler
 
   @type t() :: %__MODULE__{
-          Observations: Service.t(),
-          RegionInfo: Service.t(),
-          RegionSpeciesCodes: Service.t(),
-          Regions: Service.t()
+          Observations: Worker.t(),
+          RegionInfo: Worker.t(),
+          RegionSpeciesCodes: Worker.t(),
+          Regions: Worker.t()
         }
 
   @type opt() :: {:service_name, Sup.test_instance()}

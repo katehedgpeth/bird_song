@@ -24,7 +24,7 @@ defmodule BirdSong.Services.Ebird.RegionInfo do
   @type request_data() :: {:region_info, Region.t()}
 
   @spec get_info(Region.t(), Worker.t()) :: Helpers.api_response(t())
-  def get_info(%Region{} = region, worker) do
+  def get_info(%Region{info: :unknown} = region, worker \\ Ebird.get_instance_child(:RegionInfo)) do
     with {:ok, %Response{data: %__MODULE__{} = info}} <- get({:region_info, region}, worker) do
       {:ok, info}
     end
