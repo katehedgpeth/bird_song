@@ -35,6 +35,7 @@ defmodule BirdSong.Bird do
     field :has_images?, :boolean, default: false
     belongs_to :family, Family
     belongs_to :order, Order
+    many_to_many :quizzes, BirdSong.Quiz, join_through: "birds_quizzes"
   end
 
   @type t() :: %__MODULE__{
@@ -67,6 +68,13 @@ defmodule BirdSong.Bird do
     BirdSong.Repo.all(
       from b in __MODULE__,
         where: b.sci_name in ^sci_names
+    )
+  end
+
+  def get_many_by_common_name(["" <> _ | _] = common_names) do
+    BirdSong.Repo.all(
+      from b in __MODULE__,
+        where: b.common_name in ^common_names
     )
   end
 
