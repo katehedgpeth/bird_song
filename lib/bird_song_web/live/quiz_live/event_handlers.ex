@@ -42,8 +42,4 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   def handle_event("toggle_visibility", %{"element" => element}, %Socket{} = socket) do
     {:noreply, Visibility.toggle(socket, String.to_existing_atom(element))}
   end
-
-  def handle_event("toggle_visibility", %{"category" => category}, %Socket{} = socket) do
-    {:noreply, Visibility.toggle(socket, [:category_filters, category])}
-  end
 end

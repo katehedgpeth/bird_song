@@ -138,12 +138,13 @@ defmodule BirdSongWeb.Components.Filters.Region do
 
   defp selected_region_with_change_button(%BirdSong.Region{} = assigns) do
     ~H"""
+    <h3>Region:</h3>
     <div class="flex justify-between gap-3">
-      <div>Region: <%= @full_name %></div>
+      <span class="text-xl font-bold"> <%= @full_name %> </span>
       <button
         type="button"
         phx-click={event_name("change")}
-        class="btn btn-secondary"
+        class="btn btn-secondary btn-xs"
       >
         Change
       </button>
@@ -173,28 +174,24 @@ defmodule BirdSongWeb.Components.Filters.Region do
 
   defp region_label(%{field: %HTML.FormField{}} = assigns) do
     ~H"""
-    <label for={@field.id}>
-      <span>
-        Region
-        <span class="italic">
-          (can be city, state, or country)
+      <label for={@field.id} class="block">
+        <span>
+          Region
+          <span class="italic">
+            (can be city, state, or country)
+          </span>
         </span>
-      </span>
-    </label>
+      </label>
     """
   end
 
-  defp input_with_dropdown(%{field: _, options: []} = assigns) do
+  defp input_with_dropdown(%{field: _, options: _} = assigns) do
     ~H"""
-      <.region_input field={@field} />
-    """
-  end
-
-  defp input_with_dropdown(%{field: _, options: [%BirdSong.Region{} | _]} = assigns) do
-    ~H"""
-      <div class="dropdown dropdown-open">
+      <div class="dropdown dropdown-open block">
         <.region_input field={@field} />
-        <.suggestions options={@options} />
+        <%= if length(@options) > 0 do %>
+          <.suggestions options={@options} />
+        <%= end %>
       </div>
     """
   end
@@ -245,6 +242,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
         class={~w(
           input
           input-bordered
+          block
           w-full
           disabled:text-black/40
           disabled:italic

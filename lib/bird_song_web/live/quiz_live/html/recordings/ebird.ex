@@ -1,6 +1,5 @@
 defmodule BirdSongWeb.QuizLive.HTML.Recordings.Ebird do
   use Phoenix.LiveComponent
-  alias Phoenix.HTML
   alias BirdSong.Services.MacaulayLibrary.Recording
 
   # @behaviour BirdSongWeb.QuizLive.HTML.Recording
@@ -21,6 +20,8 @@ defmodule BirdSongWeb.QuizLive.HTML.Recordings.Ebird do
   end
 
   def render(%{recording: %Recording{}, id: "recording_details"} = assigns) do
+    assigns = Map.update!(assigns, :recording, &Map.from_struct/1)
+
     ~H"""
     <div>
       <.contributor_name {@recording} />
@@ -48,53 +49,63 @@ defmodule BirdSongWeb.QuizLive.HTML.Recordings.Ebird do
     ])
   end
 
-  defp contributor_name(%Recording{user_display_name: user_display_name}) do
-    HTML.Tag.content_tag(:div, [
-      HTML.Tag.content_tag(:span, "Recording contributed by: ", class: "font-bold"),
-      user_display_name
-    ])
+  defp contributor_name(%{user_display_name: _} = assigns) do
+    ~H"""
+      <div>
+        <span class="font-bold">Contributed by:</span>
+        <%= @user_display_name %>
+      </div>
+
+    """
   end
 
-  defp country(%Recording{location: %{"countryName" => country_name}}), do: country_name
+  defp country(%{location: %{"countryName" => country_name}}), do: country_name
 
-  defp subnational1(%Recording{location: %{"subnational1Name" => subnational1}}),
+  defp subnational1(%{location: %{"subnational1Name" => subnational1}}),
     do: subnational1 <> ", "
 
-  defp subnational2(%Recording{location: %{"subnational2Name" => nil}}), do: ""
+  defp subnational2(%{location: %{"subnational2Name" => nil}}), do: ""
 
-  defp subnational2(%Recording{location: %{"subnational2Name" => "" <> subnational2}}),
+  defp subnational2(%{location: %{"subnational2Name" => "" <> subnational2}}),
     do: subnational2 <> ", "
 
-  defp link_to_recording(%Recording{asset_id: asset_id}) do
-    HTML.Tag.content_tag(:div, [
-      HTML.Link.link("View on Cornell's Macaulay Library website",
-        class: "link link-primary block text-xs",
-        to: Path.join("https://macaulaylibrary.org/asset", to_string(asset_id)),
-        target: "_blank"
-      )
-    ])
+  defp link_to_recording(%{asset_id: asset_id} = assigns) do
+    assigns =
+      Map.put(assigns, :href, Path.join("https://macaulaylibrary.org/asset", to_string(asset_id)))
+
+    ~H"""
+      <div>
+        <a href={@href} class="link link-primary block text-xs" target="_blank">
+          View on Cornell's Macaulay Library website
+        </a>
+      </div>
+    """
   end
 
-  defp recording_date(%Recording{obs_dt: obs_dt}) do
+  defp recording_date(%{obs_dt: obs_dt}) do
     {:ok, obs_dt} = NaiveDateTime.from_iso8601(obs_dt)
 
-    HTML.Tag.content_tag(:div, [
-      HTML.Tag.content_tag(:span, "Recorded on: ", class: "font-bold"),
-      obs_dt
-      |> NaiveDateTime.to_date()
-      |> Calendar.strftime("%B %d, %Y")
-    ])
+    assigns = %{
+      date:
+        obs_dt
+        |> NaiveDateTime.to_date()
+        |> Calendar.strftime("%B %d, %Y")
+    }
+
+    ~H"""
+      <div>
+        <span class="font-bold">Date: </span>
+        <%= @date %>
+      </div>
+    """
   end
 
-  defp recording_location(%Recording{} = recording) do
-    HTML.Tag.content_tag(
-      :div,
-      [
-        HTML.Tag.content_tag(:span, "Recording Location: ", class: "font-bold"),
-        subnational2(recording),
-        subnational1(recording),
-        country(recording)
-      ]
-    )
+  defp recording_location(%{} = assigns) do
+    ~H"""
+      <div>
+        <span class="font-bold">Location: </span>
+        <%= subnational2(assigns) %> <%= subnational1(assigns) %> <%= country(assigns) %>
+      </div>
+    """
   end
 end

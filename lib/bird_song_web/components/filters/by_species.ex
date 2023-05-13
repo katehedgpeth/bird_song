@@ -15,7 +15,8 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
 
   alias BirdSongWeb.{
     Components.ButtonGroup,
-    Components.GroupButton
+    Components.GroupButton,
+    QuizLive.Visibility
   }
 
   @type bird_state() :: %{
@@ -75,18 +76,32 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
     build_category_dict(birds)
   end
 
-  def render(%{} = assigns) do
-    ~H"""
-    <div id={@id}>
-      <h3>Limit to these birds (optional):</h3>
+  defp collapse_state(%Visibility{by_species: :hidden}), do: "collapse-close"
+  defp collapse_state(%Visibility{by_species: :shown}), do: "collapse-open"
 
-      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        <%= for {category_name, birds} <- Enum.sort_by(@by_species, &elem(&1, 0)) do %>
-          <.species_group
-            category_name={category_name}
-            birds={birds}
-          />
-        <% end %>
+  def render(%{} = assigns) do
+    IO.inspect(assigns.visibility, label: :by_species)
+    IO.inspect(assigns.visibility.by_species, label: :by_species)
+
+    ~H"""
+    <div id={@id} class={["collapse", "collapse-plus", collapse_state(@visibility)]} {[
+        phx: [
+          click: "toggle_visibility",
+          value: [element: "by_species"]
+        ]]}>
+      <div class="collapse-title">
+        <h3>Select specific species (optional):</h3>
+      </div>
+
+      <div class="collapse-content">
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <%= for {category_name, birds} <- Enum.sort_by(@by_species, &elem(&1, 0)) do %>
+            <.species_group
+              category_name={category_name}
+              birds={birds}
+            />
+          <% end %>
+        </div>
       </div>
     </div>
     """
@@ -189,13 +204,6 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
   end
 
   defp species_filter_title(%{birds: _, category_name: _} = assigns) do
-    assigns =
-      Map.put(
-        assigns,
-        :on_click,
-        on_click_attrs_for_category("toggle_visibility", assigns[:category_name])
-      )
-
     ~H"""
     <div>
       <div class="divider my-0.5"></div>

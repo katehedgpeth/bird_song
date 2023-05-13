@@ -9,18 +9,17 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   @type state() :: :shown | :hidden
   @type t() :: %__MODULE__{
           answer: state(),
+          by_species: state(),
+          filters: state(),
           image: state(),
-          recording: state(),
-          category_filters: %{
-            String.t() => state()
-          }
+          recording: state()
         }
 
   defstruct answer: :hidden,
+            by_species: :hidden,
             filters: :hidden,
             image: :hidden,
-            recording: :hidden,
-            category_filters: %{}
+            recording: :hidden
 
   #########################################################
   #########################################################
@@ -29,27 +28,22 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   ##
   #########################################################
 
-  @spec toggle(Socket.t(), atom() | list(atom())) :: Socket.t()
-  def toggle(%Socket{} = socket, key_or_keys) do
+  @spec toggle(Socket.t(), atom()) :: Socket.t()
+  def toggle(%Socket{} = socket, key) do
     LiveView.assign(
       socket,
       :visibility,
       socket.assigns
       |> Map.fetch!(:visibility)
-      |> update_in(key_or_keys, &opposite/1)
+      |> Map.update!(key, &opposite/1)
     )
   end
 
-  def visible?(
-        %__MODULE__{category_filters: filters},
-        :category_filters,
-        "" <> category_name
-      ) do
-    do_visible?(filters, category_name)
-  end
-
   def visible?(%__MODULE__{} = visibility, key) do
-    do_visible?(visibility, key)
+    case Map.fetch!(visibility, key) do
+      :shown -> true
+      :hidden -> false
+    end
   end
 
   #########################################################
@@ -58,13 +52,6 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   ##  PRIVATE METHODS
   ##
   #########################################################
-
-  defp do_visible?(%{} = state, key) do
-    case Map.fetch!(state, key) do
-      :shown -> true
-      :hidden -> false
-    end
-  end
 
   defp opposite(:hidden), do: :shown
   defp opposite(:shown), do: :hidden

@@ -6,7 +6,6 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
 
   alias BirdSongWeb.{
     Components.ButtonGroup,
-    Components.Filters,
     Components.GroupButton,
     QuizLive
   }
@@ -102,40 +101,9 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     |> apply(:audio_src, [recording, asset_cdn])
   end
 
-  defp filter_collapse_class(%Visibility{filters: state}) do
-    case state do
-      :shown -> "collapse-open"
-      :hidden -> "collapse-closed"
-    end
-  end
-
   defp filters(assigns) do
     ~H"""
-      <div
-        tabindex="0"
-        class={[
-          "collapse",
-          "collapse-arrow",
-          filter_collapse_class(assigns.visibility)
-        ]}
-        {[
-          phx: [
-            click: "toggle_visibility",
-            value: [ element: "filters" ]
-          ]
-        ]}
-      >
-        <div class="collapse-title">
-          Filters
-        </div>
-        <div class="collapse-content">
-          <%=
-            assigns
-            |> Map.take([:services, :socket])
-            |> Filters.render_filters()
-          %>
-        </div>
-      </div>
+    <span></span>
     """
   end
 
@@ -186,12 +154,6 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     </div>
     """
   end
-
-  # defp show_answer(%{
-  #        visibility: %Visibility{answer: :shown},
-  #        current: %{bird: %Bird{common_name: name}}
-  #      }),
-  #      do: HTML.Tag.content_tag(:div, name, class: "mx-auto text-center")
 
   defp show_answer(%{visibility: %Visibility{answer: :hidden}}),
     do: toggle_button(%{element: "answer", text: "Answer"})

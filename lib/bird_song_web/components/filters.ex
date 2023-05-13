@@ -2,7 +2,11 @@ defmodule BirdSongWeb.Components.Filters do
   use Phoenix.LiveView
 
   alias BirdSong.Quiz
-  alias BirdSongWeb.QuizLive
+
+  alias BirdSongWeb.{
+    QuizLive,
+    QuizLive.Visibility
+  }
 
   alias Phoenix.{
     LiveView,
@@ -29,6 +33,10 @@ defmodule BirdSongWeb.Components.Filters do
   def handle_event("start", %{}, socket) do
     BirdSong.PubSub.broadcast(socket, {:start, capture_state(socket)})
     {:noreply, socket}
+  end
+
+  def handle_event("toggle_visibility", %{"element" => element}, socket) do
+    {:noreply, Visibility.toggle(socket, String.to_existing_atom(element))}
   end
 
   def handle_event("reset", _, socket) do
@@ -74,7 +82,8 @@ defmodule BirdSongWeb.Components.Filters do
   defp assign_defaults(%Socket{} = socket) do
     assign(socket, %{
       region: __MODULE__.Region.default_assigns(),
-      by_species: :not_set
+      by_species: :not_set,
+      visibility: %Visibility{}
     })
   end
 
@@ -88,7 +97,8 @@ defmodule BirdSongWeb.Components.Filters do
   defp load_quiz(%Socket{} = socket, %Quiz{} = quiz) do
     assign(socket, %{
       region: __MODULE__.Region.load_from_quiz(quiz),
-      by_species: __MODULE__.BySpecies.build_from_quiz(quiz)
+      by_species: __MODULE__.BySpecies.build_from_quiz(quiz),
+      visibility: %Visibility{}
     })
   end
 
@@ -134,7 +144,7 @@ defmodule BirdSongWeb.Components.Filters do
   @impl LiveView
   def render(%{} = assigns) do
     ~H"""
-      <div>
+      <div class="gap-3">
         <.live_component module={__MODULE__.Region}  id={@region.id}, {Map.from_struct(@region)} />
         <.filters_after_region {assigns} />
       </div>
@@ -143,19 +153,25 @@ defmodule BirdSongWeb.Components.Filters do
 
   defp filters_after_region(%{by_species: %{}} = assigns) do
     ~H"""
+    <div>
+      <div class="divider my-0.5"></div>
       <.live_component
         module={__MODULE__.BySpecies}
         id="filter-by-species"
         by_species={@by_species}
+        visibility={@visibility}
       />
-      <div class="flex">
-        <button type="submit" class= "btn btn-primary" phx-click="start">
-          Let's go!
-        </button>
+      <div class="divider my-0.5"></div>
+      <div class="flex justify-around my-3">
         <button type="button" class="btn btn-outline btn-primary" phx-click="reset">
           Clear all filters
         </button>
+
+        <button type="submit" class= "btn btn-primary" phx-click="start">
+          Let's go!
+        </button>
       </div>
+    </div>
     """
   end
 
