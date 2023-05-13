@@ -1,28 +1,28 @@
 defmodule BirdSongWeb.QuizLive.MessageHandlers do
   require Logger
-  use BirdSongWeb.QuizLive.Assign
 
-  alias BirdSong.Services
+  alias Phoenix.LiveView
 
-  alias BirdSongWeb.QuizLive
+  alias BirdSong.{
+    Services,
+    Services.Ebird.Region
+  }
 
-  def handle_info(:get_region_species_codes, socket) do
-    {:noreply, QuizLive.Services.assign_region_species_codes(socket)}
+  def handle_info({:start, filters}, socket) do
+    quiz =
+      filters
+      |> Keyword.put(:session_id, socket.assigns.session_id)
+      |> BirdSong.Quiz.create!()
+
+    BirdSong.PubSub.broadcast(socket, {:quiz_created, quiz.id})
+
+    {:noreply, LiveView.push_redirect(socket, to: "/quiz")}
   end
 
-  def handle_info(
-        {:get_recent_observations, tries: tries},
-        %Socket{assigns: %{max_api_tries: max}} = socket
-      )
-      when tries >= max do
-    {:noreply,
-     socket
-     |> Phoenix.LiveView.clear_flash()
-     |> Phoenix.LiveView.put_flash(
-       :error,
-       "eBird is not responding to our requests at the moment. Please try again later."
-     )}
-  end
+  # -------- IGNORED MESSAGES ------------
+  def handle_info(:change_region, socket), do: ignore_message(socket)
+  def handle_info({:quiz_created, _}, socket), do: ignore_message(socket)
+  def handle_info({:region_selected, %Region{}}, socket), do: ignore_message(socket)
 
   ####################################
   ####################################
@@ -30,21 +30,14 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   ##
 
   if Mix.env() === :test do
-    def handle_info({:register_render_listener, pid}, socket) do
-      {:noreply,
-       assign(
-         socket,
-         :render_listeners,
-         [pid | socket.assigns[:render_listeners]]
-       )}
-    end
-
     def handle_info({:services, %Services{} = services}, socket) do
-      {:noreply, assign(socket, :services, services)}
+      {:noreply, LiveView.assign(socket, :services, services)}
     end
 
     def handle_call(:socket, _, socket) do
       {:reply, socket, socket}
     end
   end
+
+  defp ignore_message(socket), do: {:noreply, socket}
 end

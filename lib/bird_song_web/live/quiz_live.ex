@@ -3,13 +3,18 @@ defmodule BirdSongWeb.QuizLive do
 
   use Phoenix.LiveView
 
+  alias BirdSongWeb.QuizLive.Assign
   alias BirdSongWeb.QuizLive.Visibility
-  alias Phoenix.{LiveView, LiveView.Socket}
+
+  alias BirdSong.Quiz
+
+  alias Phoenix.{
+    LiveView,
+    LiveView.Socket
+  }
 
   alias __MODULE__.{
-    Assign,
     Current,
-    EtsTables,
     EventHandlers,
     HTML,
     MessageHandlers
@@ -17,57 +22,60 @@ defmodule BirdSongWeb.QuizLive do
 
   alias BirdSong.Bird
 
-  def mount(_params, session, socket) do
-    socket =
-      socket
-      |> Assign.assign_session_id(session)
-      |> EtsTables.Assigns.lookup_session()
-      |> case do
-        {:ok, %{} = assigns} ->
-          %{socket | assigns: assigns}
-          |> assign_next_bird()
+  on_mount {BirdSong.PubSub, :subscribe}
+  on_mount {Assign, :assign_services}
 
-        {:error, {:not_found, _}} ->
-          LiveView.push_redirect(socket, to: "/quiz/new")
-      end
+  @impl LiveView
+  def mount(_params, _session, %Socket{} = socket) do
+    {:ok,
+     case Quiz.get_latest_by_session_id(socket.assigns.session_id) do
+       nil ->
+         LiveView.push_redirect(socket, to: "/quiz/new")
 
-    {:ok, socket}
+       %Quiz{} = quiz ->
+         socket.assigns
+         |> Assign.assigns_to_struct()
+         |> reset_state()
+         |> Map.replace!(:quiz, quiz)
+         |> Current.assign_current()
+         |> Assign.assign(socket)
+     end}
   end
 
+  @impl LiveView
   defdelegate handle_info(message, socket), to: MessageHandlers
 
+  @impl LiveView
   defdelegate handle_event(message, payload, socket), to: EventHandlers
 
   if Mix.env() === :test do
+    @impl LiveView
     defdelegate handle_call(message, payload, socket), to: MessageHandlers
   end
 
+  @impl LiveView
   def render(assigns) do
-    Enum.each(assigns[:render_listeners], &send(&1, {:render, assigns}))
-
     assigns
-    |> Map.put(:inner_template, &HTML.Question.render/1)
+    |> Map.put(:inner_template, HTML.Question)
     |> HTML.render()
   end
 
   def assign_next_bird(
-        %Socket{
-          assigns: %{
-            current: %Current{bird: nil},
-            birds: [%Bird{} | _]
-          }
-        } = socket
+        %Assign{
+          current: %Current{bird: nil},
+          quiz: %Quiz{}
+        } = assigns
       ) do
-    Current.assign_current(socket)
+    Current.assign_current(assigns)
   end
 
   def assign_next_bird(%Socket{} = socket) do
     socket
   end
 
-  def reset_state(%Socket{} = socket) do
-    socket
+  def reset_state(%Assign{} = assigns) do
+    assigns
     |> Current.reset()
-    |> assign(:visibility, %Visibility{})
+    |> Map.put(:visibility, %Visibility{})
   end
 end

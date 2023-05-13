@@ -1,18 +1,16 @@
 defmodule BirdSongWeb.QuizLive.Current do
   require Logger
-  use BirdSongWeb.QuizLive.Assign
   alias BirdSong.Services.MacaulayLibrary
-  alias Phoenix.LiveView.Socket
 
   alias BirdSong.{
     Bird,
     Quiz,
-    Services.Flickr,
-    Services.Flickr.Photo,
-    Services.MacaulayLibrary.Recording
+    Services.Flickr
   }
 
-  alias BirdSongWeb.QuizLive
+  alias BirdSongWeb.{
+    QuizLive.Assign
+  }
 
   defstruct [:bird, :recording, :image]
 
@@ -22,44 +20,32 @@ defmodule BirdSongWeb.QuizLive.Current do
           recording: MacaulayLibrary.Recording.t()
         }
 
-  def reset(%Socket{} = socket) do
-    assign(socket, :current, %__MODULE__{})
+  def reset(%Assign{} = assigns) do
+    Map.put(assigns, :current, %__MODULE__{})
   end
 
-  def assign_current(%Socket{} = socket) do
-    %__MODULE__{bird: nil} = get_current(socket)
-    %Quiz{birds: birds} = QuizLive.Assign.get_assign(socket, :quiz)
+  def assign_current(%Assign{} = assigns) do
+    %__MODULE__{bird: nil} = assigns.current
+    %Quiz{birds: birds} = assigns.quiz
     bird = Enum.random(birds)
 
-    socket
-    |> assign(:current, %__MODULE__{bird: bird})
+    assigns
+    |> Map.put(:current, %__MODULE__{bird: bird})
     |> update_resource(:recording)
     |> update_resource(:image)
-    |> case do
-      %Socket{
-        assigns: %{
-          current: %__MODULE__{
-            bird: %Bird{},
-            recording: %Recording{},
-            image: %Photo{}
-          }
-        }
-      } = socket ->
-        socket
-    end
   end
 
   defguard is_resource_key(key) when key in [:recording, :image]
 
-  def update_resource(%Socket{} = socket, resource_key) when is_resource_key(resource_key) do
-    update_resource(socket, get_current(socket, :bird), resource_key)
+  def update_resource(%Assign{} = assigns, resource_key) when is_resource_key(resource_key) do
+    update_resource(assigns, assigns.current.bird, resource_key)
   end
 
-  def update_resource(%Socket{} = socket, %Bird{} = bird, resource_key)
+  def update_resource(%Assign{} = assigns, %Bird{} = bird, resource_key)
       when is_resource_key(resource_key) do
     plural = :"#{resource_key}s"
 
-    worker = get_worker(socket, plural)
+    worker = get_worker(assigns, plural)
 
     resource =
       case apply(worker.module, :get, [bird, worker]) do
@@ -69,28 +55,15 @@ defmodule BirdSongWeb.QuizLive.Current do
           |> Enum.random()
       end
 
-    assign(
-      socket,
+    Map.update!(
+      assigns,
       :current,
-      socket
-      |> get_current()
-      |> Map.replace!(resource_key, resource)
+      &Map.replace!(&1, resource_key, resource)
     )
   end
 
-  def get_current(%Socket{} = socket) do
-    get_assign(socket, :current)
-  end
-
-  def get_current(%Socket{} = socket, key) do
-    socket
-    |> get_current()
-    |> Map.fetch!(key)
-  end
-
-  defp get_worker(%Socket{assigns: assigns}, key) do
-    assigns
-    |> Map.fetch!(:services)
+  defp get_worker(%Assign{services: services}, key) do
+    services
     |> Map.fetch!(key)
     |> Map.fetch!(get_worker_key(key))
   end

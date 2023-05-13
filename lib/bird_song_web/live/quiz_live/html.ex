@@ -12,7 +12,11 @@ defmodule BirdSongWeb.QuizLive.HTML do
     <div class="flex items-center flex-col">
       <%= render_flash(assigns[:flash]) %>
 
-      <%= @inner_template.(assigns) %>
+      <.live_component
+        module={@inner_template}
+        id="inner_template"
+        {Map.drop(assigns, [:inner_template])}
+      />
     </div>
     """
   end

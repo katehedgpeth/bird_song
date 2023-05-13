@@ -1,7 +1,7 @@
 defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
-  import Ecto.Query, only: [from: 2]
+  import Ecto.Query, only: [from: 2, last: 2]
   alias BirdSong.Services.Ebird.Region
 
   @type t() :: %__MODULE__{
@@ -48,7 +48,13 @@ defmodule BirdSong.Quiz do
     change(%__MODULE__{})
   end
 
-  def get_by_session_id("" <> session_id) do
+  def get_latest_by_session_id("" <> session_id) do
+    from(q in __MODULE__, where: q.session_id == ^session_id, preload: [birds: [:family, :order]])
+    |> last(:inserted_at)
+    |> BirdSong.Repo.one()
+  end
+
+  def get_all_by_session_id("" <> session_id) do
     BirdSong.Repo.all(
       from q in __MODULE__,
         where: q.session_id == ^session_id

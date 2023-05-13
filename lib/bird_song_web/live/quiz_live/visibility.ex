@@ -17,6 +17,7 @@ defmodule BirdSongWeb.QuizLive.Visibility do
         }
 
   defstruct answer: :hidden,
+            filters: :hidden,
             image: :hidden,
             recording: :hidden,
             category_filters: %{}
@@ -27,20 +28,6 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   ##  PUBLIC API
   ##
   #########################################################
-
-  @spec reset_category_filters(Socket.t()) :: Socket.t()
-  def reset_category_filters(%Socket{} = socket) do
-    %{
-      birds_by_category: %{} = by_category,
-      visibility: %__MODULE__{} = state
-    } = Map.take(socket.assigns, [:visibility, :birds_by_category])
-
-    LiveView.assign(
-      socket,
-      :visibility,
-      Enum.reduce(by_category, state, &add_category/2)
-    )
-  end
 
   @spec toggle(Socket.t(), atom() | list(atom())) :: Socket.t()
   def toggle(%Socket{} = socket, key_or_keys) do
@@ -71,10 +58,6 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   ##  PRIVATE METHODS
   ##
   #########################################################
-
-  defp add_category({name, _}, %__MODULE__{} = visibility) do
-    Map.update!(visibility, :category_filters, &Map.put(&1, name, :hidden))
-  end
 
   defp do_visible?(%{} = state, key) do
     case Map.fetch!(state, key) do

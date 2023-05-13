@@ -1,5 +1,4 @@
 defmodule BirdSongWeb.QuizLive.EtsTables do
-  use BirdSongWeb.QuizLive.Assign
   use BirdSong.GenServer, name: __MODULE__, keep_name_opt?: true
 
   defstruct [:birds, :assigns]

@@ -86,17 +86,26 @@ defmodule BirdSong.QuizTest do
     end
   end
 
-  describe "get_by_session_id/1" do
-    test "returns a list of quizzes when they exist", %{birds: birds} do
+  describe "get_*_by_session_id/1" do
+    setup tags do
+      assert %{birds: birds} = tags
+      assert [bluebird, wren, grackle] = birds
+
       session_id = Ecto.UUID.generate()
 
-      assert [bluebird, wren, grackle] = birds
+      two_minutes_ago =
+        DateTime.now!("Etc/UTC")
+        |> DateTime.add(-2, :minute)
+        |> DateTime.to_naive()
+        |> NaiveDateTime.truncate(:second)
 
       first =
         Quiz.create!(
           region_code: "US-NC-067",
           birds: [bluebird, wren],
-          session_id: session_id
+          session_id: session_id,
+          inserted_at: two_minutes_ago,
+          updated_at: two_minutes_ago
         )
 
       second =
@@ -106,9 +115,30 @@ defmodule BirdSong.QuizTest do
           session_id: session_id
         )
 
-      assert [first_result, second_result] = Quiz.get_by_session_id(session_id)
+      {:ok, created: [first, second], session_id: session_id}
+    end
+
+    test "get_all_by_session_id/1 returns a list of quizzes when they exist", %{
+      created: [first, second],
+      session_id: session_id
+    } do
+      assert [first_result, second_result] = Quiz.get_all_by_session_id(session_id)
       assert first.id === first_result.id
       assert second.id === second_result.id
+    end
+
+    test "get_latest_by_session_id/1 returns the most recently created quiz for a session", %{
+      created: [first, second],
+      session_id: session_id
+    } do
+      assert NaiveDateTime.compare(first.inserted_at, second.inserted_at) === :lt
+      assert %Quiz{id: id} = Quiz.get_latest_by_session_id(session_id)
+      assert id === second.id
+    end
+
+    test "get_latest_by_session_id/1 returns nil if there are no quizzes for the session", %{} do
+      session_id = Ecto.UUID.generate()
+      assert Quiz.get_latest_by_session_id(session_id) === nil
     end
   end
 end

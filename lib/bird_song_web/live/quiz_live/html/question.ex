@@ -1,5 +1,6 @@
 defmodule BirdSongWeb.QuizLive.HTML.Question do
   use Phoenix.LiveComponent
+  alias BirdSongWeb.QuizLive.Assign
   alias BirdSongWeb.QuizLive.Current
   alias BirdSongWeb.QuizLive.Visibility
 
@@ -18,28 +19,33 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   }
 
   def render(%{quiz: %Quiz{}} = assigns) do
+    IO.inspect(assigns[:myself])
+    assigns = Assign.assigns_to_struct(assigns)
+
     ~H"""
-      <%= QuizLive.HTML.page_title("What bird do you hear?") %>
-      <div class="flex gap-10 flex-col">
-        <.play_audio current={@current} asset_cdn={@asset_cdn} />
-        <div class="flex flex-wrap justify-center gap-5">
-          <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
-          <button phx-click="change" phx-value-element="recording" class="btn btn-outline">Change recording</button>
-        </div>
-        <div class="bg-slate-100 p-10 w-full">
-          <.show_answer visibility={@visibility} current={@current} />
-        </div>
-          <.show_possible_birds quiz={@quiz} />
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <.show_image visibility={@visibility} current={@current} />
-          <.show_recording_details
-            visibility={@visibility}
-            asset_cdn={@asset_cdn} current={@current}
-          />
-        </div>
+      <div>
+        <%= QuizLive.HTML.page_title("What bird do you hear?") %>
+        <div class="flex gap-10 flex-col">
+          <.play_audio current={@current} asset_cdn={@asset_cdn} />
+          <div class="flex flex-wrap justify-center gap-5">
+            <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
+            <button phx-click="change" phx-value-element="recording" class="btn btn-outline">Change recording</button>
+          </div>
+          <div class="bg-slate-100 p-10 w-full">
+            <.show_answer visibility={@visibility} current={@current} />
+          </div>
+            <.show_possible_birds quiz={@quiz} />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <.show_image visibility={@visibility} current={@current} />
+            <.show_recording_details
+              visibility={@visibility}
+              asset_cdn={@asset_cdn} current={@current}
+            />
+          </div>
 
-        <.filters {assigns} />
+          <.filters visibility={@visibility} socket={@socket} services={@services} />
 
+        </div>
       </div>
     """
   end
@@ -97,14 +103,38 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     |> apply(:audio_src, [recording, asset_cdn])
   end
 
+  defp filter_collapse_class(%Visibility{filters: state}) do
+    case state do
+      :shown -> "collapse-open"
+      :hidden -> "collapse-closed"
+    end
+  end
+
   defp filters(assigns) do
     ~H"""
-      <div class="collapse collapse-arrow" tabindex="0">
+      <div
+        tabindex="0"
+        class={[
+          "collapse",
+          "collapse-arrow",
+          filter_collapse_class(assigns.visibility)
+        ]}
+        {[
+          phx: [
+            click: "toggle_visibility",
+            value: [ element: "filters" ]
+          ]
+        ]}
+      >
         <div class="collapse-title">
           Filters
         </div>
         <div class="collapse-content">
-          <.live_component module={Filters} id="question-filters" {assigns} />
+          <%=
+            assigns
+            |> Map.take([:services, :socket])
+            |> Filters.render_filters()
+          %>
         </div>
       </div>
     """

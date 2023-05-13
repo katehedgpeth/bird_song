@@ -4,6 +4,16 @@ defmodule BirdSongWeb.QuizLive.EtsTables.Assigns do
 
   alias BirdSongWeb.QuizLive.EtsTables
 
+  def on_mount(:lookup_session, %{}, %{}, %Socket{} = socket) do
+    case lookup_session(socket) do
+      {:error, {:not_found, _}} ->
+        {:halt, Phoenix.LiveView.push_redirect(socket, to: "/quiz/new")}
+
+      {:ok, %{} = assigns} ->
+        {:cont, %{socket | assigns: assigns}}
+    end
+  end
+
   @spec lookup_session(Socket.t()) :: {:error, {:not_found, String.t()}} | {:ok, Map.t()}
   def lookup_session(%Socket{assigns: %{session_id: nil}}) do
     {:error, {:not_found, nil}}

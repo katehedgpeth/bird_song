@@ -52,6 +52,7 @@ defmodule BirdSong.Services do
 
   defguard is_service_key(atom) when atom in [:ebird, :images, :recordings]
 
+  @spec all() :: {:error, :not_alive} | t()
   def all() do
     all(__MODULE__)
   end

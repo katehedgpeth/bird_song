@@ -8,8 +8,10 @@ defmodule BirdSongWeb.QuizLive.HTML.NewQuiz do
 
   def render(assigns) do
     ~H"""
-      <%= QuizLive.HTML.page_title("How well do you know your bird songs?") %>
-      <.live_component module={Filters} id="filters" {assigns} />
+      <div>
+        <%= QuizLive.HTML.page_title("How well do you know your bird songs?") %>
+        <%= Filters.render_filters(assigns) %>
+      </div>
     """
   end
 end

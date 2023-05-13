@@ -1,8 +1,9 @@
 defmodule BirdSongWeb.SupervisedLiveCase do
+  alias Plug.CSRFProtection
   use ExUnit.CaseTemplate
 
   using opts do
-    path = Keyword.fetch!(opts, :path)
+    path = Keyword.get(opts, :path)
 
     quote bind_quoted: [path: path] do
       use BirdSong.SupervisedCase
@@ -11,23 +12,18 @@ defmodule BirdSongWeb.SupervisedLiveCase do
 
       @path path
 
-      setup %{conn: conn, test: test} do
-        path_with_query =
-          Path.join(
-            @path,
-            "?service_instance_name=#{test}"
-          )
+      if @path do
+        setup %{conn: conn, test: test} do
+          path_with_query =
+            Path.join(
+              @path,
+              "?services=#{test}"
+            )
 
-        # setup session_id
-        conn = get(conn, @path)
+          {:ok, view, html} = Phoenix.LiveViewTest.live(conn, path_with_query)
 
-        {:ok, view, html} =
-          Phoenix.LiveViewTest.live(
-            conn,
-            path_with_query
-          )
-
-        {:ok, view: view, html: html, conn: conn}
+          {:ok, view: view, html: html, conn: conn}
+        end
       end
     end
   end

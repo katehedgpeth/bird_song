@@ -7,21 +7,50 @@ defmodule BirdSongWeb.QuizLive.Assign do
   }
 
   alias BirdSong.Services
+  alias BirdSongWeb.QuizLive.Visibility
 
-  defmacro __using__(_ \\ []) do
-    quote do
-      alias Phoenix.{LiveView, LiveView.Socket}
-      import LiveView, only: [assign: 3, assign_new: 3]
-      import BirdSongWeb.QuizLive.Assign
-    end
+  @asset_cdn "https://cdn.download.ams.birds.cornell.edu"
+
+  defstruct [
+    # set by Phoenix
+    :socket,
+    :id,
+
+    # custom assigns
+    :current,
+    :quiz,
+    :services,
+    :session_id,
+    asset_cdn: @asset_cdn,
+    visibility: %Visibility{}
+  ]
+
+  def assigns_to_struct(assigns) do
+    assigns
+    |> Map.drop([:__changed__, :live_action, :flash, :myself])
+    |> Keyword.new()
+    |> __struct__()
+  end
+
+  def assign(%__MODULE__{} = assigns, %Socket{} = socket) do
+    LiveView.assign(socket, Map.from_struct(assigns))
   end
 
   def on_mount(:assign_services, %{} = params, _session, %Socket{} = socket) do
     assign_services(socket, params)
   end
 
+  def on_mount(
+        :assign_services,
+        :not_mounted_at_router,
+        %{"services" => _} = session,
+        %Socket{} = socket
+      ) do
+    assign_services(socket, session)
+  end
+
   @spec assign_services(Socket.t(), map) :: {:cont | :halt, Socket.t()}
-  defp assign_services(%Socket{} = socket, %{"service_instance_name" => instance_name}) do
+  defp assign_services(%Socket{} = socket, %{"services" => instance_name}) do
     instance_name
     |> get_services_instance_name()
     |> do_assign_services(socket)
@@ -53,13 +82,5 @@ defmodule BirdSongWeb.QuizLive.Assign do
 
   def get_assign(%Socket{assigns: assigns}, key) do
     Map.fetch!(assigns, key)
-  end
-
-  def assign_session_id(%Socket{} = socket, %{"_csrf_token" => "" <> session_id}) do
-    Phoenix.LiveView.assign(socket, :session_id, session_id)
-  end
-
-  def assign_session_id(%Socket{} = socket, %{}) do
-    LiveView.assign(socket, :session_id, nil)
   end
 end

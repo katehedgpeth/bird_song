@@ -237,7 +237,11 @@ defmodule BirdSong.Services.ThrottledCache.State do
          %RequestThrottler.Response{request: request}
        ) do
     [{^request, from: from, request_data: request_data}] = :ets.take(requests, request)
-    %{from: from, request_data: request_data}
+
+    %{
+      from: from,
+      request_data: request_data
+    }
   end
 
   @spec build_request_message(:start | {:end, any()}, {GenServer.from(), any()}, Worker.t()) ::

@@ -351,7 +351,7 @@ defmodule BirdSong.Services.RequestThrottler do
           __MODULE__,
           case Mix.env() do
             :test -> :warning
-            _ -> :info
+            _ -> :warning
           end
         )
       end
