@@ -65,18 +65,18 @@ defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
   #########################################################
 
   defp bird_to_params(%Bird{common_name: common_name, family: %Family{common_name: family_name}}) do
-    %{"category" => family_name, "bird" => common_name}
+    %{"family" => family_name, "bird" => common_name}
   end
 
-  defp build_category_dict(birds) do
+  defp build_family_dict(birds) do
     birds
     |> Enum.group_by(&Bird.family_name/1)
-    |> Enum.map(&do_build_category_dict/1)
+    |> Enum.map(&do_build_family_dict/1)
     |> Enum.into(%{})
   end
 
-  defp do_build_category_dict({category, birds}) do
-    {category, Enum.map(birds, &%{bird: &1, selected?: false})}
+  defp do_build_family_dict({family, birds}) do
+    {family, Enum.map(birds, &%{bird: &1, selected?: false})}
   end
 
   @spec build_for_region(ByFamily.t() | nil, Services.t(), Quiz.t()) ::
@@ -100,26 +100,26 @@ defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
         {:ok,
          codes
          |> Bird.get_many_by_species_code()
-         |> build_category_dict()}
+         |> build_family_dict()}
     end
   end
 
   def build_from_quiz(%Quiz{} = quiz) do
     quiz.region_code
     |> BirdSong.Region.from_code!()
-    |> build_category_dict()
+    |> build_family_dict()
     |> update_selected(quiz)
   end
 
-  defp deselect_all_in_category({category_name, birds}) do
-    {category_name, Enum.map(birds, &%{&1 | selected?: false})}
+  defp deselect_all_in_family({family_name, birds}) do
+    {family_name, Enum.map(birds, &%{&1 | selected?: false})}
   end
 
   defp error_text(:no_codes_for_region), do: @no_birds_error
   defp error_text(_), do: @not_available_error
 
-  defp get_all_birds(%{} = by_category) do
-    by_category
+  defp get_all_birds(%{} = by_family) do
+    by_family
     |> Enum.map(&elem(&1, 1))
     |> List.flatten()
     |> Enum.map(& &1[:bird])
@@ -129,7 +129,7 @@ defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
   def get_selected_birds(%{} = assigns) do
     assigns
     |> Map.fetch!(@assign_key)
-    |> Enum.map(fn {_category, birds} -> birds end)
+    |> Enum.map(fn {_family, birds} -> birds end)
     |> List.flatten()
     |> Enum.filter(& &1[:selected?])
     |> Enum.map(& &1[:bird])
@@ -139,7 +139,7 @@ defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
     end
   end
 
-  defp update_category_birds(birds, %{"bird" => name, "category" => _}) do
+  defp update_family_birds(birds, %{"bird" => name, "family" => _}) do
     Enum.map(birds, fn
       %{bird: %Bird{common_name: ^name}, selected?: _} = bird ->
         %{bird | selected?: not bird[:selected?]}
@@ -149,13 +149,13 @@ defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
     end)
   end
 
-  defp update_category_birds(birds, %{"category" => _}) do
+  defp update_family_birds(birds, %{"family" => _}) do
     selected? = Enum.all?(birds, & &1[:selected?])
     Enum.map(birds, &%{&1 | selected?: not selected?})
   end
 
   defp update_selected(%{} = by_family, %Quiz{birds: []}) do
-    Map.new(by_family, &deselect_all_in_category/1)
+    Map.new(by_family, &deselect_all_in_family/1)
   end
 
   defp update_selected(%{} = by_family, %Quiz{} = quiz) do
@@ -166,8 +166,8 @@ defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
 
   defp update_selected(
          %{} = by_family,
-         %{"category" => category} = params
+         %{"family" => family} = params
        ) do
-    Map.update!(by_family, category, &update_category_birds(&1, params))
+    Map.update!(by_family, family, &update_family_birds(&1, params))
   end
 end

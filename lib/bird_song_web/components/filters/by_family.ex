@@ -7,6 +7,7 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
 
   alias BirdSongWeb.{
     Components.ButtonGroup,
+    Components.Collapse,
     Components.GroupButton,
     QuizLive.Visibility
   }
@@ -27,66 +28,56 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
   defdelegate build_selected(assigns, quiz), to: __MODULE__.Assigns
   defdelegate get_selected_birds(socket), to: __MODULE__.Assigns
 
-  defp collapse_state(%Visibility{by_family: :hidden}), do: "collapse-close"
-  defp collapse_state(%Visibility{by_family: :shown}), do: "collapse-open"
-
   @impl Phoenix.LiveComponent
   def render(%{} = assigns) do
     ~H"""
-    <div
-      id={@id}
-      class={["collapse", "collapse-plus", collapse_state(@visibility)]}
-    >
-      <input type="checkbox" />
-      <div
-        class="collapse-title"
-        {[
-          phx: [
-            click: "toggle_visibility",
-            value: [element: "by_family"]
-          ]
-        ]}
-      >
-        <h3>Select specific birds or families (optional):</h3>
-      </div>
-
-      <%= if @visibility.by_family === :shown do %>
-        <.family_groups by_family={@by_family} />
-      <% end %>
+    <div>
+      <.live_component
+        module={Collapse}
+        id={@id <> "-collapse"}
+        assigns={
+          struct(Collapse,
+            state: @visibility.by_family,
+            element: "by_family",
+            icon_type: :caret,
+            title: by_family_title(%{}),
+            body:
+              assigns
+              |> Map.take([:by_family, :visibility])
+              |> family_groups()
+          )
+        }
+      />
     </div>
     """
   end
 
-  defp bird_filter_button(%{bird: %Bird{common_name: name}, selected?: selected?}, "" <> category) do
+  defp by_family_title(%{} = assigns) do
+    ~H"""
+      <h3>Select specific birds or families (optional)</h3>
+    """
+  end
+
+  defp bird_filter_button(%{bird: %Bird{common_name: name}, selected?: selected?}, "" <> family) do
     %GroupButton{
       color: "primary",
       phx_click: "include?",
-      phx_value: [bird: name, category: category],
+      phx_value: [bird: name, family: family],
       selected?: selected?,
       text: name,
       value: name
     }
   end
 
-  defp bird_filter_buttons(%{birds: birds, category_name: category_name}) do
-    assigns = %{
-      birds: birds,
-      category_name: category_name,
+  defp bird_filter_buttons(%{birds: birds, family_name: family_name}) do
+    live_component(%{
+      module: ButtonGroup,
+      id: "bird-filters-" <> family_name,
       buttons:
         birds
-        |> Enum.map(&bird_filter_button(&1, category_name))
+        |> Enum.map(&bird_filter_button(&1, family_name))
         |> Enum.sort_by(& &1.text, :desc)
-    }
-
-    ~H"""
-    <div>
-      <.live_component
-        module={ButtonGroup}
-        id={"bird-filters-" <> @category_name}
-        buttons={@buttons}
-      />
-    </div>
-    """
+    })
   end
 
   @spec bird_group_selection_state([bird_state()]) :: %{
@@ -97,35 +88,40 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
     Enum.group_by(birds, fn %{bird: %Bird{}, selected?: selected?} -> selected? end)
   end
 
-  defp on_click_attrs_for_category(event, category) do
-    [
-      phx: [
-        click: event,
-        value: [category: category]
-      ]
-    ]
-  end
-
-  defp family_group(%{birds: _, category_name: _} = assigns) do
+  defp family_group(%{birds: _, family_name: _, visibility: %Visibility{}} = assigns) do
     ~H"""
-    <div>
-      <.family_filter_title birds={@birds} category_name={@category_name} />
-      <.bird_filter_buttons birds={@birds} category_name={@category_name} />
-    </div>
+      <div class="border-b-1 border-b-black-200 last:border-b-0">
+        <.live_component
+          module={Collapse}
+          id={"family-group-" <> @family_name}
+          assigns={struct(Collapse, [
+            state: @visibility.families[@family_name],
+            element: "families",
+            icon_type: :caret,
+            phx_value: [ family: @family_name ],
+            title:
+              assigns
+              |> Map.take([:birds, :family_name])
+              |> family_filter_title(),
+            body: assigns
+            |> Map.take([:birds, :family_name])
+            |> bird_filter_buttons()
+          ])}
+      />
+      </div>
     """
   end
 
   defp family_groups(%{} = assigns) do
     ~H"""
-      <div class="collapse-content">
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <%= for {category_name, birds} <- Enum.sort_by(@by_family, &elem(&1, 0)) do %>
-            <.family_group
-              category_name={category_name}
-              birds={birds}
-            />
-          <% end %>
-        </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <%= for {family_name, birds} <- Enum.sort_by(@by_family, &elem(&1, 0)) do %>
+          <.family_group
+            family_name={family_name}
+            birds={birds}
+            visibility={@visibility}
+          />
+        <% end %>
       </div>
     """
   end
@@ -134,19 +130,13 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
   defp family_filter_checkbox_attrs(%{true => _}), do: [checked: true]
   defp family_filter_checkbox_attrs(%{false => _}), do: []
 
-  defp family_filter_checkbox(%{category_name: _name, birds: _birds} = assigns) do
+  defp family_filter_checkbox(%{family_name: _name, birds: _birds} = assigns) do
     group_state = bird_group_selection_state(assigns[:birds])
 
     assigns =
       Map.merge(assigns, %{
         checkbox_attr: family_filter_checkbox_attrs(group_state),
-        id: "family-filter-" <> assigns[:category_name],
-        on_click: on_click_attrs_for_category("include?", assigns[:category_name]),
-        text:
-          case group_state do
-            %{false => _} -> "Select all"
-            %{} -> "Deselect all"
-          end
+        id: "family-filter-" <> assigns.family_name
       })
 
     ~H"""
@@ -156,27 +146,26 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
           type="checkbox"
           id={@id}
           class="checkbox checkbox-xs"
+          {[
+            phx: [
+              click: "include?",
+              value: [ family: @family_name ]
+            ]
+          ]}
           {@checkbox_attr}
-          {@on_click}
         />
-        <span class="label-text">
-          <%= @text %>
-        </span>
       </label>
     </div>
 
     """
   end
 
-  defp family_filter_title(%{birds: _, category_name: _} = assigns) do
+  defp family_filter_title(%{birds: _, family_name: _} = assigns) do
     ~H"""
     <div>
-      <div class="divider my-0.5"></div>
-      <div class="flex justify-between">
-        <%= @category_name %>
-        <%= unless length(assigns[:birds]) === 1 do %>
-          <.family_filter_checkbox birds={@birds} category_name={@category_name} />
-        <% end %>
+      <div class="flex justify-between items-center">
+        <%= @family_name %>
+        <.family_filter_checkbox birds={@birds} family_name={@family_name} />
       </div>
     </div>
     """

@@ -41,6 +41,10 @@ defmodule BirdSongWeb.Components.Filters do
     {:noreply, socket}
   end
 
+  def handle_event("toggle_visibility", %{"element" => "families", "family" => family}, socket) do
+    {:noreply, Visibility.toggle(socket, :families, family)}
+  end
+
   def handle_event("toggle_visibility", %{"element" => element}, socket) do
     {:noreply, Visibility.toggle(socket, String.to_existing_atom(element))}
   end
@@ -122,8 +126,11 @@ defmodule BirdSongWeb.Components.Filters do
         |> LiveView.put_flash(:error, error_text)
         |> LiveView.assign(Map.drop(assigns, [:by_family]))
 
-      %{by_family: %{}} ->
-        LiveView.assign(socket, assigns)
+      %{by_family: %{} = dict} ->
+        LiveView.assign(
+          socket,
+          %{assigns | visibility: Visibility.add_families(assigns.visibility, Map.keys(dict))}
+        )
     end
   end
 

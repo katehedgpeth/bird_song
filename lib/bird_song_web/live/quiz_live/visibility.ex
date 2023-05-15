@@ -60,6 +60,14 @@ defmodule BirdSongWeb.QuizLive.Visibility do
     end
   end
 
+  def add_families(%__MODULE__{} = state, families) do
+    Enum.reduce(families, state, &add_family/2)
+  end
+
+  defp add_family("" <> family_name, %__MODULE__{} = state) do
+    Map.update!(state, :families, &Map.put(&1, family_name, :hidden))
+  end
+
   #########################################################
   #########################################################
   ##
