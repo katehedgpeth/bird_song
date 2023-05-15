@@ -75,6 +75,10 @@ defmodule BirdSongWeb.Components.FiltersTest do
       click_region_suggestion(view, "US-NC-067")
 
       view
+      |> element(~s([phx-value-element="by_species"]))
+      |> render_click()
+
+      view
       |> element(~s([phx-value-bird="Eastern Bluebird"]))
       |> render_click()
 
@@ -106,12 +110,16 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
     @tag expect: {200, "[]"}
     test "shows an error if API returns a list of 0 birds for a region", %{view: view} do
+      assert get_assigns(view)[:by_species] === nil
       click_region_suggestion(view, "US-NC-067")
       assert_receive {:end_request, %{module: Ebird.RegionSpeciesCodes, response: response}}, 500
 
       assert %RequestThrottler.Response{response: {:ok, []}} = response
 
-      assert get_assigns(view)[:flash] === %{
+      assigns = get_assigns(view)
+      assert assigns[:by_species] === nil
+
+      assert assigns[:flash] === %{
                "error" =>
                  "\n  Sorry, there do not appear to be any known birds in that region.\n  " <>
                    "Please choose a different or broader region.\n  "

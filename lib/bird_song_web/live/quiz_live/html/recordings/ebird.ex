@@ -2,8 +2,6 @@ defmodule BirdSongWeb.QuizLive.HTML.Recordings.Ebird do
   use Phoenix.LiveComponent
   alias BirdSong.Services.MacaulayLibrary.Recording
 
-  # @behaviour BirdSongWeb.QuizLive.HTML.Recording
-
   @asset_types %{
     audio: "audio",
     spectrogram: "spectrogram_small"

@@ -23,10 +23,8 @@ defmodule BirdSongWeb.Components.Filters.Region do
     struct!(__MODULE__, regions: BirdSong.Region.all())
   end
 
-  def get_selected_code(%Socket{assigns: %{region: %__MODULE__{}}} = socket) do
-    socket.assigns[:region]
-    |> Map.fetch!(:selected)
-    |> Map.fetch!(:code)
+  def get_selected_code!(%{region: %{}} = assigns) do
+    assigns.region.selected.code
   end
 
   @spec load_from_quiz(Quiz.t()) :: t()
@@ -191,7 +189,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
         <.region_input field={@field} />
         <%= if length(@options) > 0 do %>
           <.suggestions options={@options} />
-        <%= end %>
+        <% end %>
       </div>
     """
   end

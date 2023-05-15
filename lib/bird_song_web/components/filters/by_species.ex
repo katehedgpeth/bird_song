@@ -1,16 +1,8 @@
 defmodule BirdSongWeb.Components.Filters.BySpecies do
   use Phoenix.LiveComponent
 
-  alias Phoenix.{
-    LiveView,
-    LiveView.Socket
-  }
-
   alias BirdSong.{
-    Bird,
-    Quiz,
-    Services,
-    Services.Ebird
+    Bird
   }
 
   alias BirdSongWeb.{
@@ -28,81 +20,39 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
 
   @type t() :: %{family_name() => [bird_state()]}
 
-  @no_birds_error "
-  Sorry, there do not appear to be any known birds in that region.
-  Please choose a different or broader region.
-  "
+  @impl Phoenix.LiveComponent
+  defdelegate handle_event(name, params, socket), to: __MODULE__.Assigns
 
-  @not_available_error "
-  We're sorry, but our service is not available at the moment. Please try again later.
-  "
-
-  @assign_key :by_species
-
-  def assign_for_region(%Socket{} = socket, %BirdSong.Region{} = region) do
-    case build_for_region(region, socket.assigns[:services]) do
-      {:ok, %{} = dict} ->
-        assign(socket, @assign_key, dict)
-
-      {:error, error} ->
-        LiveView.put_flash(socket, :error, error_text(error))
-    end
-  end
-
-  @spec build_for_region(BirdSong.Region.t(), Services.t()) ::
-          t() | {:error, :no_birds_for_region} | Helpers.api_error()
-  def build_for_region(%BirdSong.Region{} = region, %Services{
-        ebird: %Ebird{RegionSpeciesCodes: worker}
-      }) do
-    case Ebird.RegionSpeciesCodes.get_codes(region, worker) do
-      {:error, error} ->
-        {:error, error}
-
-      {:ok, %Ebird.RegionSpeciesCodes.Response{codes: []}} ->
-        {:error, :no_codes_for_region}
-
-      {:ok, %Ebird.RegionSpeciesCodes.Response{codes: codes}} ->
-        {:ok,
-         codes
-         |> Bird.get_many_by_species_code()
-         |> build_category_dict()}
-    end
-  end
-
-  defp error_text(:no_codes_for_region), do: @no_birds_error
-  defp error_text(_), do: @not_available_error
-
-  def build_from_quiz(%Quiz{birds: birds}) do
-    build_category_dict(birds)
-  end
+  @spec build_selected(Map.t(), Quiz.t()) :: t() | {:error, String.t()}
+  defdelegate build_selected(assigns, quiz), to: __MODULE__.Assigns
+  defdelegate get_selected_birds(socket), to: __MODULE__.Assigns
 
   defp collapse_state(%Visibility{by_species: :hidden}), do: "collapse-close"
   defp collapse_state(%Visibility{by_species: :shown}), do: "collapse-open"
 
+  @impl Phoenix.LiveComponent
   def render(%{} = assigns) do
-    IO.inspect(assigns.visibility, label: :by_species)
-    IO.inspect(assigns.visibility.by_species, label: :by_species)
-
     ~H"""
-    <div id={@id} class={["collapse", "collapse-plus", collapse_state(@visibility)]} {[
-        phx: [
-          click: "toggle_visibility",
-          value: [element: "by_species"]
-        ]]}>
-      <div class="collapse-title">
+    <div
+      id={@id}
+      class={["collapse", "collapse-plus", collapse_state(@visibility)]}
+    >
+      <input type="checkbox" />
+      <div
+        class="collapse-title"
+        {[
+          phx: [
+            click: "toggle_visibility",
+            value: [element: "by_species"]
+          ]
+        ]}
+      >
         <h3>Select specific species (optional):</h3>
       </div>
 
-      <div class="collapse-content">
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <%= for {category_name, birds} <- Enum.sort_by(@by_species, &elem(&1, 0)) do %>
-            <.species_group
-              category_name={category_name}
-              birds={birds}
-            />
-          <% end %>
-        </div>
-      </div>
+      <%= if @visibility.by_species === :shown do %>
+        <.species_groups by_species={@by_species} />
+      <% end %>
     </div>
     """
   end
@@ -165,6 +115,21 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
     """
   end
 
+  defp species_groups(%{} = assigns) do
+    ~H"""
+      <div class="collapse-content">
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <%= for {category_name, birds} <- Enum.sort_by(@by_species, &elem(&1, 0)) do %>
+            <.species_group
+              category_name={category_name}
+              birds={birds}
+            />
+          <% end %>
+        </div>
+      </div>
+    """
+  end
+
   defp species_filter_checkbox_attrs(%{true => _, false => _}), do: [indeterminate: true]
   defp species_filter_checkbox_attrs(%{true => _}), do: [checked: true]
   defp species_filter_checkbox_attrs(%{false => _}), do: []
@@ -215,69 +180,5 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
       </div>
     </div>
     """
-  end
-
-  def handle_event("include?", params, socket) do
-    {:noreply, update_species_categories(socket, params)}
-  end
-
-  defp build_category_dict(birds) do
-    birds
-    |> Enum.group_by(&Bird.family_name/1)
-    |> Enum.map(&do_build_category_dict/1)
-    |> Enum.into(%{})
-  end
-
-  defp do_build_category_dict({category, birds}) do
-    {category, Enum.map(birds, &%{bird: &1, selected?: false})}
-  end
-
-  defp get_all_birds(%{} = by_category) do
-    by_category
-    |> Enum.map(&elem(&1, 1))
-    |> List.flatten()
-    |> Enum.map(& &1[:bird])
-  end
-
-  @spec get_selected_birds(Socket.t()) :: [Bird.t()]
-  def get_selected_birds(%Socket{assigns: assigns}) do
-    assigns
-    |> Map.fetch!(@assign_key)
-    |> Enum.map(fn {_category, birds} -> birds end)
-    |> List.flatten()
-    |> Enum.filter(& &1[:selected?])
-    |> Enum.map(& &1[:bird])
-    |> case do
-      [] -> get_all_birds(assigns[@assign_key])
-      [_ | _] = selected -> selected
-    end
-  end
-
-  defp update_category_birds(birds, %{"bird" => name, "category" => _}) do
-    Enum.map(birds, fn
-      %{bird: %Bird{common_name: ^name}, selected?: _} = bird ->
-        %{bird | selected?: not bird[:selected?]}
-
-      %{bird: %Bird{}, selected?: _} = bird ->
-        bird
-    end)
-  end
-
-  defp update_category_birds(birds, %{"category" => _}) do
-    selected? = Enum.all?(birds, & &1[:selected?])
-    Enum.map(birds, &%{&1 | selected?: not selected?})
-  end
-
-  defp update_species_categories(
-         %Socket{assigns: assigns} = socket,
-         %{"category" => category} = params
-       ) do
-    LiveView.assign(
-      socket,
-      @assign_key,
-      assigns
-      |> Map.fetch!(@assign_key)
-      |> Map.update!(category, &update_category_birds(&1, params))
-    )
   end
 end

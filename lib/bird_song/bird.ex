@@ -38,9 +38,11 @@ defmodule BirdSong.Bird do
     many_to_many :quizzes, BirdSong.Quiz, join_through: "birds_quizzes"
   end
 
+  @type common_name() :: String.t()
+
   @type t() :: %__MODULE__{
           sci_name: String.t(),
-          common_name: String.t(),
+          common_name: common_name(),
           species_code: String.t(),
           category: String.t(),
           taxon_order: Integer.t(),
