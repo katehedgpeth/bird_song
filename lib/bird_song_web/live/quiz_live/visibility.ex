@@ -7,16 +7,22 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   }
 
   @type state() :: :shown | :hidden
+
+  @type by_family() :: %{
+          required(String.t()) => state()
+        }
   @type t() :: %__MODULE__{
           answer: state(),
-          by_species: state(),
+          by_family: state(),
           filters: state(),
           image: state(),
-          recording: state()
+          recording: state(),
+          families: by_family()
         }
 
   defstruct answer: :hidden,
-            by_species: :hidden,
+            by_family: :hidden,
+            families: %{},
             filters: :hidden,
             image: :hidden,
             recording: :hidden
@@ -28,15 +34,23 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   ##
   #########################################################
 
-  @spec toggle(Socket.t(), atom()) :: Socket.t()
-  def toggle(%Socket{} = socket, key) do
+  @spec toggle(Socket.t(), atom(), String.t() | nil) :: Socket.t()
+  def toggle(%Socket{} = socket, key, family \\ nil) do
     LiveView.assign(
       socket,
       :visibility,
       socket.assigns
       |> Map.fetch!(:visibility)
-      |> Map.update!(key, &opposite/1)
+      |> do_toggle(key, family)
     )
+  end
+
+  defp do_toggle(%__MODULE__{} = state, key, nil) do
+    Map.update!(state, key, &opposite/1)
+  end
+
+  defp do_toggle(%__MODULE__{} = state, :families, "" <> family) do
+    %{state | families: Map.update!(state.families, family, &opposite/1)}
   end
 
   def visible?(%__MODULE__{} = visibility, key) do
@@ -55,31 +69,4 @@ defmodule BirdSongWeb.QuizLive.Visibility do
 
   defp opposite(:hidden), do: :shown
   defp opposite(:shown), do: :hidden
-
-  defp update_in(%__MODULE__{} = struct, key, func) when is_atom(key) do
-    update_in(struct, [key], func)
-  end
-
-  defp update_in(val, [], func) when is_function(func) do
-    func.(val)
-  end
-
-  defp update_in(%{} = map, [key | rest], func) do
-    Map.update!(map, key, &update_in(&1, rest, func))
-  end
-
-  defp update_in(keyword, [key | rest], func) when is_list(keyword) do
-    Keyword.update!(keyword, key, &update_in(&1, rest, func))
-  end
-
-  defp update_in(not_map_or_keyword, [next_key | _], func) when is_function(func) do
-    raise ArgumentError.exception(
-            message: """
-            Expected first argument to be a keyword or map containing key #{inspect(next_key)}, but got:
-
-
-            #{inspect(not_map_or_keyword)}
-            """
-          )
-  end
 end

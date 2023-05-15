@@ -1,9 +1,9 @@
-defmodule BirdSongWeb.Components.Filters.BySpeciesTest do
+defmodule BirdSongWeb.Components.Filters.ByFamilyTest do
   use BirdSongWeb.LiveCase, async: true
   use BirdSong.MockDataAttributes
 
   alias BirdSongWeb.{
-    Components.Filters.BySpecies,
+    Components.Filters.ByFamily,
     QuizLive.Visibility
   }
 
@@ -11,10 +11,10 @@ defmodule BirdSongWeb.Components.Filters.BySpeciesTest do
     test "unselected" do
       html =
         render_component(
-          BySpecies,
-          id: "by_species",
-          visibility: %Visibility{by_species: :shown},
-          by_species: %{
+          ByFamily,
+          id: "by_family",
+          visibility: %Visibility{by_family: :shown},
+          by_family: %{
             "Backyard Birds" => [
               %{selected?: false, bird: @carolina_wren},
               %{selected?: false, bird: @eastern_bluebird}
@@ -38,15 +38,15 @@ defmodule BirdSongWeb.Components.Filters.BySpeciesTest do
     test "selected" do
       html =
         render_component(
-          BySpecies,
-          id: "by_species",
-          by_species: %{
+          ByFamily,
+          id: "by_family",
+          by_family: %{
             "Backyard Birds" => [
               %{selected?: true, bird: @carolina_wren},
               %{selected?: false, bird: @eastern_bluebird}
             ]
           },
-          visibility: %Visibility{by_species: :shown}
+          visibility: %Visibility{by_family: :shown}
         )
 
       assert [bluebird, wren] = Floki.find(html, ".btn")

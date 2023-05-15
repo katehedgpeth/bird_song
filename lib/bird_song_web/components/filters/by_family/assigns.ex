@@ -1,9 +1,9 @@
-defmodule BirdSongWeb.Components.Filters.BySpecies.Assigns do
+defmodule BirdSongWeb.Components.Filters.ByFamily.Assigns do
   alias Phoenix.LiveView
 
   alias BirdSongWeb.Components.{
     Filters,
-    Filters.BySpecies
+    Filters.ByFamily
   }
 
   alias BirdSong.{
@@ -14,7 +14,7 @@ defmodule BirdSongWeb.Components.Filters.BySpecies.Assigns do
     Services.Ebird
   }
 
-  @assign_key :by_species
+  @assign_key :by_family
 
   @no_birds_error "
   Sorry, there do not appear to be any known birds in that region.
@@ -32,7 +32,7 @@ defmodule BirdSongWeb.Components.Filters.BySpecies.Assigns do
   ##
   #########################################################
 
-  @spec build_selected(Filters.t(), Quiz.t()) :: BySpecies.t() | {:error, String.t()}
+  @spec build_selected(Filters.t(), Quiz.t()) :: ByFamily.t() | {:error, String.t()}
   def build_selected(
         %{services: _} = assigns,
         %Quiz{} = quiz
@@ -79,8 +79,8 @@ defmodule BirdSongWeb.Components.Filters.BySpecies.Assigns do
     {category, Enum.map(birds, &%{bird: &1, selected?: false})}
   end
 
-  @spec build_for_region(BySpecies.t() | nil, Services.t(), Quiz.t()) ::
-          {:ok, BySpecies.t()} | {:error, :no_birds_for_region} | Helpers.api_error()
+  @spec build_for_region(ByFamily.t() | nil, Services.t(), Quiz.t()) ::
+          {:ok, ByFamily.t()} | {:error, :no_birds_for_region} | Helpers.api_error()
   defp build_for_region(%{} = existing_dict, %Services{}, %Quiz{}) do
     {:ok, existing_dict}
   end
@@ -154,20 +154,20 @@ defmodule BirdSongWeb.Components.Filters.BySpecies.Assigns do
     Enum.map(birds, &%{&1 | selected?: not selected?})
   end
 
-  defp update_selected(%{} = by_species, %Quiz{birds: []}) do
-    Map.new(by_species, &deselect_all_in_category/1)
+  defp update_selected(%{} = by_family, %Quiz{birds: []}) do
+    Map.new(by_family, &deselect_all_in_category/1)
   end
 
-  defp update_selected(%{} = by_species, %Quiz{} = quiz) do
+  defp update_selected(%{} = by_family, %Quiz{} = quiz) do
     quiz.birds
     |> Enum.map(&bird_to_params/1)
-    |> Enum.reduce(by_species, &update_selected(&2, &1))
+    |> Enum.reduce(by_family, &update_selected(&2, &1))
   end
 
   defp update_selected(
-         %{} = by_species,
+         %{} = by_family,
          %{"category" => category} = params
        ) do
-    Map.update!(by_species, category, &update_category_birds(&1, params))
+    Map.update!(by_family, category, &update_category_birds(&1, params))
   end
 end

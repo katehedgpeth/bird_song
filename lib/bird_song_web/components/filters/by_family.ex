@@ -1,4 +1,4 @@
-defmodule BirdSongWeb.Components.Filters.BySpecies do
+defmodule BirdSongWeb.Components.Filters.ByFamily do
   use Phoenix.LiveComponent
 
   alias BirdSong.{
@@ -27,8 +27,8 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
   defdelegate build_selected(assigns, quiz), to: __MODULE__.Assigns
   defdelegate get_selected_birds(socket), to: __MODULE__.Assigns
 
-  defp collapse_state(%Visibility{by_species: :hidden}), do: "collapse-close"
-  defp collapse_state(%Visibility{by_species: :shown}), do: "collapse-open"
+  defp collapse_state(%Visibility{by_family: :hidden}), do: "collapse-close"
+  defp collapse_state(%Visibility{by_family: :shown}), do: "collapse-open"
 
   @impl Phoenix.LiveComponent
   def render(%{} = assigns) do
@@ -43,15 +43,15 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
         {[
           phx: [
             click: "toggle_visibility",
-            value: [element: "by_species"]
+            value: [element: "by_family"]
           ]
         ]}
       >
-        <h3>Select specific species (optional):</h3>
+        <h3>Select specific birds or families (optional):</h3>
       </div>
 
-      <%= if @visibility.by_species === :shown do %>
-        <.species_groups by_species={@by_species} />
+      <%= if @visibility.by_family === :shown do %>
+        <.family_groups by_family={@by_family} />
       <% end %>
     </div>
     """
@@ -106,21 +106,21 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
     ]
   end
 
-  defp species_group(%{birds: _, category_name: _} = assigns) do
+  defp family_group(%{birds: _, category_name: _} = assigns) do
     ~H"""
     <div>
-      <.species_filter_title birds={@birds} category_name={@category_name} />
+      <.family_filter_title birds={@birds} category_name={@category_name} />
       <.bird_filter_buttons birds={@birds} category_name={@category_name} />
     </div>
     """
   end
 
-  defp species_groups(%{} = assigns) do
+  defp family_groups(%{} = assigns) do
     ~H"""
       <div class="collapse-content">
         <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          <%= for {category_name, birds} <- Enum.sort_by(@by_species, &elem(&1, 0)) do %>
-            <.species_group
+          <%= for {category_name, birds} <- Enum.sort_by(@by_family, &elem(&1, 0)) do %>
+            <.family_group
               category_name={category_name}
               birds={birds}
             />
@@ -130,17 +130,17 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
     """
   end
 
-  defp species_filter_checkbox_attrs(%{true => _, false => _}), do: [indeterminate: true]
-  defp species_filter_checkbox_attrs(%{true => _}), do: [checked: true]
-  defp species_filter_checkbox_attrs(%{false => _}), do: []
+  defp family_filter_checkbox_attrs(%{true => _, false => _}), do: [indeterminate: true]
+  defp family_filter_checkbox_attrs(%{true => _}), do: [checked: true]
+  defp family_filter_checkbox_attrs(%{false => _}), do: []
 
-  defp species_filter_checkbox(%{category_name: _name, birds: _birds} = assigns) do
+  defp family_filter_checkbox(%{category_name: _name, birds: _birds} = assigns) do
     group_state = bird_group_selection_state(assigns[:birds])
 
     assigns =
       Map.merge(assigns, %{
-        checkbox_attr: species_filter_checkbox_attrs(group_state),
-        id: "species-filter-" <> assigns[:category_name],
+        checkbox_attr: family_filter_checkbox_attrs(group_state),
+        id: "family-filter-" <> assigns[:category_name],
         on_click: on_click_attrs_for_category("include?", assigns[:category_name]),
         text:
           case group_state do
@@ -168,14 +168,14 @@ defmodule BirdSongWeb.Components.Filters.BySpecies do
     """
   end
 
-  defp species_filter_title(%{birds: _, category_name: _} = assigns) do
+  defp family_filter_title(%{birds: _, category_name: _} = assigns) do
     ~H"""
     <div>
       <div class="divider my-0.5"></div>
       <div class="flex justify-between">
         <%= @category_name %>
         <%= unless length(assigns[:birds]) === 1 do %>
-          <.species_filter_checkbox birds={@birds} category_name={@category_name} />
+          <.family_filter_checkbox birds={@birds} category_name={@category_name} />
         <% end %>
       </div>
     </div>

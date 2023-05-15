@@ -65,7 +65,7 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
       assert_receive {:region_selected, %BirdSong.Region{code: "US-NC-067"}}
       assert_receive {:end_request, %{module: Ebird.RegionSpeciesCodes}}, 1_000
-      assert has_element?(view, "#filter-by-species")
+      assert has_element?(view, "#filter-by-family")
     end
 
     test "clicking filters sets birds to selected", %{view: view} = tags do
@@ -75,14 +75,14 @@ defmodule BirdSongWeb.Components.FiltersTest do
       click_region_suggestion(view, "US-NC-067")
 
       view
-      |> element(~s([phx-value-element="by_species"]))
+      |> element(~s([phx-value-element="by_family"]))
       |> render_click()
 
       view
       |> element(~s([phx-value-bird="Eastern Bluebird"]))
       |> render_click()
 
-      assert has_element?(view, "#filter-by-species")
+      assert has_element?(view, "#filter-by-family")
     end
   end
 
@@ -110,14 +110,15 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
     @tag expect: {200, "[]"}
     test "shows an error if API returns a list of 0 birds for a region", %{view: view} do
-      assert get_assigns(view)[:by_species] === nil
+      assigns = get_assigns(view)
+      assert Map.fetch(assigns, :by_family) === {:ok, nil}
       click_region_suggestion(view, "US-NC-067")
       assert_receive {:end_request, %{module: Ebird.RegionSpeciesCodes, response: response}}, 500
 
       assert %RequestThrottler.Response{response: {:ok, []}} = response
 
       assigns = get_assigns(view)
-      assert assigns[:by_species] === nil
+      assert assigns[:by_family] === nil
 
       assert assigns[:flash] === %{
                "error" =>

@@ -16,7 +16,7 @@ defmodule BirdSongWeb.Components.Filters do
   @type assigns() :: %{
           required(:services) => Services.t(),
           required(:region) => __MODULE__.Region.t(),
-          optional(:by_species) => __MODULE__.BySpecies.t()
+          optional(:by_family) => __MODULE__.ByFamily.t()
         }
 
   on_mount {BirdSong.PubSub, :subscribe}
@@ -33,7 +33,7 @@ defmodule BirdSongWeb.Components.Filters do
   end
 
   def handle_event("include?", params, socket) do
-    __MODULE__.BySpecies.handle_event("include?", params, socket)
+    __MODULE__.ByFamily.handle_event("include?", params, socket)
   end
 
   def handle_event("start", %{}, socket) do
@@ -56,13 +56,13 @@ defmodule BirdSongWeb.Components.Filters do
       ) do
     {:noreply,
      socket.assigns
-     |> __MODULE__.BySpecies.build_selected(%Quiz{region_code: region.code, birds: []})
+     |> __MODULE__.ByFamily.build_selected(%Quiz{region_code: region.code, birds: []})
      |> case do
        {:error, error} ->
          LiveView.put_flash(socket, :error, error)
 
-       %{} = by_species ->
-         LiveView.assign(socket, :by_species, by_species)
+       %{} = by_family ->
+         LiveView.assign(socket, :by_family, by_family)
      end}
   end
 
@@ -97,7 +97,7 @@ defmodule BirdSongWeb.Components.Filters do
   defp assign_defaults(%Socket{} = socket) do
     assign(socket, %{
       region: __MODULE__.Region.default_assigns(),
-      by_species: nil,
+      by_family: nil,
       visibility: %Visibility{}
     })
   end
@@ -105,24 +105,24 @@ defmodule BirdSongWeb.Components.Filters do
   defp capture_state(%Socket{} = socket) do
     [
       region_code: __MODULE__.Region.get_selected_code!(socket.assigns),
-      birds: __MODULE__.BySpecies.get_selected_birds(socket.assigns)
+      birds: __MODULE__.ByFamily.get_selected_birds(socket.assigns)
     ]
   end
 
   defp load_quiz(%Socket{} = socket, %Quiz{} = quiz) do
     assigns = %{
       region: __MODULE__.Region.load_from_quiz(quiz),
-      by_species: __MODULE__.BySpecies.build_selected(socket.assigns, quiz),
+      by_family: __MODULE__.ByFamily.build_selected(socket.assigns, quiz),
       visibility: %Visibility{}
     }
 
     case assigns do
-      %{by_species: {:error, error_text}} ->
+      %{by_family: {:error, error_text}} ->
         socket
         |> LiveView.put_flash(:error, error_text)
-        |> LiveView.assign(Map.drop(assigns, [:by_species]))
+        |> LiveView.assign(Map.drop(assigns, [:by_family]))
 
-      %{by_species: %{}} ->
+      %{by_family: %{}} ->
         LiveView.assign(socket, assigns)
     end
   end
@@ -176,14 +176,14 @@ defmodule BirdSongWeb.Components.Filters do
     """
   end
 
-  defp filters_after_region(%{by_species: %{}} = assigns) do
+  defp filters_after_region(%{by_family: %{}} = assigns) do
     ~H"""
     <div>
       <div class="divider my-0.5"></div>
       <.live_component
-        module={__MODULE__.BySpecies}
-        id="filter-by-species"
-        by_species={@by_species}
+        module={__MODULE__.ByFamily}
+        id="filter-by-family"
+        by_family={@by_family}
         visibility={@visibility}
       />
       <div class="divider my-0.5"></div>
