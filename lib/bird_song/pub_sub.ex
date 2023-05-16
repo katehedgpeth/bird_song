@@ -33,10 +33,8 @@ defmodule BirdSong.PubSub do
     Phoenix.LiveView.assign(socket, :session_id, session_id)
   end
 
-  if Mix.env() === :test do
-    defp assign_session_id(%Socket{} = socket, %{}) do
-      Phoenix.LiveView.assign(socket, :session_id, Ecto.UUID.generate())
-    end
+  defp assign_session_id(%Socket{} = socket, %{}) do
+    Phoenix.LiveView.assign(socket, :session_id, Phoenix.Controller.get_csrf_token())
   end
 
   defp session_topic(%Socket{assigns: %{session_id: session_id}}) do
