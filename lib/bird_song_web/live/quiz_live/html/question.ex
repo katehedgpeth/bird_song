@@ -24,9 +24,9 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
       <div>
         <%= QuizLive.HTML.page_title("What bird do you hear?") %>
         <div class="flex gap-10 flex-col">
-          <.play_audio current={@current} asset_cdn={@asset_cdn} />
           <div class="flex flex-wrap justify-center gap-5">
             <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
+            <.play_audio current={@current} asset_cdn={@asset_cdn} />
             <button phx-click="change" phx-value-element="recording" class="btn btn-outline">Change recording</button>
           </div>
           <div class="bg-slate-100 p-10 w-full">
@@ -109,7 +109,7 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
 
   defp play_audio(%{current: %Current{}, asset_cdn: _} = assigns) do
     ~H"""
-      <audio autoplay={true} src={audio_src(@current.recording, @asset_cdn)} />
+      <audio autoplay={true} src={audio_src(@current.recording, @asset_cdn)} controls={true} />
     """
   end
 
@@ -128,7 +128,12 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   end
 
   defp possible_bird_button(%Bird{common_name: name, species_code: code}) do
-    %GroupButton{text: name, value: code, phx_click: "", phx_value: [bird: name]}
+    %GroupButton{
+      text: name,
+      value: code,
+      phx_click: "",
+      phx_value: [bird: name]
+    }
   end
 
   defp rendering_module(%MacaulayLibrary.Recording{}), do: QuizLive.HTML.Recordings.Ebird
