@@ -5,7 +5,10 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
   import Phoenix.LiveViewTest
 
+  alias BirdSong.Family
+
   alias BirdSong.{
+    Bird,
     MockEbirdServer,
     Services.Ebird,
     Services.RequestThrottler
@@ -15,10 +18,16 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
   @endpoint BirdSongWeb.Endpoint
 
+  @by_family_filter_selector ~s([phx-value-element="by_family"])
+
+  setup [:seed_from_mock_taxonomy]
+
   setup %{test: test} do
     session_id = Ecto.UUID.generate()
     conn = Phoenix.ConnTest.build_conn()
     Phoenix.PubSub.subscribe(BirdSong.PubSub, "session:" <> session_id)
+
+    assert {:ok, bird} = Bird.get_by_sci_name(@eastern_bluebird.sci_name)
 
     assert {:ok, view, _html} =
              live_isolated(conn, Filters,
@@ -28,12 +37,10 @@ defmodule BirdSongWeb.Components.FiltersTest do
                }
              )
 
-    {:ok, view: view}
+    {:ok, bird: bird, view: view}
   end
 
   describe "region input" do
-    setup [:seed_from_mock_taxonomy]
-
     test "does not show options if entry is less than 3 letters", %{view: view} do
       type_region(view, "fo")
 
@@ -50,7 +57,7 @@ defmodule BirdSongWeb.Components.FiltersTest do
     end
 
     @tag listen_to: [{Ebird, :RegionSpeciesCodes}]
-    test "shows filter buttons after user selects a region", %{view: view} = tags do
+    test "shows filter buttons after user selects a region", %{view: view, bird: bird} = tags do
       MockEbirdServer.setup(tags)
 
       assert %Services{} =
@@ -65,24 +72,52 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
       assert_receive {:region_selected, %BirdSong.Region{code: "US-NC-067"}}
       assert_receive {:end_request, %{module: Ebird.RegionSpeciesCodes}}, 1_000
-      assert has_element?(view, "#filter-by-family")
+      assert has_element?(view, "h3", "Select specific birds or families")
+      assert has_element?(view, family_group_selector(bird)) === false
+      assert has_element?(view, bird_button_selector(bird)) === false
     end
 
-    test "clicking filters sets birds to selected", %{view: view} = tags do
+    test "clicking filters sets birds to selected", %{view: view, bird: bird} = tags do
       MockEbirdServer.setup(tags)
 
       type_region(view, "for")
       click_region_suggestion(view, "US-NC-067")
 
-      view
-      |> element(~s([phx-value-element="by_family"]))
-      |> render_click()
+      assert has_element?(view, "h3", "Select specific birds or families")
+      refute has_element?(view, family_group_selector(bird))
+      refute has_element?(view, bird_button_selector(bird))
 
       view
-      |> element(~s([phx-value-bird="Eastern Bluebird"]))
+      |> element(@by_family_filter_selector)
       |> render_click()
 
-      assert has_element?(view, "#filter-by-family")
+      assert has_element?(view, family_group_selector(bird))
+      refute has_element?(view, bird_button_selector(bird))
+
+      view
+      |> element(family_group_selector(bird))
+      |> render_click()
+
+      assert has_element?(view, bird_button_selector(bird))
+
+      html =
+        view
+        |> element(bird_button_selector(bird))
+        |> render_click()
+
+      assert html
+             |> Floki.find(bird_button_selector(bird))
+             |> Floki.attribute("aria-checked") === ["aria-checked"]
+
+      assert [swainsons_thrush] =
+               Bird.get_many_by_common_name(["Swainson's Thrush"])
+               |> BirdSong.Repo.preload(:family)
+
+      assert Bird.family_name(swainsons_thrush) === Bird.family_name(bird)
+
+      assert html
+             |> Floki.find(bird_button_selector(swainsons_thrush))
+             |> Floki.attribute("aria-checked") === []
     end
   end
 
@@ -122,7 +157,7 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
       assert assigns[:flash] === %{
                "error" =>
-                 "\n  Sorry, there do not appear to be any known birds in that region.\n  " <>
+                 "\n  There do not appear to be any known birds in that region.\n  " <>
                    "Please choose a different or broader region.\n  "
              }
     end
@@ -159,5 +194,13 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
   defp get_assigns(view) do
     GenServer.call(view.pid, :socket).assigns
+  end
+
+  defp family_group_selector(%Bird{family: %Family{common_name: name}}) do
+    ~s([phx-value-family="#{name}"][phx-value-element="families"])
+  end
+
+  defp bird_button_selector(%Bird{common_name: name}) do
+    ~s([phx-value-bird="#{name}"])
   end
 end

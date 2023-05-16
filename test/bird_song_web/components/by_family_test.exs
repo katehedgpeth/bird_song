@@ -13,13 +13,14 @@ defmodule BirdSongWeb.Components.Filters.ByFamilyTest do
         render_component(
           ByFamily,
           id: "by_family",
-          visibility: %Visibility{by_family: :shown},
+          visibility: %Visibility{by_family: :shown, families: %{"Backyard Birds" => :shown}},
           by_family: %{
             "Backyard Birds" => [
-              %{selected?: false, bird: @carolina_wren},
-              %{selected?: false, bird: @eastern_bluebird}
+              %{selected?: false, bird: @carolina_wren, disabled?: false},
+              %{selected?: false, bird: @eastern_bluebird, disabled?: false}
             ]
-          }
+          },
+          use_recent_observations?: false
         )
 
       assert [bluebird, wren] = Floki.find(html, ".btn")
@@ -42,11 +43,12 @@ defmodule BirdSongWeb.Components.Filters.ByFamilyTest do
           id: "by_family",
           by_family: %{
             "Backyard Birds" => [
-              %{selected?: true, bird: @carolina_wren},
-              %{selected?: false, bird: @eastern_bluebird}
+              %{selected?: true, bird: @carolina_wren, disabled?: false},
+              %{selected?: false, bird: @eastern_bluebird, disabled?: false}
             ]
           },
-          visibility: %Visibility{by_family: :shown}
+          use_recent_observations?: false,
+          visibility: %Visibility{by_family: :shown, families: %{"Backyard Birds" => :shown}}
         )
 
       assert [bluebird, wren] = Floki.find(html, ".btn")

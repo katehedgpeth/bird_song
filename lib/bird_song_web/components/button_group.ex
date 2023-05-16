@@ -2,10 +2,11 @@ defmodule BirdSongWeb.Components.GroupButton do
   use Phoenix.LiveComponent
 
   @enforce_keys [:text, :value, :phx_click, :phx_value]
-  defstruct [:color, :phx_click, :phx_value, :text, :value, selected?: false]
+  defstruct [:color, :phx_click, :phx_value, :text, :value, disabled?: false, selected?: false]
 
   @type t() :: %__MODULE__{
           color: String.t(),
+          disabled?: boolean(),
           phx_click: String.t(),
           phx_value: keyword(String.t()),
           selected?: boolean(),
@@ -18,10 +19,12 @@ defmodule BirdSongWeb.Components.GroupButton do
     <div id={@id} class={class(@button)}>
       <button
         type="button"
+        disabled={@button.disabled?}
         {[
           aria: [
             role: "checkbox",
-            checked: @button.selected?
+            checked: @button.selected?,
+            disabled: @button.disabled?
           ],
           phx: [
             click: @button.phx_click,
@@ -38,14 +41,17 @@ defmodule BirdSongWeb.Components.GroupButton do
   defp class(%__MODULE__{} = button) do
     button
     |> Map.from_struct()
-    |> Enum.reduce(["btn", "btn-xs"], &class/2)
+    |> Enum.reduce(["btn", "btn-xs"], &class(&1, button, &2))
   end
 
-  defp class({:selected?, false}, css), do: ["btn-outline" | css]
+  defp class({:selected?, false}, %__MODULE__{}, css), do: ["btn-outline" | css]
 
-  defp class({:color, "" <> color}, css), do: ["btn-#{color}" | css]
+  defp class({:color, "" <> color}, %__MODULE__{disabled?: false}, css),
+    do: ["btn-#{color}" | css]
 
-  defp class({_prop, _val}, css), do: css
+  defp class({:disabled?, true}, %__MODULE__{}, css), do: ["btn-disabled" | css]
+
+  defp class({_prop, _val}, %__MODULE__{}, css), do: css
 end
 
 defmodule BirdSongWeb.Components.ButtonGroup do

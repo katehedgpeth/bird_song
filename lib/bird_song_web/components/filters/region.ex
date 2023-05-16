@@ -28,7 +28,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
   end
 
   @spec load_from_quiz(Quiz.t()) :: t()
-  def load_from_quiz(%Quiz{region_code: "" <> region_code}) do
+  def load_from_quiz(%Quiz{region_code: region_code}) do
     %__MODULE__{
       selected: BirdSong.Region.from_code!(region_code)
     }

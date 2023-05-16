@@ -12,10 +12,7 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
     QuizLive.Visibility
   }
 
-  @type bird_state() :: %{
-          bird: Bird.t(),
-          selected?: boolean()
-        }
+  @type bird_state() :: Assigns.bird_state()
 
   @type family_name() :: String.t()
 
@@ -24,9 +21,10 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
   @impl Phoenix.LiveComponent
   defdelegate handle_event(name, params, socket), to: __MODULE__.Assigns
 
-  @spec build_selected(Map.t(), Quiz.t()) :: t() | {:error, String.t()}
-  defdelegate build_selected(assigns, quiz), to: __MODULE__.Assigns
-  defdelegate get_selected_birds(socket), to: __MODULE__.Assigns
+  @spec build_dict([bird_state()], [Bird.t()]) :: t() | {:error, String.t()}
+  defdelegate build_dict(all, selected), to: __MODULE__.Assigns
+  defdelegate get_selected_birds(family_dict), to: __MODULE__.Assigns
+  defdelegate get_all_birds(family_dict), to: __MODULE__.Assigns
 
   @impl Phoenix.LiveComponent
   def render(%{} = assigns) do
@@ -41,10 +39,11 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
             element: "by_family",
             icon_type: :caret,
             title: by_family_title(%{}),
-            body:
-              assigns
-              |> Map.take([:by_family, :visibility])
-              |> family_groups()
+            body: family_groups(%{
+              by_family: @by_family,
+              visibility: @visibility,
+              use_recent_observations?: @use_recent_observations?
+            })
           )
         }
       />
@@ -54,16 +53,20 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
 
   defp by_family_title(%{} = assigns) do
     ~H"""
-      <h3>Select specific birds or families (optional)</h3>
+      <h3 class="py-2">Select specific birds or families (optional)</h3>
     """
   end
 
-  defp bird_filter_button(%{bird: %Bird{common_name: name}, selected?: selected?}, "" <> family) do
+  defp bird_filter_button(
+         %{bird: %Bird{common_name: name}, disabled?: disabled?, selected?: selected?},
+         "" <> family
+       ) do
     %GroupButton{
       color: "primary",
       phx_click: "include?",
       phx_value: [bird: name, family: family],
       selected?: selected?,
+      disabled?: disabled?,
       text: name,
       value: name
     }
@@ -90,22 +93,30 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
 
   defp family_group(%{birds: _, family_name: _, visibility: %Visibility{}} = assigns) do
     ~H"""
-      <div class="border-b-1 border-b-black-200 last:border-b-0">
+      <div class={
+        [
+          "border-b-1",
+          "border-b-black-200",
+          "last:border-b-0"
+          | disabled_group_classes(@birds)
+        ]
+      }>
         <.live_component
           module={Collapse}
           id={"family-group-" <> @family_name}
           assigns={struct(Collapse, [
-            state: @visibility.families[@family_name],
+            state: Map.fetch!(@visibility.families, @family_name),
             element: "families",
             icon_type: :caret,
             phx_value: [ family: @family_name ],
-            title:
-              assigns
-              |> Map.take([:birds, :family_name])
-              |> family_filter_title(),
-            body: assigns
-            |> Map.take([:birds, :family_name])
-            |> bird_filter_buttons()
+            title: family_filter_title(%{
+                birds: @birds,
+                family_name: @family_name
+              }),
+            body: bird_filter_buttons(%{
+              birds: @birds,
+              family_name: @family_name,
+            })
           ])}
       />
       </div>
@@ -114,14 +125,17 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
 
   defp family_groups(%{} = assigns) do
     ~H"""
-      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        <%= for {family_name, birds} <- Enum.sort_by(@by_family, &elem(&1, 0)) do %>
-          <.family_group
-            family_name={family_name}
-            birds={birds}
-            visibility={@visibility}
-          />
-        <% end %>
+      <div>
+        <.filtered_species_note use_recent_observations?={@use_recent_observations?} />
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <%= for {family_name, birds} <- Enum.sort_by(@by_family, &elem(&1, 0)) do %>
+            <.family_group
+              family_name={family_name}
+              birds={birds}
+              visibility={@visibility}
+            />
+          <% end %>
+        </div>
       </div>
     """
   end
@@ -169,5 +183,22 @@ defmodule BirdSongWeb.Components.Filters.ByFamily do
       </div>
     </div>
     """
+  end
+
+  defp filtered_species_note(%{} = assigns) do
+    ~H"""
+      <%= if @use_recent_observations? === true do %>
+        <p class="text-xs text-gray-600 italic">
+          * Families and species that have not been observed in the last 30 days are grayed out.
+        </p>
+      <% end %>
+    """
+  end
+
+  defp disabled_group_classes([%{bird: _} | _] = birds) do
+    case Enum.all?(birds, & &1.disabled?) do
+      true -> ["text-gray-300"]
+      false -> []
+    end
   end
 end

@@ -14,6 +14,10 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
   @spec get_codes(BirdSong.Region.t(), Worker.t()) ::
           {:ok, __MODULE__.Response.t()} | Helpers.api_error()
   def get_codes(%BirdSong.Region{code: region_code}, worker) do
+    get_codes(region_code, worker)
+  end
+
+  def get_codes("" <> region_code, worker) do
     get({:region_species_codes, region_code}, worker)
   end
 

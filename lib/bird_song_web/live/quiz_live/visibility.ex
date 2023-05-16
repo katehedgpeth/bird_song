@@ -65,7 +65,7 @@ defmodule BirdSongWeb.QuizLive.Visibility do
   end
 
   defp add_family("" <> family_name, %__MODULE__{} = state) do
-    Map.update!(state, :families, &Map.put(&1, family_name, :hidden))
+    Map.update!(state, :families, &Map.put_new(&1, family_name, :hidden))
   end
 
   #########################################################

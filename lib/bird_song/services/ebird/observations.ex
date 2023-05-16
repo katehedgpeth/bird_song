@@ -16,8 +16,8 @@ defmodule BirdSong.Services.Ebird.Observations do
 
   @spec get_recent_observations(String.t(), Worker.t()) ::
           Helpers.api_response(Response.t())
-  def get_recent_observations("" <> region, server) do
-    get({:recent_observations, region}, server)
+  def get_recent_observations("" <> region, worker) do
+    get({:recent_observations, region}, worker)
   end
 
   def handle_info(:create_data_folder, state) do

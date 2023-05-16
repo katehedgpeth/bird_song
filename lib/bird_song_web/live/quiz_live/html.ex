@@ -9,7 +9,7 @@ defmodule BirdSongWeb.QuizLive.HTML do
 
   def render(assigns) do
     ~H"""
-    <div class="flex items-center flex-col">
+    <div class="flex items-center flex-col w-full">
       <%= render_flash(assigns[:flash]) %>
 
       <.live_component

@@ -5,6 +5,8 @@ defmodule BirdSong.Family do
 
   @keys [:code, :common_name, :order, :sci_name]
 
+  @type name() :: String.t()
+
   schema "families" do
     field :common_name, :string
     field :code, :string

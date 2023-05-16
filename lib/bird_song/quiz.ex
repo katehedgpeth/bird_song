@@ -8,7 +8,8 @@ defmodule BirdSong.Quiz do
           correct_answers: integer(),
           incorrect_answers: integer(),
           quiz_length: integer(),
-          region_code: String.t() | nil
+          region_code: String.t(),
+          use_recent_observations?: boolean()
         }
 
   schema "quizzes" do
@@ -17,6 +18,7 @@ defmodule BirdSong.Quiz do
     field :quiz_length, :integer, default: 10
     field :region_code, :string
     field :session_id, :string
+    field :use_recent_observations?, :boolean
     many_to_many :birds, BirdSong.Bird, join_through: "birds_quizzes"
 
     timestamps()
