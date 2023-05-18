@@ -20,7 +20,7 @@ defmodule BirdSongWeb.QuizLive.Assign do
     :current,
     :quiz,
     :services,
-    :session_id,
+    :user,
     asset_cdn: @asset_cdn,
     visibility: %Visibility{}
   ]

@@ -3,95 +3,89 @@ defmodule BirdSong.QuizTest do
   import BirdSong.TestSetup
 
   alias Ecto.Changeset
+  alias BirdSong.AccountsFixtures
 
   alias BirdSong.{
+    Accounts,
     Bird,
     Quiz
   }
 
+  @cant_be_blank_error {"can't be blank", validation: :required}
+
   setup [:seed_from_mock_taxonomy]
 
-  setup do
+  setup tags do
     {:ok,
+     user: AccountsFixtures.user_fixture(),
      birds:
-       Bird.get_many_by_common_name([
-         "Eastern Bluebird",
-         "Carolina Wren",
-         "Common Grackle"
-       ])}
+       case tags do
+         %{seed_birds?: false} ->
+           []
+
+         %{} ->
+           Bird.get_many_by_common_name([
+             "Eastern Bluebird",
+             "Carolina Wren",
+             "Common Grackle"
+           ])
+       end}
   end
 
-  test "changeset returns a changeset without errors when data is valid", %{birds: birds} do
-    required = [:region_code, :quiz_length, :session_id, :birds]
+  describe "changeset/2" do
+    test "returns a changeset with errors when region_code is missing", %{
+      birds: birds,
+      user: user
+    } do
+      changeset = Quiz.changeset(user, %{birds: birds})
+      assert %Changeset{} = changeset
 
-    assert %Changeset{
-             data: %Quiz{},
-             errors: errors,
-             params: %{},
-             required: ^required,
-             valid?: false
-           } = Quiz.changeset(%Quiz{}, %{})
+      assert changeset.required === [:region_code, :quiz_length, :birds, :user]
+      assert %{"birds" => ^birds} = changeset.params
+      assert changeset.errors === [region_code: @cant_be_blank_error]
+    end
 
-    not_blank = {"can't be blank", validation: :required}
-    assert errors === [region_code: not_blank, session_id: not_blank, birds: not_blank]
+    test "returns a changeset with errors when birds is missing", %{user: user} do
+      changeset = Quiz.changeset(user, %{region_code: "US"})
 
-    assert %Changeset{
-             changes: %{region_code: "US"},
-             data: data,
-             errors: [session_id: ^not_blank, birds: ^not_blank],
-             params: params,
-             required: ^required,
-             valid?: false
-           } = Quiz.changeset(%Quiz{}, %{region_code: "US"})
+      assert %Changeset{} = changeset
+      assert changeset.params === %{"region_code" => "US"}
 
-    assert params === %{"region_code" => "US"}
-    assert %Quiz{} = data
+      assert changeset.errors === [birds: {"is invalid", type: {:array, :map}}]
+      assert changeset.data === %Quiz{}
+    end
 
-    session_id = Ecto.UUID.generate()
+    test "returns a changeset with errors when birds is an empty array", %{user: user} do
+      changeset = Quiz.changeset(user, %{region_code: "US-NC", birds: []})
 
-    assert %Changeset{
-             changes: %{
-               region_code: "US-NC"
-             },
-             data: %Quiz{},
-             errors: [],
-             params: %{"region_code" => "US-NC"},
-             required: ^required,
-             valid?: true
-           } =
-             Quiz.changeset(
-               %Quiz{
-                 region_code: "US",
-                 birds: birds,
-                 session_id: session_id
-               },
-               %{
-                 region_code: "US-NC"
-               }
-             )
-  end
+      assert %Changeset{} = changeset
 
-  describe "create!/1" do
-    test "inserts to DB when data is valid", %{birds: birds} do
-      assert length(birds) === 3
+      refute changeset.valid?
 
-      assert %Quiz{id: id} =
-               Quiz.create!(
-                 region_code: "US-NC-067",
-                 birds: birds,
-                 session_id: Ecto.UUID.generate()
-               )
+      assert %{birds: [], region_code: "US-NC", user: %Changeset{data: %Accounts.User{}}} =
+               changeset.changes
 
-      assert is_integer(id)
+      assert changeset.errors === [
+               birds:
+                 {"should have at least %{count} item(s)",
+                  count: 1, validation: :length, kind: :min, type: :list}
+             ]
+
+      assert changeset.params === %{"birds" => [], "region_code" => "US-NC"}
+    end
+
+    test "returns a valid changeset when all data is valid", %{user: user, birds: birds} do
+      changeset = Quiz.changeset(user, %{region_code: "US-NC", birds: birds})
+      assert %Changeset{} = changeset
+      assert changeset.valid?
+      assert changeset.errors === []
     end
   end
 
-  describe "get_*_by_session_id/1" do
+  describe "get_*_by_user_id/1" do
     setup tags do
       assert %{birds: birds} = tags
       assert [bluebird, wren, grackle] = birds
-
-      session_id = Ecto.UUID.generate()
 
       two_minutes_ago =
         DateTime.now!("Etc/UTC")
@@ -99,46 +93,55 @@ defmodule BirdSong.QuizTest do
         |> DateTime.to_naive()
         |> NaiveDateTime.truncate(:second)
 
-      first =
-        Quiz.create!(
-          region_code: "US-NC-067",
-          birds: [bluebird, wren],
-          session_id: session_id,
-          inserted_at: two_minutes_ago,
-          updated_at: two_minutes_ago
-        )
-
-      second =
-        Quiz.create!(
-          region_code: "US-NC-067",
-          birds: [wren, grackle],
-          session_id: session_id
-        )
-
-      {:ok, created: [first, second], session_id: session_id}
+      {:ok,
+       params: [
+         %{
+           region_code: "US-NC-067",
+           birds: [bluebird, wren],
+           inserted_at: two_minutes_ago,
+           updated_at: two_minutes_ago
+         },
+         %{
+           region_code: "US-NC-067",
+           birds: [wren, grackle]
+         }
+       ]}
     end
 
-    test "get_all_by_session_id/1 returns a list of quizzes when they exist", %{
-      created: [first, second],
-      session_id: session_id
-    } do
-      assert [first_result, second_result] = Quiz.get_all_by_session_id(session_id)
+    test "get_all_for_user/1 returns a list of quizzes when they exist", tags do
+      assert {:ok, %{quiz_1: first, quiz_2: second}} = insert_multiple(tags)
+
+      assert [first_result, second_result] = Quiz.get_all_for_user(tags.user)
       assert first.id === first_result.id
       assert second.id === second_result.id
     end
 
-    test "get_latest_by_session_id/1 returns the most recently created quiz for a session", %{
-      created: [first, second],
-      session_id: session_id
+    test "get_current_for_user/1 uses the user's current_quiz_id value", %{
+      params: [_first, second],
+      user: user
     } do
-      assert NaiveDateTime.compare(first.inserted_at, second.inserted_at) === :lt
-      assert %Quiz{id: id} = Quiz.get_latest_by_session_id(session_id)
-      assert id === second.id
+      assert %{quiz: quiz, user: user} = Accounts.update_current_quiz!(user, second)
+      assert user.current_quiz_id === quiz.id
+      assert %Quiz{id: id} = Quiz.get_current_for_user!(user)
+      assert id === quiz.id
     end
 
-    test "get_latest_by_session_id/1 returns nil if there are no quizzes for the session", %{} do
-      session_id = Ecto.UUID.generate()
-      assert Quiz.get_latest_by_session_id(session_id) === nil
+    test "get_latest_by_user_id/1 returns nil if a current quiz has not been assigned", %{
+      user: user
+    } do
+      assert user.current_quiz_id === nil
+      assert Quiz.get_current_for_user!(user) === nil
     end
+  end
+
+  defp insert_multiple(%{params: params, user: user}) do
+    params
+    |> Enum.with_index(1)
+    |> Enum.reduce(Ecto.Multi.new(), &do_insert_multiple(&1, user, &2))
+    |> BirdSong.Repo.transaction()
+  end
+
+  defp do_insert_multiple({params, index}, user, multi) do
+    Ecto.Multi.insert(multi, :"quiz_#{index}", Quiz.changeset(user, params))
   end
 end

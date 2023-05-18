@@ -1,7 +1,28 @@
+defmodule BirdSong.Quiz.BadUserError do
+  use BirdSong.CustomError, [:quiz, :user]
+
+  def message_text(%__MODULE__{quiz: quiz, user: user}) do
+    """
+    Quiz does not belong to user!
+    quiz.user_id: #{quiz.user_id}
+    user_id: #{user.id}
+    """
+  end
+end
+
 defmodule BirdSong.Quiz do
   use Ecto.Schema
   import Ecto.Changeset
-  import Ecto.Query, only: [from: 2, last: 2]
+  import Ecto.Query, only: [from: 2]
+
+  alias BirdSong.Quiz.BadUserError
+
+  alias BirdSong.{
+    Accounts.User,
+    Bird,
+    Quiz.Answer,
+    Repo
+  }
 
   @type t() :: %__MODULE__{
           birds: [String.t()],
@@ -17,47 +38,57 @@ defmodule BirdSong.Quiz do
     field :incorrect_answers, :integer, default: 0
     field :quiz_length, :integer, default: 10
     field :region_code, :string
-    field :session_id, :string
     field :use_recent_observations?, :boolean
-    many_to_many :birds, BirdSong.Bird, join_through: "birds_quizzes"
+    belongs_to :user, User
+    has_many :answers, Answer
+    many_to_many :birds, Bird, join_through: "birds_quizzes", unique: true
 
     timestamps()
   end
 
-  @doc false
-  def changeset(%__MODULE__{} = quiz, %{} = changes) do
-    quiz
-    |> cast(changes, [
+  def multi_insert_quiz(%{user: user}, attrs) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.insert(:quiz, changeset(user, attrs))
+  end
+
+  def changeset(%User{} = user, %{} = attrs) do
+    %__MODULE__{}
+    |> cast(attrs, [
       :correct_answers,
       :incorrect_answers,
       :quiz_length,
       :region_code
     ])
-    |> cast_assoc(:birds, required: true)
-    |> validate_required([:region_code, :quiz_length, :session_id])
-  end
-
-  def create!(filters) do
-    filters
-    |> __struct__()
-    |> changeset(%{})
-    |> BirdSong.Repo.insert!()
+    |> put_assoc(:birds, attrs[:birds])
+    |> put_assoc(:user, user)
+    |> validate_required([:region_code, :quiz_length, :birds, :user])
+    |> validate_length(:birds, min: 1)
   end
 
   def default_changeset() do
     change(%__MODULE__{})
   end
 
-  def get_latest_by_session_id("" <> session_id) do
-    from(q in __MODULE__, where: q.session_id == ^session_id, preload: [birds: [:family, :order]])
-    |> last(:inserted_at)
-    |> BirdSong.Repo.one()
+  def get_current_for_user!(%User{current_quiz_id: nil}) do
+    nil
   end
 
-  def get_all_by_session_id("" <> session_id) do
+  def get_current_for_user!(%User{id: user_id, current_quiz_id: quiz_id} = user)
+      when is_integer(quiz_id) do
+    case BirdSong.Repo.get!(__MODULE__, quiz_id) do
+      %__MODULE__{user_id: ^user_id} = quiz ->
+        Repo.preload(quiz, birds: [:family])
+
+      %__MODULE__{} = quiz ->
+        raise BadUserError.exception(quiz: quiz, user: user)
+    end
+  end
+
+  def get_all_for_user(%User{id: user_id}) do
     BirdSong.Repo.all(
       from q in __MODULE__,
-        where: q.session_id == ^session_id
+        where: q.user_id == ^user_id,
+        preload: [:user]
     )
   end
 end

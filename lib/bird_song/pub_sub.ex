@@ -1,26 +1,32 @@
-defmodule BirdSong.PubSub.SessionIdError do
+defmodule BirdSong.PubSub.UserTokenError do
   use BirdSong.CustomError, [:assigns]
 
   def message_text(%__MODULE__{assigns: assigns}) do
     """
-    BirdSong.PubSub expects its subscribers to have a :session_id assign.
-    Call `on_mount {BirdSong.PubSub, :subscribe}` at the top of a LiveComponent.
+    BirdSong.PubSub.on_mount expects callers to have a :user assign, which should be
+    a map that contains a :token key
 
-    assigns:
-    #{Enum.map(assigns, &inspect/1) |> Enum.join("\n")}
+    received:
+    #{assigns |> Enum.map(&inspect/1) |> Enum.join("\n")}
     """
   end
 end
 
 defmodule BirdSong.PubSub do
-  alias BirdSong.PubSub.SessionIdError
+  alias BirdSong.{
+    PubSub.UserTokenError
+  }
+
   alias Phoenix.LiveView.Socket
   alias Phoenix.PubSub
 
-  def on_mount(:subscribe, _params_or_not_mounted_at_router, %{} = session, %Socket{} = socket) do
-    socket = assign_session_id(socket, session)
-    :ok = PubSub.subscribe(__MODULE__, session_topic(socket))
-    {:cont, socket}
+  def on_mount(
+        :subscribe,
+        _params_or_not_mounted_at_router,
+        %{},
+        %Socket{assigns: %{user: %{}}} = socket
+      ) do
+    {:cont, subscribe(socket)}
   end
 
   def broadcast(%Socket{} = socket, message) do
@@ -29,19 +35,16 @@ defmodule BirdSong.PubSub do
     socket
   end
 
-  defp assign_session_id(%Socket{} = socket, %{"_csrf_token" => "" <> session_id}) do
-    Phoenix.LiveView.assign(socket, :session_id, session_id)
+  def subscribe(%{} = socket_or_conn) do
+    :ok = PubSub.subscribe(__MODULE__, session_topic(socket_or_conn))
+    socket_or_conn
   end
 
-  defp assign_session_id(%Socket{} = socket, %{}) do
-    Phoenix.LiveView.assign(socket, :session_id, Phoenix.Controller.get_csrf_token())
+  defp session_topic(%{assigns: %{user: %{token: token}}}) do
+    "user:#{token}"
   end
 
-  defp session_topic(%Socket{assigns: %{session_id: session_id}}) do
-    "session:" <> session_id
-  end
-
-  defp session_topic(%Socket{} = socket) do
-    raise SessionIdError.exception(assigns: socket.assigns)
+  defp session_topic(%{assigns: assigns}) do
+    raise UserTokenError.exception(assigns: assigns)
   end
 end

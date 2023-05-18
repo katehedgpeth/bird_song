@@ -1,14 +1,9 @@
 defmodule BirdSong.TestHelpers do
   require Logger
 
-  alias BirdSong.Services.MacaulayLibrary
-
   alias BirdSong.{
     Bird,
-    Data.Scraper.BadResponseError,
-    MockJsScraper,
     Services,
-    Services.MacaulayLibrary,
     Services.Service
   }
 
@@ -114,13 +109,6 @@ defmodule BirdSong.TestHelpers do
     )
 
     socket
-  end
-
-  def start_service_supervised(_module, %{}) do
-    raise BirdSong.DeprecatedFunctionError.exception(
-            deprecated: "TestHelpers.start_service_supervised/2",
-            replacement: "use BirdSong.SupervisedCase"
-          )
   end
 
   def module_alias(module) do

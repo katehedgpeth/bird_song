@@ -14,14 +14,21 @@ defmodule BirdSongWeb.QuizLive.NewTest do
   ]
 
   describe "connected mount - success scenarios" do
+    @tag login?: false
+    test "requires login", %{conn: conn, path_with_query: path_with_query} do
+      assert {:error, {:redirect, %{to: "/users/log_in"}}} =
+               Phoenix.LiveViewTest.live(conn, path_with_query)
+    end
+
     test "saves filters to database and redirects to /quiz when receives a :start message", %{
-      view: view
+      view: view,
+      user: user
     } do
       birds = Bird.get_many_by_common_name(["Eastern Bluebird", "Red-shouldered Hawk"])
       assert [_, _] = birds
       socket = GenServer.call(view.pid, :socket)
 
-      assert Quiz.get_all_by_session_id(socket.assigns.session_id) === []
+      assert Quiz.get_all_for_user(user) === []
 
       BirdSong.PubSub.broadcast(
         socket,
@@ -30,7 +37,9 @@ defmodule BirdSongWeb.QuizLive.NewTest do
 
       assert_redirect(view, "/quiz")
 
-      assert [%Quiz{}] = Quiz.get_all_by_session_id(socket.assigns.session_id)
+      assert [quiz] = Quiz.get_all_for_user(user)
+      assert %Quiz{} = quiz
+      assert quiz.user.id === user.id
     end
   end
 end

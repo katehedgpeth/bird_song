@@ -29,7 +29,6 @@ defmodule BirdSong.DataCase do
 
   setup tags do
     BirdSong.DataCase.setup_sandbox(tags)
-    Mix.Tasks.BirdSong.SeedRegions.run(["--folder=test/mock_data"])
     :ok
   end
 
@@ -38,6 +37,7 @@ defmodule BirdSong.DataCase do
   """
   def setup_sandbox(tags) do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(BirdSong.Repo, shared: not tags[:async])
+    Mix.Tasks.BirdSong.SeedRegions.run(["--folder=test/mock_data"])
 
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
   end

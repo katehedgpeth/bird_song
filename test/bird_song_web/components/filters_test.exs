@@ -1,5 +1,6 @@
 defmodule BirdSongWeb.Components.FiltersTest do
-  use BirdSong.SupervisedCase, use_db?: true
+  use BirdSongWeb.ConnCase
+  use BirdSong.SupervisedCase
   use BirdSong.MockDataAttributes
   import BirdSong.TestSetup
 
@@ -8,6 +9,8 @@ defmodule BirdSongWeb.Components.FiltersTest do
   alias BirdSong.Family
 
   alias BirdSong.{
+    Accounts,
+    Accounts.User,
     Bird,
     MockEbirdServer,
     Services.Ebird,
@@ -20,12 +23,16 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
   @by_family_filter_selector ~s([phx-value-element="by_family"])
 
-  setup [:seed_from_mock_taxonomy]
+  setup [
+    :seed_from_mock_taxonomy,
+    :register_and_log_in_user
+  ]
 
-  setup %{test: test} do
-    session_id = Ecto.UUID.generate()
-    conn = Phoenix.ConnTest.build_conn()
-    Phoenix.PubSub.subscribe(BirdSong.PubSub, "session:" <> session_id)
+  setup %{conn: %Plug.Conn{} = conn, test: test} do
+    conn =
+      conn
+      |> assign_user_token()
+      |> BirdSong.PubSub.subscribe()
 
     assert {:ok, bird} = Bird.get_by_sci_name(@eastern_bluebird.sci_name)
 
@@ -33,14 +40,22 @@ defmodule BirdSongWeb.Components.FiltersTest do
              live_isolated(conn, Filters,
                session: %{
                  "services" => Atom.to_string(test),
-                 "_csrf_token" => session_id
+                 "user_token" => conn.assigns.user.token
                }
              )
 
-    {:ok, bird: bird, view: view}
+    {:ok, bird: bird, conn: conn, view: view}
   end
 
   describe "region input" do
+    test "has user token and id assigned", %{conn: conn, user: %User{id: user_id}, view: view} do
+      assert %User{} = Accounts.get_user!(user_id)
+      assigns = get_assigns(view)
+      assert assigns.user.id === user_id
+      assert assigns.user.token === conn.assigns.user.token
+      assert %User{id: ^user_id} = Accounts.get_user_by_session_token(assigns.user.token)
+    end
+
     test "does not show options if entry is less than 3 letters", %{view: view} do
       type_region(view, "fo")
 
@@ -49,6 +64,8 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
     test "shows region dropdown after user types 3 letters", %{view: view} do
       type_region(view, "For")
+
+      assert %BirdSong.Region{} = BirdSong.Region.from_code!("US-NC-067")
 
       assert has_element?(view, suggestion_selector("US-NC-067"))
 
@@ -202,5 +219,10 @@ defmodule BirdSongWeb.Components.FiltersTest do
 
   defp bird_button_selector(%Bird{common_name: name}) do
     ~s([phx-value-bird="#{name}"])
+  end
+
+  defp assign_user_token(conn) do
+    %{"user_token" => token} = Plug.Conn.get_session(conn)
+    Plug.Conn.assign(conn, :user, %{token: token})
   end
 end

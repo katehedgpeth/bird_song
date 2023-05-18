@@ -33,6 +33,7 @@ defmodule BirdSong.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
+      {:bcrypt_elixir, "~> 3.0"},
       {:phoenix, "~> 1.6.15"},
       {:phoenix_ecto, "~> 4.4"},
       {:ecto_sql, "~> 3.6"},
@@ -50,7 +51,8 @@ defmodule BirdSong.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:httpoison, "~> 2.0"},
       {:bypass, "~> 2.1"},
-      {:tailwind, "~> 0.1"}
+      {:tailwind, "~> 0.1"},
+      {:swoosh, "~> 1.4"}
     ]
   end
 

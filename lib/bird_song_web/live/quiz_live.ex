@@ -6,7 +6,10 @@ defmodule BirdSongWeb.QuizLive do
   alias BirdSongWeb.QuizLive.Assign
   alias BirdSongWeb.QuizLive.Visibility
 
-  alias BirdSong.Quiz
+  alias BirdSong.{
+    Accounts,
+    Quiz
+  }
 
   alias Phoenix.{
     LiveView,
@@ -20,15 +23,17 @@ defmodule BirdSongWeb.QuizLive do
     MessageHandlers
   }
 
-  alias BirdSong.Bird
-
+  on_mount BirdSongWeb.QuizLive.User
   on_mount {BirdSong.PubSub, :subscribe}
   on_mount {Assign, :assign_services}
 
   @impl LiveView
   def mount(_params, _session, %Socket{} = socket) do
     {:ok,
-     case Quiz.get_latest_by_session_id(socket.assigns.session_id) do
+     socket.assigns.user.id
+     |> Accounts.get_user!()
+     |> Quiz.get_current_for_user!()
+     |> case do
        nil ->
          LiveView.push_redirect(socket, to: "/quiz/new")
 

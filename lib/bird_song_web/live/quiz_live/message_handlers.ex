@@ -4,23 +4,20 @@ defmodule BirdSongWeb.QuizLive.MessageHandlers do
   alias Phoenix.LiveView
 
   alias BirdSong.{
+    Accounts,
     Services
   }
 
   def handle_info({:start, filters}, socket) do
-    quiz =
-      filters
-      |> Keyword.put(:session_id, socket.assigns.session_id)
-      |> BirdSong.Quiz.create!()
-
-    BirdSong.PubSub.broadcast(socket, {:quiz_created, quiz.id})
+    %{quiz: %BirdSong.Quiz{}} =
+      socket.assigns.user.id
+      |> Accounts.update_current_quiz!(Map.new(filters))
 
     {:noreply, LiveView.push_redirect(socket, to: "/quiz")}
   end
 
   # -------- IGNORED MESSAGES ------------
   def handle_info(:change_region, socket), do: ignore_message(socket)
-  def handle_info({:quiz_created, _}, socket), do: ignore_message(socket)
   def handle_info({:region_selected, %BirdSong.Region{}}, socket), do: ignore_message(socket)
 
   ####################################

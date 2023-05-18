@@ -9,6 +9,7 @@ defmodule BirdSongWeb.QuizLive.New do
     QuizLive.Assign
   }
 
+  on_mount BirdSongWeb.QuizLive.User
   on_mount {BirdSong.PubSub, :subscribe}
   on_mount {Assign, :assign_services}
 

@@ -39,6 +39,7 @@ defmodule BirdSongWeb.Components.Filters do
   We're sorry, but our service is not available at the moment. Please try again later.
   "
 
+  on_mount QuizLive.User
   on_mount {BirdSong.PubSub, :subscribe}
   on_mount {QuizLive.Assign, :assign_services}
 
@@ -99,7 +100,6 @@ defmodule BirdSongWeb.Components.Filters do
 
   # ---------- IGNORED MESSAGES ----------
   def handle_info({:start, _}, socket), do: ignore_message(socket)
-  def handle_info({:quiz_created, _}, socket), do: ignore_message(socket)
 
   defp ignore_message(socket), do: {:noreply, socket}
 
@@ -181,7 +181,10 @@ defmodule BirdSongWeb.Components.Filters do
   end
 
   defp load_quiz_or_assign_defaults(%Socket{} = socket) do
-    case Quiz.get_latest_by_session_id(socket.assigns[:session_id]) do
+    socket.assigns.user.id
+    |> BirdSong.Accounts.get_user!()
+    |> Quiz.get_current_for_user!()
+    |> case do
       nil -> assign_defaults(socket)
       %Quiz{} = quiz -> load_quiz(socket, quiz)
     end

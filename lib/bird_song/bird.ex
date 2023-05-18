@@ -138,8 +138,18 @@ defmodule BirdSong.Bird do
     |> BirdSong.Repo.insert()
   end
 
+  def changeset(%__MODULE__{} = bird) do
+    changeset(bird, %{})
+  end
+
+  def changeset(%__MODULE__{}, %__MODULE__{} = bird) do
+    bird
+    |> BirdSong.Repo.preload([:family, :order])
+    |> changeset(%{})
+  end
+
   @doc false
-  def changeset(%__MODULE__{} = bird, attrs \\ %{}) do
+  def changeset(%__MODULE__{} = bird, %{} = attrs) do
     bird
     |> cast(attrs, [:has_recordings?, :has_images? | @cast_keys])
     |> cast_assoc(:order)
