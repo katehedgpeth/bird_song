@@ -9,6 +9,30 @@ import Config
 
 one_second = 1_000
 
+env =
+  Map.new(
+    [
+      "BIRD_SONG_ADMIN_EMAIL",
+      "BIRD_SONG_SIGNING_SALT",
+      "EBIRD_API_TOKEN",
+      "FLICKR_API_KEY"
+    ],
+    fn name ->
+      case System.get_env(name) do
+        "" <> val ->
+          {
+            name
+            |> String.downcase()
+            |> String.to_existing_atom(),
+            val
+          }
+
+        _ ->
+          raise BirdSong.MissingEnvironmentVariableError.exception(name: name)
+      end
+    end
+  )
+
 config :bird_song,
   ecto_repos: [BirdSong.Repo]
 
@@ -18,28 +42,18 @@ config :bird_song, BirdSongWeb.Endpoint,
   render_errors: [view: BirdSongWeb.ErrorView, accepts: ~w(html json), layout: false],
   pubsub_server: BirdSong.PubSub,
   live_view: [
-    signing_salt:
-      case System.get_env("BIRD_SONG_SIGNING_SALT") do
-        "" <> salt -> salt
-        nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
-      end
+    signing_salt: env.bird_song_signing_salt
   ]
+
+config :bird_song, BirdSong.Accounts.Mailer, adapter: Swoosh.Adapters.Local
 
 config :bird_song, BirdSong.Services.ThrottledCache,
   backlog_timeout_ms: :infinity,
   throttle_ms: 2 * one_second,
-  admin_email:
-    (case System.get_env("BIRD_SONG_ADMIN_EMAIL") do
-       "" <> email -> email
-       _ -> raise "missing environment variable: BIRD_SONG_ADMIN_EMAIL"
-     end)
+  admin_email: env.bird_song_admin_email
 
 config :bird_song, BirdSong.Services.Ebird,
-  token:
-    (case System.get_env("EBIRD_API_TOKEN") do
-       "" <> token -> token
-       nil -> raise "missing environment variable: EBIRD_API_TOKEN"
-     end),
+  token: env.ebird_api_token,
   taxonomy_file: Path.relative_to_cwd("data/taxonomy.json")
 
 config :bird_song, BirdSong.Services.MacaulayLibrary,
@@ -51,11 +65,7 @@ config :bird_song, BirdSong.Services.XenoCanto, write_to_disk?: false
 
 config :bird_song, BirdSong.Services.Flickr,
   write_to_disk?: false,
-  api_key:
-    (case System.get_env("FLICKR_API_KEY") do
-       "" <> key -> key
-       nil -> raise "missing environment variable: BIRD_SONG_SIGNING_SALT"
-     end)
+  api_key: env.flickr_api_key
 
 config :bird_song, BirdSong.Services,
   images: BirdSong.Services.Flickr,
