@@ -46,11 +46,6 @@ defmodule BirdSong.Quiz do
     timestamps()
   end
 
-  def multi_insert_quiz(%{user: user}, attrs) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.insert(:quiz, changeset(user, attrs))
-  end
-
   def changeset(%User{} = user, %{} = attrs) do
     %__MODULE__{}
     |> cast(attrs, [

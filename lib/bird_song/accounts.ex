@@ -369,32 +369,36 @@ defmodule BirdSong.Accounts do
             optional(:quiz) => Quiz.t()
           }
           | no_return()
-  def update_current_quiz!(user_id, quiz) when is_integer(user_id) do
-    Ecto.Multi.new()
-    |> User.get_for_multi(user_id)
-    |> put_quiz_in_multi(quiz)
-    |> Ecto.Multi.merge(User, :update_current_quiz, [])
-    |> Repo.transaction()
-    |> do_update_current_quiz!()
-  end
-
-  defp put_quiz_in_multi(%Ecto.Multi{} = multi, quiz) do
-    case quiz do
-      nil ->
-        Ecto.Multi.put(multi, :quiz, nil)
-
-      %{} ->
-        Ecto.Multi.merge(multi, BirdSong.Quiz, :multi_insert_quiz, [quiz])
+  def update_current_quiz!(user_id, quiz_or_nil) when is_integer(user_id) do
+    with {:ok, results} <-
+           BirdSong.Repo.transaction(&do_update_current_quiz!(&1, user_id, quiz_or_nil)) do
+      results
     end
   end
 
-  defp do_update_current_quiz!({:ok, results}) do
-    results
-    |> Map.replace!(:user, results.user_with_current_quiz)
-    |> Map.drop([:user_with_current_quiz, :user_id])
+  defp do_update_current_quiz!(repo, user_id, quiz_or_nil) do
+    user = repo.get(User, user_id)
+    {quiz_id, quiz} = maybe_create_quiz(repo, user, quiz_or_nil)
+
+    %{
+      quiz: quiz,
+      user:
+        user
+        |> User.current_quiz_changeset(%{current_quiz_id: quiz_id})
+        |> repo.update!()
+    }
   end
 
-  defp do_update_current_quiz!({:error, _, %Ecto.Changeset{} = changeset, %{}}) do
-    Ecto.Changeset.apply_action!(changeset, changeset.action)
+  defp maybe_create_quiz(_repo, %User{}, nil) do
+    {nil, nil}
+  end
+
+  defp maybe_create_quiz(repo, %User{} = user, %{} = quiz_params) do
+    quiz =
+      user
+      |> Quiz.changeset(quiz_params)
+      |> repo.insert!()
+
+    {quiz.id, quiz}
   end
 end
