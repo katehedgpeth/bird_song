@@ -25,6 +25,14 @@ defmodule BirdSongWeb.QuizLive.Assign do
     visibility: %Visibility{}
   ]
 
+  @type t() :: %__MODULE__{
+          current: Current.t(),
+          quiz: Quiz.t() | nil,
+          services: Services.t(),
+          asset_cdn: String.t(),
+          visibility: Visibility.t()
+        }
+
   def assigns_to_struct(assigns) do
     assigns
     |> Map.drop([:__changed__, :live_action, :flash, :myself])
@@ -34,6 +42,14 @@ defmodule BirdSongWeb.QuizLive.Assign do
 
   def assign(%__MODULE__{} = assigns, %Socket{} = socket) do
     LiveView.assign(socket, Map.from_struct(assigns))
+  end
+
+  @spec update_assigns(Socket.t(), (t() -> t())) :: Socket.t()
+  def update_assigns(%Socket{} = socket, callback) do
+    socket.assigns
+    |> assigns_to_struct()
+    |> callback.()
+    |> assign(socket)
   end
 
   def on_mount(:assign_services, %{} = params, _session, %Socket{} = socket) do

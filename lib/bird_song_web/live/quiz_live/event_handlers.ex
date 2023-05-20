@@ -3,6 +3,12 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     LiveView.Socket
   }
 
+  alias BirdSong.{
+    Bird,
+    Quiz,
+    Repo
+  }
+
   alias BirdSongWeb.{
     QuizLive,
     QuizLive.Assign,
@@ -32,6 +38,10 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
     }
   end
 
+  def handle_event("submit_answer", %{"bird" => bird_id}, %Socket{} = socket) do
+    {:noreply, check_answer(socket, String.to_integer(bird_id))}
+  end
+
   def handle_event("toggle_visibility", %{"element" => "answer"}, %Socket{} = socket) do
     {:noreply,
      socket
@@ -41,5 +51,19 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
 
   def handle_event("toggle_visibility", %{"element" => element}, %Socket{} = socket) do
     {:noreply, Visibility.toggle(socket, String.to_existing_atom(element))}
+  end
+
+  defp check_answer(%Socket{} = socket, submitted) when is_integer(submitted) do
+    Assign.update_assigns(
+      socket,
+      &Current.assign_answer(
+        &1,
+        Quiz.Answer.submit!(%{
+          quiz: socket.assigns.quiz,
+          correct_bird: socket.assigns.current.bird,
+          submitted_bird: Repo.get!(Bird, submitted)
+        })
+      )
+    )
   end
 end

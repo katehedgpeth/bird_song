@@ -1,5 +1,6 @@
 defmodule BirdSongWeb.QuizLive.Current do
   require Logger
+  alias BirdSong.Quiz.Answer
   alias BirdSong.Services.MacaulayLibrary
 
   alias BirdSong.{
@@ -12,9 +13,10 @@ defmodule BirdSongWeb.QuizLive.Current do
     QuizLive.Assign
   }
 
-  defstruct [:bird, :recording, :image]
+  defstruct [:answer, :bird, :recording, :image]
 
   @type t() :: %__MODULE__{
+          answer: Answer.t(),
           bird: Bird.t(),
           image: Flickr.Photo.t(),
           recording: MacaulayLibrary.Recording.t()
@@ -33,6 +35,10 @@ defmodule BirdSongWeb.QuizLive.Current do
     |> Map.put(:current, %__MODULE__{bird: bird})
     |> update_resource(:recording)
     |> update_resource(:image)
+  end
+
+  def assign_answer(%Assign{} = assigns, %Answer{} = answer) do
+    %{assigns | current: %{assigns.current | answer: answer}}
   end
 
   defguard is_resource_key(key) when key in [:recording, :image]

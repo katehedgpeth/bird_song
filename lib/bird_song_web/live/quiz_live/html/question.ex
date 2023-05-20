@@ -5,13 +5,10 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   alias BirdSongWeb.QuizLive.Visibility
 
   alias BirdSongWeb.{
-    Components.ButtonGroup,
-    Components.GroupButton,
     QuizLive
   }
 
   alias BirdSong.{
-    Bird,
     Quiz,
     Services.Flickr,
     Services.MacaulayLibrary
@@ -25,14 +22,16 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
         <%= QuizLive.HTML.page_title("What bird do you hear?") %>
         <div class="flex gap-10 flex-col">
           <div class="flex flex-wrap justify-center gap-5">
-            <button phx-click="next" class="btn btn-secondary">Skip to next bird</button>
             <.play_audio current={@current} asset_cdn={@asset_cdn} />
             <button phx-click="change" phx-value-element="recording" class="btn btn-outline">Change recording</button>
           </div>
-          <div class="bg-slate-100 p-10 w-full">
-            <.show_answer visibility={@visibility} current={@current} />
-          </div>
-            <.show_possible_birds quiz={@quiz} />
+          <.live_component
+            module={QuizLive.HTML.Answer}
+            id="answer"
+            current={@current}
+            quiz={@quiz}
+            rendering_module={rendering_module(@current.recording)}
+          />
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <.show_image visibility={@visibility} current={@current} />
             <.show_recording_details
@@ -113,55 +112,8 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     """
   end
 
-  defp possible_bird_buttons(%{birds: birds}) do
-    assigns = %{
-      buttons: Enum.map(birds, &possible_bird_button/1)
-    }
-
-    ~H"""
-      <.live_component
-        module={ButtonGroup}
-        id="possible-birds"
-        buttons={@buttons}
-      />
-    """
-  end
-
-  defp possible_bird_button(%Bird{common_name: name, species_code: code}) do
-    %GroupButton{
-      text: name,
-      value: code,
-      phx_click: "",
-      phx_value: [bird: name]
-    }
-  end
-
   defp rendering_module(%MacaulayLibrary.Recording{}), do: QuizLive.HTML.Recordings.Ebird
   defp rendering_module(%Flickr.Photo{}), do: QuizLive.HTML.Images.Flickr
-
-  defp show_answer(%{
-         visibility: %Visibility{answer: :shown},
-         current: %{
-           bird: %Bird{common_name: name},
-           recording: recording,
-           image: _
-         }
-       }) do
-    assigns = %{
-      name: name,
-      recording: recording
-    }
-
-    ~H"""
-    <div class="text-center">
-      <%= @name %>
-      <.live_component module={rendering_module(@recording)} id="also-audible" recording={@recording} />
-    </div>
-    """
-  end
-
-  defp show_answer(%{visibility: %Visibility{answer: :hidden}}),
-    do: toggle_button(%{element: "answer", text: "Answer"})
 
   defp toggle_button(%{element: _, text: _} = assigns) do
     ~H"""
@@ -180,15 +132,6 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
     <div class="flex-none">
       <%= image(assigns) %>
     </div>
-    """
-  end
-
-  defp show_possible_birds(%{quiz: %Quiz{}} = assigns) do
-    ~H"""
-      <div>
-        <h3>Possible Birds:</h3>
-        <.possible_bird_buttons birds={@quiz.birds} />
-      </div>
     """
   end
 
