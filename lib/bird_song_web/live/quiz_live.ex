@@ -3,35 +3,36 @@ defmodule BirdSongWeb.QuizLive do
 
   use Phoenix.LiveView
 
-  alias BirdSongWeb.QuizLive.Assign
-  alias BirdSongWeb.QuizLive.Visibility
+  alias Phoenix.{
+    LiveView,
+    LiveView.Socket
+  }
 
   alias BirdSong.{
     Accounts,
     Quiz
   }
 
-  alias Phoenix.{
-    LiveView,
-    LiveView.Socket
-  }
+  alias BirdSongWeb.Components.Stats
 
   alias __MODULE__.{
+    Assign,
     Current,
     EventHandlers,
     HTML,
-    MessageHandlers
+    MessageHandlers,
+    Visibility
   }
 
   on_mount BirdSongWeb.QuizLive.User
   on_mount {BirdSong.PubSub, :subscribe}
   on_mount {Assign, :assign_services}
+  on_mount {Stats, :get}
 
   @impl LiveView
   def mount(_params, _session, %Socket{} = socket) do
     {:ok,
      socket.assigns.user.id
-     |> Accounts.get_user!()
      |> Quiz.get_current_for_user!()
      |> case do
        nil ->

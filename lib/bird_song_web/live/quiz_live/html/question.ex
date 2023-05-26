@@ -5,7 +5,8 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
   alias BirdSongWeb.QuizLive.Visibility
 
   alias BirdSongWeb.{
-    QuizLive
+    QuizLive,
+    Components.Stats
   }
 
   alias BirdSong.{
@@ -41,6 +42,7 @@ defmodule BirdSongWeb.QuizLive.HTML.Question do
           </div>
 
           <.filters visibility={@visibility} socket={@socket} services={@services} />
+          <.live_component module={Stats} id="stats" stats={@stats} />
 
         </div>
       </div>

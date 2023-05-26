@@ -182,7 +182,6 @@ defmodule BirdSongWeb.Components.Filters do
 
   defp load_quiz_or_assign_defaults(%Socket{} = socket) do
     socket.assigns.user.id
-    |> BirdSong.Accounts.get_user!()
     |> Quiz.get_current_for_user!()
     |> case do
       nil -> assign_defaults(socket)

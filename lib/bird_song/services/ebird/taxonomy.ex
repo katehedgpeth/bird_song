@@ -20,16 +20,16 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
     |> Jason.decode!()
   end
 
-  def seed!(records, instance \\ BirdSong) when is_list(records) do
+  def seed!(records) when is_list(records) do
     {:ok, birds} =
       records
-      |> seed(instance)
+      |> seed()
       |> BirdSong.Repo.transaction()
 
     Map.values(birds)
   end
 
-  def seed(records, _instance \\ BirdSong) when is_list(records) do
+  def seed(records) when is_list(records) do
     records = Enum.reject(records, &nil_family?/1)
 
     Multi.new()

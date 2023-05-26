@@ -10,6 +10,7 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   }
 
   alias BirdSongWeb.{
+    Components.Stats,
     QuizLive,
     QuizLive.Assign,
     QuizLive.Current,
@@ -54,16 +55,18 @@ defmodule BirdSongWeb.QuizLive.EventHandlers do
   end
 
   defp check_answer(%Socket{} = socket, submitted) when is_integer(submitted) do
+    answer =
+      Quiz.Answer.submit!(%{
+        quiz: socket.assigns.quiz,
+        correct_bird: socket.assigns.current.bird,
+        submitted_bird: Repo.get!(Bird, submitted)
+      })
+
     Assign.update_assigns(
       socket,
-      &Current.assign_answer(
-        &1,
-        Quiz.Answer.submit!(%{
-          quiz: socket.assigns.quiz,
-          correct_bird: socket.assigns.current.bird,
-          submitted_bird: Repo.get!(Bird, submitted)
-        })
-      )
+      &(&1
+        |> Current.assign_answer(answer)
+        |> Stats.update_counts(answer))
     )
   end
 end

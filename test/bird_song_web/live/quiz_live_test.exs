@@ -108,6 +108,11 @@ defmodule BirdSongWeb.QuizLiveTest do
       assert Floki.text(html) =~ "Correct answer: " <> assigns.current.bird.common_name
     end
 
+    test "updates stats", %{view: view} do
+      view
+      |> element(~s([phx-click=""]))
+    end
+
     test "clicking next button loads the next bird", %{view: view} do
       view
       |> element("button", "Next")

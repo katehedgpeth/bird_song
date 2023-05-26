@@ -15,13 +15,13 @@ defmodule BirdSong.Quiz do
   import Ecto.Changeset
   import Ecto.Query, only: [from: 2]
 
+  alias BirdSong.Accounts
   alias BirdSong.Quiz.BadUserError
 
   alias BirdSong.{
     Accounts.User,
     Bird,
-    Quiz.Answer,
-    Repo
+    Quiz.Answer
   }
 
   @type t() :: %__MODULE__{
@@ -34,14 +34,14 @@ defmodule BirdSong.Quiz do
         }
 
   schema "quizzes" do
-    field :correct_answers, :integer, default: 0
-    field :incorrect_answers, :integer, default: 0
-    field :quiz_length, :integer, default: 10
-    field :region_code, :string
-    field :use_recent_observations?, :boolean
-    belongs_to :user, User
-    has_many :answers, Answer
-    many_to_many :birds, Bird, join_through: "birds_quizzes", unique: true
+    field(:correct_answers, :integer, default: 0)
+    field(:incorrect_answers, :integer, default: 0)
+    field(:quiz_length, :integer, default: 10)
+    field(:region_code, :string)
+    field(:use_recent_observations?, :boolean)
+    belongs_to(:user, User)
+    has_many(:answers, Answer)
+    many_to_many(:birds, Bird, join_through: "birds_quizzes", unique: true)
 
     timestamps()
   end
@@ -64,15 +64,33 @@ defmodule BirdSong.Quiz do
     change(%__MODULE__{})
   end
 
-  def get_current_for_user!(%User{current_quiz_id: nil}) do
+  def get_current_for_user!(user_id) when is_integer(user_id) do
+    with {:ok, current} <-
+           BirdSong.Repo.transaction(fn repo ->
+             user_id
+             |> Accounts.get_user!(repo: repo)
+             |> get_current_for_user!(repo)
+           end) do
+      current
+    end
+  end
+
+  def get_current_for_user!(%User{} = user) do
+    get_current_for_user!(user, BirdSong.Repo)
+  end
+
+  def get_current_for_user!(%User{current_quiz_id: nil}, _repo) do
     nil
   end
 
-  def get_current_for_user!(%User{id: user_id, current_quiz_id: quiz_id} = user)
+  def get_current_for_user!(
+        %User{id: user_id, current_quiz_id: quiz_id} = user,
+        repo
+      )
       when is_integer(quiz_id) do
-    case BirdSong.Repo.get!(__MODULE__, quiz_id) do
+    case repo.get!(__MODULE__, quiz_id) do
       %__MODULE__{user_id: ^user_id} = quiz ->
-        Repo.preload(quiz, birds: [:family])
+        repo.preload(quiz, birds: [:family])
 
       %__MODULE__{} = quiz ->
         raise BadUserError.exception(quiz: quiz, user: user)
@@ -81,9 +99,10 @@ defmodule BirdSong.Quiz do
 
   def get_all_for_user(%User{id: user_id}) do
     BirdSong.Repo.all(
-      from q in __MODULE__,
+      from(q in __MODULE__,
         where: q.user_id == ^user_id,
         preload: [:user]
+      )
     )
   end
 end

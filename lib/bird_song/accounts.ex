@@ -63,7 +63,22 @@ defmodule BirdSong.Accounts do
       ** (Ecto.NoResultsError)
 
   """
-  def get_user!(id), do: Repo.get!(User, id)
+  def get_user!(id, opts \\ []) do
+    opts =
+      [repo: BirdSong.Repo, preload: []]
+      |> Keyword.merge(opts)
+      |> Map.new()
+
+    User
+    |> opts.repo.get!(id)
+    |> opts.repo.preload(opts.preload)
+  end
+
+  def multi_get_user(%Ecto.Multi{} = multi, user_id, opts \\ []) do
+    Ecto.Multi.run(multi, :user, fn repo, %{} ->
+      {:ok, get_user!(user_id, Keyword.put(opts, :repo, repo))}
+    end)
+  end
 
   ## User registration
 
@@ -79,10 +94,10 @@ defmodule BirdSong.Accounts do
       {:error, %Ecto.Changeset{}}
 
   """
-  def register_user(attrs) do
+  def register_user(attrs, repo \\ Repo) do
     %User{}
     |> User.registration_changeset(attrs)
-    |> Repo.insert()
+    |> repo.insert()
   end
 
   @doc """
