@@ -25,7 +25,7 @@ defmodule BirdSongWeb.QuizLiveTest do
       Bird.get_many_by_common_name([
         "Carolina Wren",
         "Red-shouldered Hawk",
-        "Northern Mockingbird"
+        "Common Grackle"
       ])
 
     assert [%Bird{}, %Bird{}, %Bird{}] = birds

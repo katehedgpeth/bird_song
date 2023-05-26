@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.EbirdTest do
-  use BirdSong.SupervisedCase, async: true, use_db?: true
+  use BirdSong.SupervisedCase, use_db?: true
 
   alias BirdSong.MockEbirdServer
 

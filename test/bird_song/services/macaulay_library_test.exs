@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.MacaulayLibraryTest do
-  use BirdSong.SupervisedCase, async: true
+  use BirdSong.SupervisedCase
 
   alias BirdSong.Services.Supervisor.ForbiddenExternalURLError
   alias BirdSong.Services.MacaulayLibrary

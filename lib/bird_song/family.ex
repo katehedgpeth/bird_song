@@ -1,34 +1,44 @@
 defmodule BirdSong.Family do
   use Ecto.Schema
   alias Ecto.Changeset
-  alias BirdSong.{Order, Bird}
+
+  alias BirdSong.{
+    Bird,
+    Order,
+    Services.Ebird.Taxonomy
+  }
+
+  @behaviour Taxonomy
 
   @keys [:code, :common_name, :order, :sci_name]
 
   @type name() :: String.t()
 
   schema "families" do
-    field :common_name, :string
-    field :code, :string
-    field :sci_name, :string
-    belongs_to :order, Order
-    has_many :birds, Bird
+    field(:common_name, :string)
+    field(:code, :string)
+    field(:sci_name, :string)
+    belongs_to(:order, Order)
+    has_many(:birds, Bird)
   end
 
-  def from_raw(
-        %{
-          "familyCode" => code,
-          "familyComName" => common_name,
-          "familySciName" => sci_name
-        },
-        %Order{} = order
-      ) do
-    BirdSong.Repo.insert(%__MODULE__{
+  @impl Taxonomy
+  def uid_struct_key(), do: :code
+
+  @impl Taxonomy
+  def uid_raw_key(), do: "familyCode"
+
+  @impl Taxonomy
+  def params_from_raw(%{
+        "familyCode" => code,
+        "familyComName" => common_name,
+        "familySciName" => sci_name
+      }) do
+    %{
       code: code,
       common_name: common_name,
-      order: order,
       sci_name: sci_name
-    })
+    }
   end
 
   def changeset(%__MODULE__{} = family, attrs \\ %{}) do

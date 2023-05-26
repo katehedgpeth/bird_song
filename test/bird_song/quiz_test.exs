@@ -120,7 +120,7 @@ defmodule BirdSong.QuizTest do
       params: [_first, second],
       user: user
     } do
-      assert %{quiz: quiz, user: user} = Accounts.update_current_quiz!(user, second)
+      assert %{quiz: quiz, user: user} = Accounts.update_current_quiz!(user.id, second)
       assert user.current_quiz_id === quiz.id
       assert %Quiz{id: id} = Quiz.get_current_for_user!(user)
       assert id === quiz.id

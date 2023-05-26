@@ -1,5 +1,5 @@
 defmodule BirdSong.Services.DataFileTest do
-  use BirdSong.SupervisedCase, async: true
+  use BirdSong.SupervisedCase
   use BirdSong.MockDataAttributes
 
   alias BirdSong.{

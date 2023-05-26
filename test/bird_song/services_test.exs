@@ -1,5 +1,5 @@
 defmodule BirdSong.ServicesTest do
-  use BirdSong.SupervisedCase, async: true
+  use BirdSong.SupervisedCase
 
   alias BirdSong.Services.Supervisor.ForbiddenExternalURLError
 

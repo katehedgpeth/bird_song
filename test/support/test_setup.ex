@@ -19,11 +19,11 @@ defmodule BirdSong.TestSetup do
 
   def seed_from_taxonomy(%{} = tags) do
     ExUnit.Assertions.assert(
-      {:ok, [%Bird{} | _]} =
+      [_ | _] =
         tags
         |> Map.fetch!(:taxonomy_file)
         |> Ebird.Taxonomy.read_data_file()
-        |> Ebird.Taxonomy.seed()
+        |> Ebird.Taxonomy.seed!()
     )
 
     :ok

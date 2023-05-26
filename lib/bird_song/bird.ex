@@ -1,9 +1,15 @@
 defmodule BirdSong.Bird do
   use Ecto.Schema
-  import Ecto.Changeset
   import Ecto.Query, only: [from: 2]
-  alias BirdSong.Services.Ebird.RegionSpeciesCodes
-  alias BirdSong.{Family, Order}
+
+  alias BirdSong.{
+    Family,
+    Order,
+    Services.Ebird.RegionSpeciesCodes,
+    Services.Ebird.Taxonomy
+  }
+
+  @behaviour Taxonomy
 
   @derive {Inspect, only: [:common_name, :id, :sci_name]}
 
@@ -54,6 +60,12 @@ defmodule BirdSong.Bird do
           has_images?: boolean()
         }
 
+  @impl Taxonomy
+  def uid_raw_key(), do: "speciesCode"
+
+  @impl Taxonomy
+  def uid_struct_key(), do: :species_code
+
   def family_name(%__MODULE__{family: %Family{common_name: family_name}}) do
     family_name
   end
@@ -95,17 +107,8 @@ defmodule BirdSong.Bird do
 
   def get_many_by_species_code({:error, error}), do: {:error, error}
 
-  def update(%__MODULE__{} = bird, attrs) do
-    bird
-    |> changeset(Enum.into(attrs, %{}))
-    |> BirdSong.Repo.update()
-  end
-
-  @type repo_error() :: {:error, Changeset.t()}
-  @type new_or_error() :: {:ok, t()} | repo_error()
-
-  @spec from_raw(Map.t(), Family.t(), Order.t()) :: new_or_error()
-  def from_raw(
+  @impl Taxonomy
+  def params_from_raw(
         %{
           "sciName" => sci_name,
           "comName" => common_name,
@@ -115,13 +118,11 @@ defmodule BirdSong.Bird do
           "bandingCodes" => banding_codes,
           "comNameCodes" => common_name_codes,
           "sciNameCodes" => sci_name_codes
-        } = raw,
-        %Family{} = family,
-        %Order{} = order
+        } = raw
       ) do
     report_as = Map.get(raw, "reportAs")
 
-    %__MODULE__{
+    %{
       sci_name: sci_name,
       common_name: common_name,
       species_code: species_code,
@@ -130,35 +131,8 @@ defmodule BirdSong.Bird do
       report_as: report_as,
       banding_codes: banding_codes,
       common_name_codes: common_name_codes,
-      sci_name_codes: sci_name_codes,
-      family: family,
-      order: order
+      sci_name_codes: sci_name_codes
     }
-    |> changeset()
-    |> BirdSong.Repo.insert()
-  end
-
-  def changeset(%__MODULE__{} = bird) do
-    changeset(bird, %{})
-  end
-
-  def changeset(%__MODULE__{}, %__MODULE__{} = bird) do
-    bird
-    |> BirdSong.Repo.preload([:family, :order])
-    |> changeset(%{})
-  end
-
-  @doc false
-  def changeset(%__MODULE__{} = bird, %{} = attrs) do
-    bird
-    |> cast(attrs, [:has_recordings?, :has_images? | @cast_keys])
-    |> cast_assoc(:order)
-    |> cast_assoc(:family)
-    |> validate_required(@required_keys)
-    |> unique_constraint(:species_code)
-    |> unique_constraint(:common_name)
-    |> unique_constraint(:sci_name)
-    |> unique_constraint(:taxon_order)
   end
 
   def cast_keys() do

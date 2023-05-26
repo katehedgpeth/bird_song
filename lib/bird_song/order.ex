@@ -1,12 +1,30 @@
 defmodule BirdSong.Order do
   use Ecto.Schema
   alias Ecto.Changeset
-  alias BirdSong.{Family, Bird}
+
+  alias BirdSong.{
+    Family,
+    Bird,
+    Services.Ebird.Taxonomy
+  }
+
+  @behaviour Taxonomy
 
   schema "orders" do
     field :name, :string
     has_many :families, Family
     has_many :birds, Bird
+  end
+
+  @impl Taxonomy
+  def uid_raw_key(), do: "order"
+
+  @impl Taxonomy
+  def uid_struct_key(), do: :name
+
+  @impl Taxonomy
+  def params_from_raw(%{"order" => name}) do
+    %{name: name}
   end
 
   def changeset(%__MODULE__{} = order, %{} = attrs \\ %{}) do

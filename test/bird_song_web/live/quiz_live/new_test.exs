@@ -1,5 +1,5 @@
 defmodule BirdSongWeb.QuizLive.NewTest do
-  use BirdSongWeb.SupervisedLiveCase, path: "/quiz/new", async: true
+  use BirdSongWeb.SupervisedLiveCase, path: "/quiz/new"
   import BirdSong.TestSetup
 
   alias BirdSong.{

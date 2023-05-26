@@ -1,13 +1,17 @@
 defmodule BirdSong.Services.Ebird.Taxonomy do
   require Logger
-  alias Ecto.Changeset
-  alias BirdSong.Services.Helpers
+  alias Ecto.Multi
 
   alias BirdSong.{
     Bird,
     Family,
-    Order
+    Order,
+    Services.Helpers
   }
+
+  @callback params_from_raw(Map.t()) :: Map.t()
+  @callback uid_raw_key() :: String.t()
+  @callback uid_struct_key() :: Atom.t()
 
   def read_data_file(path \\ "data/taxonomy.json") do
     path
@@ -16,98 +20,166 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
     |> Jason.decode!()
   end
 
-  @type seed_return() :: {:ok, [Bird.t()]} | {:error, Changeset.t()}
-  @type grouped_records_as_list() :: [{String.t(), [Map.t()]}]
+  def seed!(records, instance \\ BirdSong) when is_list(records) do
+    {:ok, birds} =
+      records
+      |> seed(instance)
+      |> BirdSong.Repo.transaction()
 
-  @spec seed([Map.t()]) :: seed_return()
+    Map.values(birds)
+  end
 
-  def seed(taxonomy) when is_list(taxonomy) do
-    {no_family, with_family} = Enum.split_with(taxonomy, &(&1["familyCode"] === nil))
+  def seed(records, _instance \\ BirdSong) when is_list(records) do
+    records = Enum.reject(records, &nil_family?/1)
 
-    Enum.map(
-      no_family,
-      &Helpers.log(
-        [
-          taxonomy_parse_error: :no_family,
-          common_name: &1["comName"],
-          sci_name: &1["sciName"]
-        ],
-        __MODULE__,
-        :warning
+    Multi.new()
+    |> Multi.merge(&insert_parents(&1, {Order, :order}, records))
+    |> Multi.merge(&insert_parents(&1, {Family, :family}, records))
+    |> Multi.merge(&insert_birds(&1, records))
+  end
+
+  defp record_uid(record, schema) do
+    Map.fetch!(record, schema.uid_raw_key())
+  end
+
+  defp insert_parents(changes, {module, key}, records) do
+    params =
+      records
+      |> MapSet.new(&record_uid(&1, module))
+      |> Enum.reduce(
+        [],
+        &prepare_parent_params(%{
+          parent_name: &1,
+          acc: &2,
+          module: module,
+          records: records,
+          changes: changes
+        })
       )
-    )
 
-    with_family
-    |> group_by_order()
-    |> Map.to_list()
-    |> parse_and_insert_order([])
+    Multi.new()
+    |> Multi.insert_all(:"insert_all_#{key}", module, params)
+    |> Multi.run(key, &parents_to_dict(&1, &2, module))
   end
 
-  @spec parse_and_insert_order(grouped_records_as_list(), [Bird.t()]) ::
-          seed_return()
-  def parse_and_insert_order([], birds), do: {:ok, birds}
-
-  def parse_and_insert_order([{name, order_birds} | rest], all_birds) do
-    with {:ok, order} <- Order.insert(name),
-         {:ok, all_birds} <- parse_and_insert_families(order_birds, order, all_birds) do
-      parse_and_insert_order(rest, all_birds)
-    end
+  defp parents_to_dict(repo, %{}, module) do
+    {:ok,
+     module
+     |> repo.all()
+     |> Map.new(
+       &{
+         Map.fetch!(&1, module.uid_struct_key()),
+         &1
+       }
+     )}
   end
 
-  @spec parse_and_insert_families([Map.t()], Order.t(), [Bird.t()]) ::
-          seed_return()
-  def parse_and_insert_families(records, order, all_birds) do
+  defp prepare_parent_params(%{
+         parent_name: parent_name,
+         acc: acc,
+         module: module,
+         records: records,
+         changes: changes
+       }) do
     records
-    |> group_by_family()
-    |> Map.to_list()
-    |> parse_and_insert_family(order, all_birds)
+    |> first_with_parent_uid(module, parent_name)
+    |> add_params_to_list(%{acc: acc, module: module, changes: changes})
   end
 
-  @spec parse_and_insert_family(grouped_records_as_list(), Order.t(), [Bird.t()]) ::
-          seed_return()
-  def parse_and_insert_family([], %Order{}, all_birds), do: {:ok, all_birds}
+  defp insert_birds(%{} = changes, records) do
+    params =
+      Enum.reduce(
+        records,
+        [],
+        &add_params_to_list(&1, %{acc: &2, module: Bird, changes: changes})
+      )
 
-  def parse_and_insert_family(
-        [{_family_name, [_ | _] = family_birds} | rest],
-        %Order{} = order,
-        all_birds
-      ) do
-    with {:ok, family} <-
-           family_birds
-           |> List.first()
-           |> Family.from_raw(order),
-         {:ok, all_birds} <-
-           parse_and_insert_bird(family_birds, family, order, all_birds) do
-      parse_and_insert_family(rest, order, all_birds)
+    Multi.new()
+    |> Multi.insert_all(:birds, Bird, params)
+  end
+
+  defp nil_family?(%{} = record) do
+    case Map.fetch(record, Family.uid_raw_key()) do
+      {:ok, "" <> _} ->
+        false
+
+      :error ->
+        log_nil_family(record)
+        true
     end
   end
 
-  @spec parse_and_insert_bird([Map.t()], Family.t(), Order.t(), [Bird.t()]) ::
-          seed_return()
-  defp parse_and_insert_bird([], %Family{}, %Order{}, all_birds) do
-    {:ok, all_birds}
-  end
-
-  defp parse_and_insert_bird(
-         [%{} = bird | rest],
-         %Family{} = family,
-         %Order{} = order,
-         all_birds
-       ) do
-    with {:ok, %Bird{} = new_bird} <- Bird.from_raw(bird, family, order) do
-      parse_and_insert_bird(rest, family, order, [new_bird | all_birds])
+  defp first_with_parent_uid(records, parent_module, parent_name) do
+    case Enum.find(
+           records,
+           &(record_uid(&1, parent_module) === parent_name)
+         ) do
+      %{} = record -> record
+      nil -> raise "cannot find record with value #{parent_name} for #{inspect(parent_module)}"
     end
   end
 
-  def group_by_family(list) do
-    Enum.group_by(list, &family_name/1)
+  defp add_params_to_list(raw, %{acc: acc, module: module, changes: changes}) do
+    [prepare_params(raw, module, changes) | acc]
   end
 
-  def group_by_order(list) do
-    Enum.group_by(list, &order_name/1)
+  defp prepare_params(raw, module, changes) do
+    assoc_data = %{
+      child_module: module,
+      raw: raw,
+      changes: changes
+    }
+
+    raw
+    |> module.params_from_raw()
+    |> get_assoc(:order, assoc_data)
+    |> get_assoc(:family, assoc_data)
   end
 
-  def family_name(%{"familyCode" => family_name}), do: family_name
-  def order_name(%{"order" => order_name}), do: order_name
-  def common_name(%{"comName" => common_name}), do: common_name
+  defp assoc_module(:family), do: Family
+  defp assoc_module(:order), do: Order
+
+  defp get_assoc(params, _, %{child_module: Order}) do
+    # Order has no associations
+    params
+  end
+
+  defp get_assoc(params, :family, %{child_module: Family}) do
+    # Family has no family assoc
+    params
+  end
+
+  defp get_assoc(params, assoc_name, %{raw: raw, changes: changes}) do
+    # Family has Order assoc
+    # Bird has Order and Family assoc
+
+    Map.put(
+      params,
+      :"#{assoc_name}_id",
+      get_assoc_id_from_changes(changes, assoc_name, raw)
+    )
+  end
+
+  defp get_assoc_id_from_changes(changes, assoc_name, raw) do
+    assoc_uid = Map.fetch!(raw, assoc_module(assoc_name).uid_raw_key())
+
+    changes
+    |> Map.fetch!(assoc_name)
+    |> Map.fetch!(assoc_uid)
+    |> Map.fetch!(:id)
+  end
+
+  defp log_nil_family(record) do
+    Helpers.log(
+      [
+        taxonomy_parse_error: :nil_parents,
+        common_name: record["comName"],
+        sci_name: record["sciName"],
+        family: record[Family.uid_raw_key()],
+        order: record[Order.uid_raw_key()]
+      ],
+      __MODULE__,
+      :debug
+    )
+  end
 end

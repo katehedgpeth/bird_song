@@ -1,6 +1,6 @@
 defmodule BirdSong.Services.MacaulayLibrary.RecordingsTest do
-  use BirdSong.SupervisedCase, async: true
-  use BirdSong.DataCase, async: true
+  use BirdSong.SupervisedCase
+  use BirdSong.DataCase
   import BirdSong.TestSetup, only: [seed_from_taxonomy: 1]
 
   alias BirdSong.{

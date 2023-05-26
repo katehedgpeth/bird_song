@@ -1,5 +1,5 @@
 defmodule BirdSongWeb.UserAuthTest do
-  use BirdSongWeb.ConnCase, async: true
+  use BirdSongWeb.ConnCase
 
   alias BirdSong.Accounts
   alias BirdSongWeb.UserAuth

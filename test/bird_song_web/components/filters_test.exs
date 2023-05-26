@@ -126,14 +126,15 @@ defmodule BirdSongWeb.Components.FiltersTest do
              |> Floki.find(bird_button_selector(bird))
              |> Floki.attribute("aria-checked") === ["aria-checked"]
 
-      assert [swainsons_thrush] =
-               Bird.get_many_by_common_name(["Swainson's Thrush"])
-               |> BirdSong.Repo.preload(:family)
+      grackle =
+        Bird
+        |> BirdSong.Repo.get_by!(common_name: "Swainson's Thrush")
+        |> BirdSong.Repo.preload(:family)
 
-      assert Bird.family_name(swainsons_thrush) === Bird.family_name(bird)
+      assert Bird.family_name(grackle) === Bird.family_name(bird)
 
       assert html
-             |> Floki.find(bird_button_selector(swainsons_thrush))
+             |> Floki.find(bird_button_selector(grackle))
              |> Floki.attribute("aria-checked") === []
     end
   end

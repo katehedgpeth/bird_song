@@ -1,5 +1,5 @@
 defmodule BirdSongWeb.Components.Filters.ByFamilyTest do
-  use BirdSongWeb.LiveCase, async: true
+  use BirdSongWeb.LiveCase
   use BirdSong.MockDataAttributes
 
   alias BirdSongWeb.{
