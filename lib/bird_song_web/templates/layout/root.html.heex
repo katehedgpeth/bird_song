@@ -10,7 +10,6 @@
     <script defer phx-track-static type="text/javascript" src={Routes.static_path(@conn, "/assets/app.js")}></script>
   </head>
   <body>
-    <%= render "_user_menu.html", assigns %>
 
       <div class="drawer drawer-end">
         <input id="drawer-nav" type="checkbox" class="drawer-toggle" />
@@ -23,6 +22,7 @@
         <div class="drawer-side">
           <label for="drawer-nav" class="drawer-overlay"></label>
           <ul class="menu p-4 w-80 bg-base-100 text-base-content">
+            <%= render "_user_menu.html", assigns %>
             <li><a href="/quiz/new">Start a new quiz</a></li>
             <li><a href="/about">About BirdSong</a></li>
             <%= if function_exported?(Routes, :live_dashboard_path, 2) do %>

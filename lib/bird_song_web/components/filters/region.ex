@@ -176,7 +176,7 @@ defmodule BirdSongWeb.Components.Filters.Region do
         <span>
           Region
           <span class="italic">
-            (can be city, state, or country)
+            (can be county, state, or country)
           </span>
         </span>
       </label>

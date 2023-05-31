@@ -39,9 +39,9 @@ defmodule BirdSongWeb.Components.Filters do
   We're sorry, but our service is not available at the moment. Please try again later.
   "
 
-  on_mount QuizLive.User
-  on_mount {BirdSong.PubSub, :subscribe}
-  on_mount {QuizLive.Assign, :assign_services}
+  on_mount(QuizLive.User)
+  on_mount({BirdSong.PubSub, :subscribe})
+  on_mount({QuizLive.Assign, :assign_services})
 
   def not_available_error(), do: @not_available_error
 
@@ -288,9 +288,22 @@ defmodule BirdSongWeb.Components.Filters do
     """
   end
 
-  defp filters_after_region(%{} = assigns) do
+  defp filters_after_region(%{region: %__MODULE__.Region{selected: %BirdSong.Region{}}} = assigns) do
     ~H"""
-    <span></span>
+    <div class="flex flex-col items-center my-3">
+      <progress class="progress progress-secondary w-3/4"></progress>
+      <div>
+        Fetching bird list for
+        <%= @region.selected.short_name %>
+        ...
+      </div>
+    </div>
+    """
+  end
+
+  defp filters_after_region(%{region: %__MODULE__.Region{selected: :none}} = assigns) do
+    ~H"""
+    <div></div>
     """
   end
 end

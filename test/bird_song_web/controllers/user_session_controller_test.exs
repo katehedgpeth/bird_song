@@ -12,7 +12,7 @@ defmodule BirdSongWeb.UserSessionControllerTest do
       conn = get(conn, Routes.user_session_path(conn, :new))
       response = html_response(conn, 200)
       assert response =~ "<h1>Log in</h1>"
-      assert response =~ "Register</a>"
+      assert response =~ "Create an account</a>"
       assert response =~ "Forgot your password?</a>"
     end
 

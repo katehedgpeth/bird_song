@@ -4,12 +4,19 @@
   <%= label f, :email %>
   <%= email_input f, :email, required: true %>
 
-  <div>
-    <%= submit "Send instructions to reset password" %>
+  <div class="my-3">
+    <%= submit "Send instructions to reset password", class: "btn btn-primary" %>
   </div>
 </.form>
 
 <p>
-  <%= link "Register", to: Routes.user_registration_path(@conn, :new) %> |
-  <%= link "Log in", to: Routes.user_session_path(@conn, :new) %>
+  <%= link "Register",
+    to: Routes.user_registration_path(@conn, :new),
+    class: "link link-primary"
+  %>
+  |
+  <%= link "Log in",
+    to: Routes.user_session_path(@conn, :new),
+    class: "link link-primary"
+  %>
 </p>
