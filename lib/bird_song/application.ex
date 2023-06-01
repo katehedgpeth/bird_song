@@ -16,7 +16,7 @@ defmodule BirdSong.Application do
                 # Start the PubSub system
                 {Phoenix.PubSub, name: BirdSong.PubSub},
                 # Start the Endpoint (http/https)
-                BirdSongWeb.Endpoint
+                {SiteEncrypt.Phoenix, BirdSongWeb.Endpoint}
                 # Start a worker by calling: BirdSong.Worker.start_link(arg)
                 # {BirdSong.Worker, arg}
               ]

@@ -19,16 +19,30 @@ config :logger, level: :info
 # To get SSL working, you will need to add the `https` key
 # to the previous section and set your `:url` port to 443:
 #
-#     config :bird_song, BirdSongWeb.Endpoint,
-#       ...,
-#       url: [host: "example.com", port: 443],
-#       https: [
-#         ...,
-#         port: 443,
-#         cipher_suite: :strong,
-#         keyfile: System.get_env("SOME_APP_SSL_KEY_PATH"),
-#         certfile: System.get_env("SOME_APP_SSL_CERT_PATH")
-#       ]
+config :bird_song, BirdSongWeb.Endpoint,
+  url: [host: System.get_env("CHIRPITY_DOMAIN"), port: 443],
+  cache_static_manifest: "priv/static/cache_manifest.json",
+  server: true,
+  force_ssl: [hsts: true],
+  http: [port: 4000, transport_options: [socket_opts: [:inet6]]],
+  https: [
+    ...,
+    port: 4040,
+    cipher_suite: :strong,
+    transport_options: [socket_opts: [:inet6]]
+    # keyfile: System.get_env("SOME_APP_SSL_KEY_PATH"),
+    # certfile: System.get_env("SOME_APP_SSL_CERT_PATH")
+  ]
+
+env_name = "CHIRPITY_USER_FOLDER"
+
+server_folder =
+  System.get_env(env_name) ||
+    raise "missing environment variable: " <> env_name
+
+config :bird_song, :cert_path, Path.join(["/home", server_folder, "site_encrypt_db"])
+config :bird_song, :cert_mode, "production"
+
 #
 # The `cipher_suite` is set to `:strong` to support only the
 # latest and more secure SSL ciphers. This means old browsers

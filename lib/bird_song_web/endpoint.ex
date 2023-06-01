@@ -1,5 +1,11 @@
 defmodule BirdSongWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :bird_song
+  use SiteEncrypt.Phoenix
+
+  @site_encrypt :bird_song
+                |> Application.compile_env(BirdSongWeb.Endpoint)
+                |> Keyword.fetch!(:site_encrypt)
+                |> Map.new()
 
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
@@ -10,7 +16,41 @@ defmodule BirdSongWeb.Endpoint do
     signing_salt: "d7bPRpjl"
   ]
 
+  @impl Phoenix.Endpoint
+  def init(_key, config) do
+    {:ok, SiteEncrypt.Phoenix.configure_https(config)}
+  end
+
+  @impl SiteEncrypt
+  def certification do
+    SiteEncrypt.configure(
+      client: :native,
+      domains: [@site_encrypt.domain, "www." <> @site_encrypt.domain],
+      emails: [@site_encrypt.email],
+      db_folder: Application.get_env(:my_app, :cert_path, "tmp/site_encrypt_db"),
+      directory_url:
+        case Application.get_env(:my_app, :cert_mode, "local") do
+          "local" -> {:internal, port: 4002}
+          "staging" -> "https://acme-staging-v02.api.letsencrypt.org/directory"
+          "production" -> "https://acme-v02.api.letsencrypt.org/directory"
+        end
+    )
+  end
+
+  def www_redirect(%Plug.Conn{} = conn, _options) do
+    if String.starts_with?(conn.host, "www." <> host()) do
+      conn
+      |> Phoenix.Controller.redirect(external: "https://" <> host())
+      |> halt()
+    else
+      conn
+    end
+  end
+
   socket "/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]]
+
+  # redirect all www. requests to the root url
+  plug :www_redirect
 
   # Serve at "/" the static files from "priv/static" directory.
   #

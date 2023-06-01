@@ -22,6 +22,7 @@ config :bird_song, BirdSong.Repo,
 # you can enable the server option below.
 config :bird_song, BirdSongWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
+  https: [port: 4001],
   secret_key_base: "hrIR1FkwdDB5LojQi0KtqNAcO+AysoHdghdJX1o+zWn5i75h2r70T8X2tlo9RqeP",
   server: false
 

@@ -15,7 +15,8 @@ env =
       "BIRD_SONG_ADMIN_EMAIL",
       "BIRD_SONG_SIGNING_SALT",
       "EBIRD_API_TOKEN",
-      "FLICKR_API_KEY"
+      "FLICKR_API_KEY",
+      "CHIRPITY_DOMAIN"
     ],
     fn name ->
       case System.get_env(name) do
@@ -43,6 +44,10 @@ config :bird_song, BirdSongWeb.Endpoint,
   pubsub_server: BirdSong.PubSub,
   live_view: [
     signing_salt: env.bird_song_signing_salt
+  ],
+  site_encrypt: [
+    domain: env.chirpity_domain,
+    email: env.bird_song_admin_email
   ]
 
 config :bird_song, BirdSong.Accounts.Mailer, adapter: Swoosh.Adapters.Local
