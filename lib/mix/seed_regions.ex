@@ -6,15 +6,20 @@ defmodule Mix.Tasks.BirdSong.SeedRegions do
 
   def run(opts) when is_list(opts) do
     opts
-    |> get_data_folder()
+    |> parse_opts()
     |> run()
   end
 
-  def run("" <> parent_folder) do
-    parent_folder
-    |> get_all_regions()
-    |> BirdSong.Region.seed()
+  def run(%{folder: "" <> _, run_transaction?: _} = opts) do
+    apply(
+      BirdSong.Region,
+      seed_function(opts),
+      [get_all_regions(opts.folder)]
+    )
   end
+
+  defp seed_function(%{run_transaction?: true}), do: :seed!
+  defp seed_function(%{run_transaction?: false}), do: :seed
 
   def get_all_regions(parent_folder) do
     "world-country"
@@ -41,11 +46,15 @@ defmodule Mix.Tasks.BirdSong.SeedRegions do
     end
   end
 
-  defp get_data_folder(["--folder=" <> folder]) do
-    folder
+  defp parse_opts(opts) do
+    Enum.reduce(opts, %{folder: "data", run_transaction?: true}, &parse_opt/2)
   end
 
-  defp get_data_folder([]) do
-    "data"
+  defp parse_opt("--folder=" <> folder, opts) do
+    Map.replace!(opts, :folder, folder)
+  end
+
+  defp parse_opt("--no-transaction", opts) do
+    Map.replace!(opts, :run_transaction?, false)
   end
 end

@@ -69,19 +69,28 @@ defmodule BirdSong.Region do
 
   def seed([%Ebird.Region{} | _] = regions) do
     regions
-    |> Enum.map(&to_struct/1)
+    |> Enum.map(&build_params/1)
     |> Enum.reject(&(&1[:full_name] in @known_dupes))
     |> Enum.chunk_every(3000)
-    |> Enum.map(&do_seed/1)
+    |> Enum.with_index()
+    |> Enum.reduce(Ecto.Multi.new(), &do_seed/2)
   end
 
-  def do_seed(regions) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.insert_all(:insert_all, __MODULE__, regions)
+  def seed!([%Ebird.Region{} | _] = regions) do
+    regions
+    |> seed()
     |> BirdSong.Repo.transaction()
+    |> case do
+      {:ok, regions} -> regions
+      {:error, error} -> error
+    end
   end
 
-  def to_struct(%Ebird.Region{} = region) do
+  def do_seed({regions, idx}, multi) when is_list(regions) do
+    Ecto.Multi.insert_all(multi, :"insert_all_regions_#{idx}", __MODULE__, regions)
+  end
+
+  def build_params(%Ebird.Region{} = region) do
     timestamp =
       NaiveDateTime.utc_now()
       |> NaiveDateTime.truncate(:second)

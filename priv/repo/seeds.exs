@@ -10,5 +10,4 @@
 # We recommend using the bang functions (`insert!`, `update!`
 # and so on) as they will fail if something goes wrong.
 
-BirdSong.Services.Ebird.Taxonomy.read_data_file()
-|> BirdSong.Services.Ebird.Taxonomy.seed()
+BirdSong.StaticData.seed!()

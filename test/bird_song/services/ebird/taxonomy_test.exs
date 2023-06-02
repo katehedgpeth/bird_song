@@ -16,7 +16,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyMultiTest do
   describe "seed" do
     setup tags do
       %{
-        records: Taxonomy.read_data_file("test/mock_data/mock_taxonomy.json"),
+        records: Taxonomy.read_data_file("test/mock_data/taxonomy.json"),
         ets_tables:
           Enum.map(
             [:Order, :Family, :Bird],

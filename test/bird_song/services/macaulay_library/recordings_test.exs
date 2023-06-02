@@ -40,7 +40,7 @@ defmodule BirdSong.Services.MacaulayLibrary.RecordingsTest do
   end
 
   @tag :slow_test
-  @tag taxonomy_file: TestHelpers.mock_file_path("mock_taxonomy")
+  @tag taxonomy_file: TestHelpers.mock_file_path("taxonomy")
   @tag listen_to: [{MacaulayLibrary, :Playwright}]
   test "get/2", %{} = tags do
     assert {:ok, tmp_dir} = Map.fetch(tags, :tmp_dir)

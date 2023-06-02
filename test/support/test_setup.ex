@@ -13,7 +13,7 @@ defmodule BirdSong.TestSetup do
 
   def seed_from_mock_taxonomy(%{} = tags) do
     tags
-    |> Map.put_new(:taxonomy_file, TestHelpers.mock_file_path("mock_taxonomy"))
+    |> Map.put_new(:taxonomy_file, TestHelpers.mock_file_path("taxonomy"))
     |> seed_from_taxonomy()
   end
 

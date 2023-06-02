@@ -11,7 +11,7 @@ Mix.Task.run("ecto.migrate")
 
 Logger.configure(level: :debug)
 
-mock_taxonomy_file_name = "mock_taxonomy"
+mock_taxonomy_file_name = "taxonomy"
 one_second = 1_000
 
 full_taxonomy =
@@ -19,9 +19,7 @@ full_taxonomy =
   |> Enum.map(fn data -> {data["speciesCode"], data} end)
   |> Enum.into(%{})
 
-forsyth_codes = Taxonomy.read_data_file(
-  "data/forsyth_species_codes.json"
-)
+forsyth_codes = Taxonomy.read_data_file("data/forsyth_species_codes.json")
 
 mock_taxonomy_file_name
 |> TestHelpers.mock_file_path()
