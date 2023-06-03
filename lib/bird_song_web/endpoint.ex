@@ -27,9 +27,9 @@ defmodule BirdSongWeb.Endpoint do
       client: :native,
       domains: [@site_encrypt.domain, "www." <> @site_encrypt.domain],
       emails: [@site_encrypt.email],
-      db_folder: Application.get_env(:my_app, :cert_path, "tmp/site_encrypt_db"),
+      db_folder: Application.get_env(:bird_song, :cert_path, "tmp/site_encrypt_db"),
       directory_url:
-        case Application.get_env(:my_app, :cert_mode, "local") do
+        case Application.get_env(:bird_song, :cert_mode, "local") do
           "local" -> {:internal, port: 4002}
           "staging" -> "https://acme-staging-v02.api.letsencrypt.org/directory"
           "production" -> "https://acme-v02.api.letsencrypt.org/directory"
