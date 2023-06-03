@@ -44,11 +44,12 @@ defmodule BirdSong.Services.Ebird.TaxonomyMultiTest do
       assert length(order_uids) === 2
 
       assert %Multi{} = multi
-      assert Multi.to_list(multi) |> length() === 3
+      assert Multi.to_list(multi) |> length() === 4
       assert {:ok, inserted} = BirdSong.Repo.transaction(multi)
 
       assert Map.keys(inserted) === [
                :birds,
+               :existing,
                :family,
                :insert_all_family,
                :insert_all_order,
@@ -64,7 +65,7 @@ defmodule BirdSong.Services.Ebird.TaxonomyMultiTest do
       assert length(inserted_orders) === 2
     end
 
-    test "cannot be called multiple times", %{records: records} do
+    test "can be called multiple times", %{records: records} do
       assert length(records) === 5
 
       assert {:ok, inserted} =
@@ -73,17 +74,17 @@ defmodule BirdSong.Services.Ebird.TaxonomyMultiTest do
                |> Taxonomy.seed()
                |> Repo.transaction()
 
-      assert map_size(inserted) === 5
+      assert inserted.birds === {3, nil}
 
-      error =
-        assert_raise Postgrex.Error, fn ->
-          records
-          |> Taxonomy.seed()
-          |> Repo.transaction()
-        end
+      assert Repo.all(BirdSong.Bird) |> length() === 3
 
-      assert error.postgres.code === :unique_violation
-      assert error.postgres.constraint === "orders_name_index"
+      assert {:ok, inserted_again} =
+               records
+               |> Taxonomy.seed()
+               |> Repo.transaction()
+
+      assert inserted_again.birds === {2, nil}
+      assert Repo.all(BirdSong.Bird) |> length() === 5
     end
   end
 end

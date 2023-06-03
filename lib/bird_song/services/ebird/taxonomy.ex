@@ -33,9 +33,18 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
     records = Enum.reject(records, &nil_family?/1)
 
     Multi.new()
+    |> Multi.run(:existing, &{:ok, get_existing(&1, &2)})
     |> Multi.merge(&insert_parents(&1, {Order, :order}, records))
     |> Multi.merge(&insert_parents(&1, {Family, :family}, records))
     |> Multi.merge(&insert_birds(&1, records))
+  end
+
+  defp get_existing(repo, %{}) do
+    %{
+      order: all_to_dict(repo, %{}, Order),
+      family: all_to_dict(repo, %{}, Family),
+      bird: all_to_dict(repo, %{}, Bird)
+    }
   end
 
   defp record_uid(record, schema) do
@@ -45,6 +54,7 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
   defp insert_parents(changes, {module, key}, records) do
     params =
       records
+      |> Enum.reject(&record_exists?(&1, changes, module, key))
       |> MapSet.new(&record_uid(&1, module))
       |> Enum.reduce(
         [],
@@ -59,19 +69,24 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
 
     Multi.new()
     |> Multi.insert_all(:"insert_all_#{key}", module, params)
-    |> Multi.run(key, &parents_to_dict(&1, &2, module))
+    |> Multi.run(key, &{:ok, all_to_dict(&1, &2, module)})
   end
 
-  defp parents_to_dict(repo, %{}, module) do
-    {:ok,
-     module
-     |> repo.all()
-     |> Map.new(
-       &{
-         Map.fetch!(&1, module.uid_struct_key()),
-         &1
-       }
-     )}
+  defp record_exists?(record, %{existing: existing}, module, key) do
+    existing
+    |> Map.fetch!(key)
+    |> Map.has_key?(record_uid(record, module))
+  end
+
+  defp all_to_dict(repo, %{}, module) do
+    module
+    |> repo.all()
+    |> Map.new(
+      &{
+        Map.fetch!(&1, module.uid_struct_key()),
+        &1
+      }
+    )
   end
 
   defp prepare_parent_params(%{
@@ -88,8 +103,9 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
 
   defp insert_birds(%{} = changes, records) do
     params =
-      Enum.reduce(
-        records,
+      records
+      |> Enum.reject(&record_exists?(&1, changes, Bird, :bird))
+      |> Enum.reduce(
         [],
         &add_params_to_list(&1, %{acc: &2, module: Bird, changes: changes})
       )
@@ -163,10 +179,19 @@ defmodule BirdSong.Services.Ebird.Taxonomy do
   defp get_assoc_id_from_changes(changes, assoc_name, raw) do
     assoc_uid = Map.fetch!(raw, assoc_module(assoc_name).uid_raw_key())
 
-    changes
+    changes.existing
     |> Map.fetch!(assoc_name)
-    |> Map.fetch!(assoc_uid)
-    |> Map.fetch!(:id)
+    |> Map.fetch(assoc_uid)
+    |> case do
+      {:ok, %{id: id}} ->
+        id
+
+      :error ->
+        changes
+        |> Map.fetch!(assoc_name)
+        |> Map.fetch!(assoc_uid)
+        |> Map.fetch!(:id)
+    end
   end
 
   defp log_nil_family(record) do

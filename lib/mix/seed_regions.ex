@@ -10,12 +10,10 @@ defmodule Mix.Tasks.BirdSong.SeedRegions do
     |> run()
   end
 
-  def run(%{folder: "" <> _, run_transaction?: _} = opts) do
-    apply(
-      BirdSong.Region,
-      seed_function(opts),
-      [get_all_regions(opts.folder)]
-    )
+  def run(%{folder: "" <> folder}) do
+    folder
+    |> get_all_regions()
+    |> BirdSong.Region.seed!()
   end
 
   defp seed_function(%{run_transaction?: true}), do: :seed!

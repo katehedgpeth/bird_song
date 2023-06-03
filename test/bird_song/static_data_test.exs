@@ -1,14 +1,34 @@
 defmodule BirdSong.StaticDataTest do
   use BirdSong.DataCase
+
+  alias BirdSong.{
+    Bird,
+    Family,
+    Order,
+    Region,
+    Repo
+  }
+
   @moduletag seed_regions?: false
 
   describe "&seed/1" do
     test "seeds both regions and birds" do
-      inserted = BirdSong.StaticData.seed!("test/mock_data")
-      assert inserted.insert_all_family === {4, nil}
-      assert inserted.insert_all_order === {2, nil}
-      assert inserted.birds === {5, nil}
-      assert inserted.insert_all_regions_0 === {117, nil}
+      schemas = [
+        Bird,
+        Family,
+        Order,
+        Region
+      ]
+
+      for schema <- schemas do
+        assert Repo.all(schema) === []
+      end
+
+      assert BirdSong.StaticData.seed!("test/mock_data") === :ok
+
+      for schema <- schemas do
+        assert [_ | _] = Repo.all(schema)
+      end
     end
   end
 end
