@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e # return a non-zero response if any of these commands fail
 
-app_folder=home/katehedgpeth/bird_song
+app_folder=/home/katehedgpeth/bird_song
 
 cd $app_folder
 
