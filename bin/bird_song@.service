@@ -1,0 +1,17 @@
+[Unit]
+Description=Chirpity
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=katehedgpeth
+
+EnvironmentFile=/home/katehedgpeth/env_vars
+
+ExecStart=/bin/bash -c '/home/katehedgpeth/releases/${RELEASE}/bin/bird_song start'
+
+[Install]
+WantedBy=multi-user.target

@@ -7,6 +7,16 @@ import Config
 # any compile-time configuration in here, as it won't be applied.
 # The block below contains prod specific runtime configuration.
 
+# Set ports based on environment variables in the release
+http_port = System.get_env("HTTP_PORT")
+https_port = System.get_env("HTTPS_PORT")
+
+if http_port && https_port do
+  config :my_app, MyAppWeb.Endpoint,
+    http: [port: String.to_integer(http_port)],
+    https: [port: String.to_integer(https_port)]
+end
+
 # ## Using releases
 #
 # If you use `mix release`, you need to explicitly enable the server
