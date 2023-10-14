@@ -12,6 +12,19 @@ defmodule BirdSong.Bird do
   @behaviour Taxonomy
 
   @derive {Inspect, only: [:common_name, :id, :sci_name]}
+  @derive {Jason.Encoder,
+           only: [
+             :species_code,
+             :common_name,
+             :sci_name,
+             :category,
+             :taxon_order,
+             :banding_codes,
+             :common_name_codes,
+             :sci_name_codes,
+             :family,
+             :order
+           ]}
 
   @cast_keys [
     :species_code,
@@ -23,9 +36,6 @@ defmodule BirdSong.Bird do
     :common_name_codes,
     :sci_name_codes
   ]
-  @assoc_keys [:family, :order]
-
-  @required_keys @cast_keys ++ @assoc_keys
 
   schema "birds" do
     field :species_code, :string
@@ -83,6 +93,22 @@ defmodule BirdSong.Bird do
       from b in __MODULE__,
         where: b.sci_name in ^sci_names
     )
+  end
+
+  def get_many_by_id([]) do
+    []
+  end
+
+  def get_many_by_id(ids) when is_list(ids) do
+    ids
+    |> get_many_by_id_query()
+    |> BirdSong.Repo.all()
+  end
+
+  def get_many_by_id_query(ids) when is_list(ids) do
+    from bird in __MODULE__,
+      where: bird.id in ^ids,
+      preload: [:family, :order]
   end
 
   def get_many_by_common_name(["" <> _ | _] = common_names) do

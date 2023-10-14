@@ -2,10 +2,7 @@ defmodule BirdSong.TestSetup do
   require ExUnit.Assertions
   use BirdSong.MockDataAttributes
 
-  alias BirdSong.{
-    Bird,
-    TestHelpers
-  }
+  alias BirdSong.TestHelpers
 
   def seed_from_mock_taxonomy(%{seed_data?: false}) do
     :ok

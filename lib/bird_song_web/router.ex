@@ -102,7 +102,6 @@ defmodule BirdSongWeb.Router do
 
   scope "/api", BirdSongWeb do
     pipe_through [:api, :api_require_authenticated_user]
-    get "/quiz/:id", Api.QuizController, :show
     post "/quiz", Api.QuizController, :create
   end
 end

@@ -1,20 +1,8 @@
 defmodule BirdSongWeb.Api.UserControllerTest do
-  use BirdSongWeb.ConnCase
-
-  import BirdSong.AccountsFixtures
-
-  setup %{conn: conn} do
-    {:ok, conn: put_req_header(conn, "accept", "application/json"), user: user_fixture()}
-  end
-
-  def api_path(conn, method, params \\ []) do
-    Path.join(
-      "/api",
-      Routes.user_session_path(conn, method, params)
-    )
-  end
+  use BirdSongWeb.ApiConnCase
 
   describe "create user session" do
+    @tag login?: false
     test "logs in user if password is valid", %{conn: conn, user: user} do
       conn =
         post(conn, api_path(conn, :create),
@@ -30,6 +18,7 @@ defmodule BirdSongWeb.Api.UserControllerTest do
              }
     end
 
+    @tag login?: false
     test "returns 401 when password is invalid", %{conn: conn, user: user} do
       conn =
         post(conn, api_path(conn, :create),
@@ -44,8 +33,8 @@ defmodule BirdSongWeb.Api.UserControllerTest do
   end
 
   describe "log out" do
-    test "deletes user session", %{conn: conn, user: user} do
-      conn = conn |> log_in_user(user) |> delete(api_path(conn, :delete))
+    test "deletes user session", %{conn: conn} do
+      conn = delete(conn, api_path(conn, :delete))
 
       assert json_response(conn, 200) == %{
                "message" => "User logged out successfully.",

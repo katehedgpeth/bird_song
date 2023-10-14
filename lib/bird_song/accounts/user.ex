@@ -14,6 +14,13 @@ defmodule BirdSong.Accounts.User do
           answers: [Answer.t()] | Ecto.Association.NotLoaded.t()
         }
 
+  @derive {Jason.Encoder,
+           only: [
+             :id,
+             :email,
+             :current_quiz_id
+           ]}
+
   schema "users" do
     field :email, :string
     field :password, :string, virtual: true, redact: true

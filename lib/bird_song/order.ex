@@ -10,6 +10,8 @@ defmodule BirdSong.Order do
 
   @behaviour Taxonomy
 
+  @derive {Jason.Encoder, only: [:name]}
+
   schema "orders" do
     field :name, :string
     has_many :families, Family

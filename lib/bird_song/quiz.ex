@@ -24,6 +24,17 @@ defmodule BirdSong.Quiz do
     Quiz.Answer
   }
 
+  @derive {Jason.Encoder,
+           only: [
+             :id,
+             :birds,
+             :correct_answers,
+             :incorrect_answers,
+             :quiz_length,
+             :region_code,
+             :use_recent_observations?
+           ]}
+
   @type t() :: %__MODULE__{
           birds: [String.t()],
           correct_answers: integer(),
@@ -62,6 +73,12 @@ defmodule BirdSong.Quiz do
 
   def default_changeset() do
     change(%__MODULE__{})
+  end
+
+  def create(%User{} = user, params) do
+    user
+    |> changeset(params)
+    |> BirdSong.Repo.insert()
   end
 
   def get_current_for_user!(user_id) when is_integer(user_id) do

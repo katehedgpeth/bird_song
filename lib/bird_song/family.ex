@@ -10,6 +10,8 @@ defmodule BirdSong.Family do
 
   @behaviour Taxonomy
 
+  @derive {Jason.Encoder, only: [:code, :common_name, :sci_name]}
+
   @keys [:code, :common_name, :order, :sci_name]
 
   @type name() :: String.t()
