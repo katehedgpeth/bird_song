@@ -55,9 +55,12 @@ defmodule BirdSongWeb.UserSessionControllerTest do
     end
 
     test "logs the user in with return to", %{conn: conn, user: user} do
+      conn = init_test_session(conn, user_return_to: "/foo/bar")
+
+      assert get_session(conn, :user_return_to) == "/foo/bar"
+
       conn =
         conn
-        |> init_test_session(user_return_to: "/foo/bar")
         |> post(Routes.user_session_path(conn, :create), %{
           "user" => %{
             "email" => user.email,
@@ -74,9 +77,9 @@ defmodule BirdSongWeb.UserSessionControllerTest do
           "user" => %{"email" => user.email, "password" => "invalid_password"}
         })
 
-      response = html_response(conn, 200)
+      response = html_response(conn, :unauthorized)
       assert response =~ "<h1>Log in</h1>"
-      assert response =~ "Invalid email or password"
+      assert response =~ "Invalid email or password."
     end
   end
 

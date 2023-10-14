@@ -22,6 +22,7 @@ defmodule BirdSongWeb.UserRegistrationController do
         conn
         |> put_flash(:info, "User created successfully.")
         |> UserAuth.log_in_user(user)
+        |> redirect(to: UserAuth.session_redirect_path(conn))
 
       {:error, %Ecto.Changeset{} = changeset} ->
         render(conn, "new.html", changeset: changeset)

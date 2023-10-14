@@ -2,6 +2,8 @@ defmodule BirdSongWeb.UserAuth do
   import Plug.Conn
   import Phoenix.Controller
 
+  alias Plug.Conn
+
   alias BirdSong.Accounts
   alias BirdSongWeb.Router.Helpers, as: Routes
 
@@ -11,6 +13,18 @@ defmodule BirdSongWeb.UserAuth do
   @max_age 60 * 60 * 24 * 60
   @remember_me_cookie "_bird_song_web_user_remember_me"
   @remember_me_options [sign: true, max_age: @max_age, same_site: "Lax"]
+
+  @spec log_in_user_if_valid_password(Conn.t(), map()) :: Conn.t()
+  def log_in_user_if_valid_password(
+        conn,
+        %{"email" => email, "password" => password} = user_params
+      ) do
+    if user = Accounts.get_user_by_email_and_password(email, password) do
+      log_in_user(conn, user, user_params)
+    else
+      conn
+    end
+  end
 
   @doc """
   Logs the user in.
@@ -26,14 +40,12 @@ defmodule BirdSongWeb.UserAuth do
   """
   def log_in_user(conn, user, params \\ %{}) do
     token = Accounts.generate_user_session_token(user)
-    user_return_to = get_session(conn, :user_return_to)
 
     conn
     |> renew_session()
     |> put_session(:user_token, token)
     |> put_session(:live_socket_id, "users_sessions:#{Base.url_encode64(token)}")
     |> maybe_write_remember_me_cookie(token, params)
-    |> redirect(to: user_return_to || signed_in_path(conn))
   end
 
   defp maybe_write_remember_me_cookie(conn, token, %{"remember_me" => "true"}) do
@@ -81,7 +93,6 @@ defmodule BirdSongWeb.UserAuth do
     conn
     |> renew_session()
     |> delete_resp_cookie(@remember_me_cookie)
-    |> redirect(to: "/")
   end
 
   @doc """
@@ -105,6 +116,13 @@ defmodule BirdSongWeb.UserAuth do
       else
         {nil, conn}
       end
+    end
+  end
+
+  def session_redirect_path(conn) do
+    case get_session(conn, :user_return_to) do
+      "" <> path -> path
+      nil -> signed_in_path(conn)
     end
   end
 
@@ -135,6 +153,18 @@ defmodule BirdSongWeb.UserAuth do
       |> put_flash(:error, "You must log in to access this page.")
       |> maybe_store_return_to()
       |> redirect(to: Routes.user_session_path(conn, :new))
+      |> halt()
+    end
+  end
+
+  def api_require_authenticated_user(conn, _opts) do
+    if conn.assigns[:current_user] do
+      conn
+    else
+      conn
+      |> maybe_store_return_to()
+      |> put_status(:unauthorized)
+      |> json(%{message: "Login required."})
       |> halt()
     end
   end

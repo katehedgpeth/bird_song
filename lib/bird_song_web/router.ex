@@ -1,7 +1,13 @@
 defmodule BirdSongWeb.Router do
   use BirdSongWeb, :router
 
-  import BirdSongWeb.UserAuth
+  import BirdSongWeb.UserAuth,
+    only: [
+      fetch_current_user: 2,
+      require_authenticated_user: 2,
+      api_require_authenticated_user: 2,
+      redirect_if_user_is_authenticated: 2
+    ]
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -15,6 +21,9 @@ defmodule BirdSongWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_session
+    plug :fetch_live_flash
+    plug :fetch_current_user
   end
 
   scope "/", BirdSongWeb do
@@ -82,5 +91,18 @@ defmodule BirdSongWeb.Router do
     post "/users/confirm", UserConfirmationController, :create
     get "/users/confirm/:token", UserConfirmationController, :edit
     post "/users/confirm/:token", UserConfirmationController, :update
+  end
+
+  scope "/api", BirdSongWeb do
+    pipe_through [:api]
+
+    post "/users/log_in", Api.UserSessionController, :create
+    delete "/users/log_out", Api.UserSessionController, :delete
+  end
+
+  scope "/api", BirdSongWeb do
+    pipe_through [:api, :api_require_authenticated_user]
+    get "/quiz/:id", Api.QuizController, :show
+    post "/quiz", Api.QuizController, :create
   end
 end

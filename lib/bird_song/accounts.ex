@@ -240,6 +240,7 @@ defmodule BirdSong.Accounts do
   @doc """
   Generates a session token.
   """
+  @spec generate_user_session_token(User.t()) :: String.t()
   def generate_user_session_token(user) do
     {token, user_token} = UserToken.build_session_token(user)
     Repo.insert!(user_token)
