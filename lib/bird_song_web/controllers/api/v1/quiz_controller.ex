@@ -11,15 +11,10 @@ defmodule BirdSongWeb.Api.V1.QuizController do
 
   def create(conn, %{} = params) do
     Ecto.Multi.new()
-    |> Ecto.Multi.put(:params, %{
-      birds: Map.get(params, "birds", []),
-      region_code: Map.get(params, "region_code"),
-      user: conn.assigns.current_user
-    })
-    |> Ecto.Multi.all(:birds, &birds_query/1)
-    |> Ecto.Multi.insert(:quiz, &quiz_changeset/1)
-    |> Ecto.Multi.update(:updated_user, &user_changeset/1)
-    |> BirdSong.Repo.transaction()
+    |> Ecto.Multi.put(:user, conn.assigns.current_user)
+    |> Ecto.Multi.put(:region_code, params["region_code"])
+    |> Ecto.Multi.all(:birds, birds_query(params))
+    |> Quiz.create_and_update_user()
     |> case do
       {:ok, %{quiz: quiz}} ->
         json(conn, %{quiz: quiz})
@@ -32,27 +27,9 @@ defmodule BirdSongWeb.Api.V1.QuizController do
     end
   end
 
-  defp birds_query(%{params: %{birds: bird_ids}}) do
-    Bird.get_many_by_id_query(bird_ids)
-  end
-
-  defp quiz_changeset(%{
-         birds: birds,
-         params: params
-       }) do
-    Quiz.changeset(params.user, %{
-      birds: birds,
-      region_code: params.region_code
-    })
-  end
-
-  defp user_changeset(%{
-         params: %{user: user},
-         quiz: %Quiz{id: quiz_id}
-       }) do
-    Accounts.User.current_quiz_changeset(
-      user,
-      %{current_quiz_id: quiz_id}
-    )
+  defp birds_query(params) do
+    params
+    |> Map.get("birds", [])
+    |> Bird.get_many_by_id_query()
   end
 end
