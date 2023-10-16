@@ -1,11 +1,11 @@
-defmodule BirdSongWeb.Api.UserControllerTest do
+defmodule BirdSongWeb.Api.V1.UserSessionControllerTest do
   use BirdSongWeb.ApiConnCase
 
   describe "create user session" do
     @tag login?: false
     test "logs in user if password is valid", %{conn: conn, user: user} do
       conn =
-        post(conn, api_path(conn, :create),
+        post(conn, Routes.api_v1_user_session_path(conn, :create),
           user: %{
             "email" => user.email,
             "password" => valid_user_password()
@@ -21,7 +21,7 @@ defmodule BirdSongWeb.Api.UserControllerTest do
     @tag login?: false
     test "returns 401 when password is invalid", %{conn: conn, user: user} do
       conn =
-        post(conn, api_path(conn, :create),
+        post(conn, Routes.api_v1_user_session_path(conn, :create),
           user: %{email: user.email, password: "invalid_password"}
         )
 
@@ -34,14 +34,14 @@ defmodule BirdSongWeb.Api.UserControllerTest do
 
   describe "log out" do
     test "deletes user session", %{conn: conn} do
-      conn = delete(conn, api_path(conn, :delete))
+      conn = delete(conn, Routes.api_v1_user_session_path(conn, :delete))
 
       assert json_response(conn, 200) == %{
                "message" => "User logged out successfully.",
                "success" => true
              }
 
-      conn = post(conn, Routes.quiz_path(conn, :create))
+      conn = post(conn, Routes.api_v1_quiz_path(conn, :create))
       assert json_response(conn, :unauthorized) == %{"message" => "Login required."}
     end
   end

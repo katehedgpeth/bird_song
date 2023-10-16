@@ -21,13 +21,6 @@ defmodule BirdSongWeb.ApiConnCase do
 
       setup [:maybe_login]
 
-      def api_path(conn, method, params \\ []) do
-        Path.join(
-          "/api",
-          Routes.user_session_path(conn, method, params)
-        )
-      end
-
       def maybe_login(%{login?: false}) do
         :ok
       end

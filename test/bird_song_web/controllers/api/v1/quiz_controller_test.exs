@@ -1,4 +1,4 @@
-defmodule BirdSongWeb.QuizControllerTest do
+defmodule BirdSongWeb.Api.V1.QuizControllerTest do
   use BirdSongWeb.ApiConnCase
 
   alias BirdSong.{
@@ -9,15 +9,15 @@ defmodule BirdSongWeb.QuizControllerTest do
   describe "returns 401 when user is not logged in" do
     @describetag login?: false
 
-    test "POST /quiz", %{conn: conn} do
-      conn = post(conn, Routes.quiz_path(conn, :create))
+    test "POST /api/v1/quiz", %{conn: conn} do
+      conn = post(conn, Routes.api_v1_quiz_path(conn, :create))
       assert json_response(conn, :unauthorized) == %{"message" => "Login required."}
     end
   end
 
-  describe "POST /api/quiz" do
+  describe "POST /api/v1/quiz" do
     test "returns an error response if params are invalid", %{conn: conn} do
-      conn = post(conn, Routes.quiz_path(conn, :create))
+      conn = post(conn, Routes.api_v1_quiz_path(conn, :create))
 
       assert json_response(conn, :bad_request) == %{
                "errors" => %{
@@ -26,7 +26,7 @@ defmodule BirdSongWeb.QuizControllerTest do
                }
              }
 
-      conn = post(conn, Routes.quiz_path(conn, :create, region_code: "US-NC-67"))
+      conn = post(conn, Routes.api_v1_quiz_path(conn, :create, region_code: "US-NC-67"))
 
       assert json_response(conn, :bad_request) == %{
                "errors" => %{
@@ -36,7 +36,9 @@ defmodule BirdSongWeb.QuizControllerTest do
     end
 
     test "returns a quiz when params are valid", %{conn: conn} do
-      path = Routes.quiz_path(conn, :create, birds: get_bird_ids(), region_code: "US-NC-067")
+      path =
+        Routes.api_v1_quiz_path(conn, :create, birds: get_bird_ids(), region_code: "US-NC-067")
+
       conn = post(conn, path)
       response = json_response(conn, 200)
       assert Map.keys(response) == ["quiz"]

@@ -93,15 +93,15 @@ defmodule BirdSongWeb.Router do
     post "/users/confirm/:token", UserConfirmationController, :update
   end
 
-  scope "/api", BirdSongWeb do
+  scope "/api/v1", BirdSongWeb.Api.V1, as: :api_v1 do
     pipe_through [:api]
 
-    post "/users/log_in", Api.UserSessionController, :create
-    delete "/users/log_out", Api.UserSessionController, :delete
+    post "/users/log_in", UserSessionController, :create
+    delete "/users/log_out", UserSessionController, :delete
   end
 
-  scope "/api", BirdSongWeb do
+  scope "/api/v1", BirdSongWeb.Api.V1, as: :api_v1 do
     pipe_through [:api, :api_require_authenticated_user]
-    post "/quiz", Api.QuizController, :create
+    post "/quiz", QuizController, :create
   end
 end

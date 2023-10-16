@@ -1,4 +1,4 @@
-defmodule BirdSongWeb.Api.UserSessionController do
+defmodule BirdSongWeb.Api.V1.UserSessionController do
   use BirdSongWeb, :controller
 
   alias BirdSongWeb.UserAuth

@@ -1,4 +1,4 @@
-defmodule BirdSongWeb.Api.QuizController do
+defmodule BirdSongWeb.Api.V1.QuizController do
   use BirdSongWeb, :controller
 
   alias BirdSong.{
