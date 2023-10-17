@@ -12,6 +12,13 @@ defmodule BirdSong.Quiz.Answer do
     Repo
   }
 
+  @derive {Jason.Encoder,
+           only: [
+             :correct?,
+             :correct_bird,
+             :submitted_bird
+           ]}
+
   schema "quiz_answers" do
     field :correct?, :boolean, default: false
     belongs_to :quiz, Quiz

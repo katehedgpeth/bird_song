@@ -57,11 +57,12 @@ defmodule BirdSong.Quiz do
     timestamps()
   end
 
-  def create_and_update_user(%Ecto.Multi{} = multi) do
-    multi
-    |> Ecto.Multi.insert(:quiz, &create_changeset/1)
-    |> Ecto.Multi.update(:updated_user, &user_changeset/1)
-    |> BirdSong.Repo.transaction()
+  def create(%{} = params) do
+    {user, params} = Map.pop!(params, :user)
+
+    user
+    |> changeset(params)
+    |> BirdSong.Repo.insert()
   end
 
   def changeset(%User{} = user, %{} = attrs) do
@@ -127,24 +128,6 @@ defmodule BirdSong.Quiz do
         where: q.user_id == ^user_id,
         preload: [:user]
       )
-    )
-  end
-
-  defp create_changeset(%{
-         birds: birds,
-         region_code: region_code,
-         user: user
-       }) do
-    changeset(user, %{
-      birds: birds,
-      region_code: region_code
-    })
-  end
-
-  defp user_changeset(%{quiz: %__MODULE__{id: quiz_id}, user: user}) do
-    Accounts.User.current_quiz_changeset(
-      user,
-      %{current_quiz_id: quiz_id}
     )
   end
 end

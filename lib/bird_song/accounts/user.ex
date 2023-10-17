@@ -134,14 +134,6 @@ defmodule BirdSong.Accounts.User do
     end
   end
 
-  def update_current_quiz(%{quiz: quiz, user: user}) do
-    Ecto.Multi.new()
-    |> Ecto.Multi.update(
-      :user_with_current_quiz,
-      current_quiz_changeset(user, %{current_quiz_id: get_quiz_id(quiz)})
-    )
-  end
-
   def get_for_multi(%Ecto.Multi{} = multi, id) when is_integer(id) do
     multi
     |> Ecto.Multi.put(:user_id, id)
@@ -157,9 +149,6 @@ defmodule BirdSong.Accounts.User do
       where: u.id == ^user_id
     )
   end
-
-  defp get_quiz_id(%Quiz{id: id}) when is_integer(id), do: id
-  defp get_quiz_id(nil), do: nil
 
   @doc """
   Confirms the account by setting `confirmed_at`.

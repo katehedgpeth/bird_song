@@ -3,14 +3,13 @@ defmodule BirdSongWeb.Api.V1.UserControllerTest do
 
   alias BirdSong.{
     Bird,
-    Quiz,
-    Accounts.User
+    Quiz
   }
 
   setup %{user: user} do
     BirdSong.StaticData.seed_taxonomy("test/mock_data")
 
-    {:ok, _} = update_current_quiz(user)
+    {:ok, _} = create_quiz(user)
   end
 
   describe "returns 401 if user is not logged in" do
@@ -33,45 +32,9 @@ defmodule BirdSongWeb.Api.V1.UserControllerTest do
     end
   end
 
-  describe "GET /api/v1/users/:user_id/quizzes/current" do
-    test "returns current quiz if current quiz is assigned", %{
-      conn: conn,
-      updated_user: user,
-      quiz: quiz
-    } do
-      assert user.current_quiz_id == quiz.id
-
-      response =
-        conn
-        |> get(Routes.api_v1_user_quiz_path(conn, :show, user.id, "current"))
-        |> json_response(:ok)
-
-      assert Map.keys(response) == ["quiz"]
-    end
-
-    test "returns 404 if user does not have a current quiz assigned", %{
-      conn: conn,
-      updated_user: user
-    } do
-      user
-      |> User.current_quiz_changeset(%{current_quiz_id: nil})
-      |> BirdSong.Repo.update!()
-
-      response =
-        conn
-        |> get(Routes.api_v1_user_quiz_path(conn, :show, user.id, "current"))
-        |> json_response(:not_found)
-
-      assert response == %{
-               "message" => "No current quiz assigned.",
-               "error" => true
-             }
-    end
-  end
-
   describe "GET /api/v1/users/:user_id/quizzes/:quiz_id" do
     test "returns a quiz if it exists", %{conn: conn, user: user, quiz: old_quiz} do
-      assert {:ok, %{quiz: _new_quiz}} = update_current_quiz(user)
+      assert {:ok, %{quiz: _new_quiz}} = create_quiz(user)
 
       response =
         conn
@@ -93,7 +56,7 @@ defmodule BirdSongWeb.Api.V1.UserControllerTest do
     end
 
     test "returns 403 if quiz does not belong to user", %{conn: conn, user: user} do
-      assert {:ok, %{quiz: new_quiz}} = update_current_quiz(user_fixture())
+      assert {:ok, %{quiz: new_quiz}} = create_quiz(user_fixture())
 
       response =
         conn
@@ -104,11 +67,15 @@ defmodule BirdSongWeb.Api.V1.UserControllerTest do
     end
   end
 
-  defp update_current_quiz(user) do
+  defp create_quiz(user) do
     Ecto.Multi.new()
     |> Ecto.Multi.put(:user, user)
     |> Ecto.Multi.put(:region_code, "US-NC-067")
     |> Ecto.Multi.all(:birds, Bird)
-    |> Quiz.create_and_update_user()
+    |> Ecto.Multi.insert(
+      :quiz,
+      &Quiz.changeset(&1.user, Map.take(&1, [:region_code, :birds]))
+    )
+    |> BirdSong.Repo.transaction()
   end
 end

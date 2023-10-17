@@ -103,6 +103,7 @@ defmodule BirdSongWeb.Router do
   scope "/api/v1", BirdSongWeb.Api.V1, as: :api_v1 do
     pipe_through [:api, :api_require_authenticated_user]
     post "/quizzes", QuizController, :create
+    post "/quizzes/:quiz_id/answers", QuizAnswersController, :create
     get "/users/:user_id/quizzes/:quiz_id", UserQuizController, :show
   end
 end
