@@ -4,7 +4,6 @@ defmodule BirdSongWeb.Api.V1.QuizController do
   alias Plug.Conn
 
   alias BirdSong.{
-    Accounts,
     Bird,
     Quiz
   }

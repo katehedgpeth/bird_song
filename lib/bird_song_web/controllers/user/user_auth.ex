@@ -22,7 +22,7 @@ defmodule BirdSongWeb.UserAuth do
     if user = Accounts.get_user_by_email_and_password(email, password) do
       log_in_user(conn, user, user_params)
     else
-      conn
+      log_out_user(conn)
     end
   end
 
@@ -43,6 +43,7 @@ defmodule BirdSongWeb.UserAuth do
 
     conn
     |> renew_session()
+    |> assign(:current_user, user)
     |> put_session(:user_token, token)
     |> put_session(:live_socket_id, "users_sessions:#{Base.url_encode64(token)}")
     |> maybe_write_remember_me_cookie(token, params)
@@ -93,6 +94,7 @@ defmodule BirdSongWeb.UserAuth do
     conn
     |> renew_session()
     |> delete_resp_cookie(@remember_me_cookie)
+    |> assign(:current_user, nil)
   end
 
   @doc """

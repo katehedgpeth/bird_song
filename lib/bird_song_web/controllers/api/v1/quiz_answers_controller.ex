@@ -3,7 +3,6 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersController do
 
   alias BirdSong.{
     Bird,
-    Quiz,
     Quiz.Answer,
     UserQuiz
   }

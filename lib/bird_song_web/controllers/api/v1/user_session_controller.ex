@@ -1,20 +1,25 @@
 defmodule BirdSongWeb.Api.V1.UserSessionController do
   use BirdSongWeb, :controller
 
+  alias Plug.Conn
+
   alias BirdSongWeb.UserAuth
+  alias BirdSong.Accounts.User
 
   action_fallback BirdSongWeb.FallbackController
 
   def create(conn, %{"user" => user_params}) do
-    conn = UserAuth.log_in_user_if_valid_password(conn, user_params)
-
-    case get_session(conn, :user_token) do
-      "" <> _ ->
+    case UserAuth.log_in_user_if_valid_password(conn, user_params) do
+      %Conn{assigns: %{current_user: %User{}}} = conn ->
         conn
         |> put_status(:created)
-        |> json(%{success: true, message: "User successfully logged in."})
+        |> json(%{
+          success: true,
+          message: "User successfully logged in.",
+          user: conn.assigns.current_user
+        })
 
-      nil ->
+      %Conn{} = conn ->
         conn
         |> put_status(:unauthorized)
         |> json(%{error: true, message: "Invalid email or password."})

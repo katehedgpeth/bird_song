@@ -12,10 +12,14 @@ defmodule BirdSongWeb.Api.V1.UserSessionControllerTest do
           }
         )
 
-      assert json_response(conn, 201) == %{
+      response = json_response(conn, 201)
+      assert Map.keys(response) == ["message", "success", "user"]
+
+      assert %{
                "message" => "User successfully logged in.",
-               "success" => true
-             }
+               "success" => true,
+               "user" => %{"email" => _, "id" => _}
+             } = response
     end
 
     @tag login?: false
@@ -29,6 +33,26 @@ defmodule BirdSongWeb.Api.V1.UserSessionControllerTest do
                "error" => true,
                "message" => "Invalid email or password."
              }
+    end
+
+    test "returns 401 when password is invalid even if session cookie exists", %{
+      conn: conn,
+      user: user
+    } do
+      conn =
+        post(conn, Routes.api_v1_user_session_path(conn, :create),
+          user: %{email: user.email, password: valid_user_password()}
+        )
+
+      conn = fetch_cookies(conn, [])
+      assert Map.keys(conn.cookies) == ["_bird_song_key"]
+
+      conn =
+        post(conn, Routes.api_v1_user_session_path(conn, :create),
+          user: %{email: user.email, password: "invalid_password"}
+        )
+
+      assert json_response(conn, :unauthorized)
     end
   end
 
