@@ -19,15 +19,18 @@ defmodule BirdSong.MockEbirdServer do
   }
 
   def setup(tags) do
-    bypass =
-      tags
-      |> Map.fetch!(:bypasses)
-      |> Map.fetch!(Ebird)
-      |> Map.fetch!(:bypass)
-
-    Bypass.expect(bypass, &response/1)
+    tags
+    |> get_bypass()
+    |> Bypass.expect(&response/1)
 
     :ok
+  end
+
+  def get_bypass(tags) do
+    tags
+    |> Map.fetch!(:bypasses)
+    |> Map.fetch!(Ebird)
+    |> Map.fetch!(:bypass)
   end
 
   # Ebird.Regions

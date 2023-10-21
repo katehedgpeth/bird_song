@@ -56,7 +56,19 @@ defmodule BirdSong.Region do
   end
 
   def from_code!("" <> code) do
-    BirdSong.Repo.one!(from r in __MODULE__, where: r.code == ^code)
+    code
+    |> from_code_query()
+    |> BirdSong.Repo.one!()
+  end
+
+  def from_code("" <> code) do
+    code
+    |> from_code_query()
+    |> BirdSong.Repo.one()
+  end
+
+  defp from_code_query("" <> code) do
+    from r in __MODULE__, where: r.code == ^code
   end
 
   @doc false

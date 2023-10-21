@@ -6,6 +6,7 @@ defmodule BirdSong.Services.Ebird.RegionSpeciesCodes do
   alias BirdSong.{
     Services.Ebird,
     Services.Helpers,
+    Services.Worker,
     Services.ThrottledCache
   }
 
