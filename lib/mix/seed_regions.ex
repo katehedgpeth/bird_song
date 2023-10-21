@@ -2,6 +2,9 @@ defmodule Mix.Tasks.BirdSong.SeedRegions do
   use Mix.Task
   alias BirdSong.Services.Ebird
 
+  @moduledoc "seed region data"
+  @shortdoc "seed region data"
+
   @requirements ["app.config", "app.start"]
 
   def run(opts) when is_list(opts) do
@@ -15,9 +18,6 @@ defmodule Mix.Tasks.BirdSong.SeedRegions do
     |> get_all_regions()
     |> BirdSong.Region.seed!()
   end
-
-  defp seed_function(%{run_transaction?: true}), do: :seed!
-  defp seed_function(%{run_transaction?: false}), do: :seed
 
   def get_all_regions(parent_folder) do
     "world-country"

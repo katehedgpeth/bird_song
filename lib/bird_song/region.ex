@@ -5,6 +5,17 @@ defmodule BirdSong.Region do
 
   alias BirdSong.Services.Ebird
 
+  @derive {Jason.Encoder,
+           only: [
+             :code,
+             :full_name,
+             :max_lat,
+             :max_lon,
+             :min_lat,
+             :min_lon,
+             :short_name
+           ]}
+
   @known_dupes [
     "Echizen, Fukui, Japan",
     "Esashi, Hokkaido, Japan",
@@ -34,6 +45,14 @@ defmodule BirdSong.Region do
 
   def all() do
     BirdSong.Repo.all(__MODULE__)
+  end
+
+  def filter_by_name(name) do
+    name = String.downcase(name)
+
+    __MODULE__
+    |> BirdSong.Repo.all()
+    |> Enum.filter(fn %{short_name: short_name} -> String.downcase(short_name) =~ name end)
   end
 
   def from_code!("" <> code) do
