@@ -10,13 +10,16 @@ defmodule BirdSongWeb.Api.V1.UserSessionController do
 
   def create(conn, %{"user" => user_params}) do
     case UserAuth.log_in_user_if_valid_password(conn, user_params) do
-      %Conn{assigns: %{current_user: %User{}}} = conn ->
+      %Conn{assigns: %{current_user: %User{} = user}} = conn ->
+        conn = BirdSong.Accounts.Guardian.Plug.sign_in(conn, user)
+
         conn
         |> put_status(:created)
         |> json(%{
           success: true,
           message: "User successfully logged in.",
-          user: conn.assigns.current_user
+          user: conn.assigns.current_user,
+          token: Conn.get_session(conn, "guardian_default_token")
         })
 
       %Conn{} = conn ->

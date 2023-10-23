@@ -66,6 +66,9 @@ config :bird_song, BirdSongWeb.Endpoint,
     ]
   ]
 
+config :bird_song, BirdSong.Accounts.Guardian,
+  secret_key: "G8E93ahhOX8WN7ikO7yzTynog8NeIqQyYkAKFHi8sukmB3bRrYOdK+1aXuB6Bgj5"
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :console, format: "[$level] $message\n"
 

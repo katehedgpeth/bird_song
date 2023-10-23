@@ -13,7 +13,7 @@ defmodule BirdSongWeb.Api.V1.UserSessionControllerTest do
         )
 
       response = json_response(conn, 201)
-      assert Map.keys(response) == ["message", "success", "user"]
+      assert Map.keys(response) == ["message", "success", "token", "user"]
 
       assert %{
                "message" => "User successfully logged in.",

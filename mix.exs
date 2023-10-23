@@ -54,7 +54,8 @@ defmodule BirdSong.MixProject do
       {:bypass, "~> 2.1"},
       {:tailwind, "~> 0.1"},
       {:swoosh, "~> 1.4"},
-      {:site_encrypt, "~> 0.5"}
+      {:site_encrypt, "~> 0.5"},
+      {:guardian, "~> 2.0"}
     ]
   end
 

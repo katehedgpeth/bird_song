@@ -16,7 +16,7 @@ defmodule BirdSongWeb.Api.V1.QuizControllerTest do
   end
 
   describe "POST /api/v1/quiz" do
-    test "returns an error response if params are invalid", %{conn: conn} do
+    test "returns an error response if all params are missing", %{conn: conn} do
       conn = post(conn, Routes.api_v1_quiz_path(conn, :create))
 
       assert json_response(conn, :bad_request) == %{
@@ -25,8 +25,24 @@ defmodule BirdSongWeb.Api.V1.QuizControllerTest do
                  "region_code" => ["can't be blank"]
                }
              }
+    end
 
+    test "returns an error if birds is missing", %{conn: conn} do
       conn = post(conn, Routes.api_v1_quiz_path(conn, :create, region_code: "US-NC-67"))
+
+      assert json_response(conn, :bad_request) == %{
+               "errors" => %{
+                 "birds" => ["should have at least 1 item(s)"]
+               }
+             }
+    end
+
+    test "returns an error if birds is empty", %{conn: conn} do
+      conn =
+        post(
+          conn,
+          Routes.api_v1_quiz_path(conn, :create, region_code: "US-NC-067", birds: [])
+        )
 
       assert json_response(conn, :bad_request) == %{
                "errors" => %{

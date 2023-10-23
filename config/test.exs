@@ -36,6 +36,9 @@ config :bird_song, BirdSong.Services.MacaulayLibrary.Playwright, default_timeout
 
 config :bird_song, BirdSong.Services, stream_timeout_ms: one_second
 
+config :bird_song, BirdSong.Accounts.Guardian,
+  secret_key: "22wmFQKi84Rf4emitIf8xEOa077kGJhXnrwmS/g27Vm74vbksggLo0je+3s68rPo"
+
 config :logger, level: :warn
 
 # Initialize plugs at runtime for faster test compilation

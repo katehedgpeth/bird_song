@@ -27,7 +27,7 @@ defmodule BirdSongWeb.ApiConnCase do
 
       def maybe_login(%{login?: true, conn: conn, user: user}) do
         %{
-          conn: BirdSongWeb.ConnCase.log_in_user(conn, user)
+          conn: BirdSong.Accounts.Guardian.Plug.sign_in(conn, user)
         }
       end
     end

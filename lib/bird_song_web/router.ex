@@ -4,8 +4,8 @@ defmodule BirdSongWeb.Router do
   import BirdSongWeb.UserAuth,
     only: [
       fetch_current_user: 2,
+      guardian_fetch_current_user: 2,
       require_authenticated_user: 2,
-      api_require_authenticated_user: 2,
       redirect_if_user_is_authenticated: 2
     ]
 
@@ -19,11 +19,19 @@ defmodule BirdSongWeb.Router do
     plug :fetch_current_user
   end
 
+  pipeline :api_auth do
+    plug BirdSong.Accounts.Pipeline
+  end
+
+  pipeline :api_ensure_auth do
+    plug Guardian.Plug.EnsureAuthenticated
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
     plug :fetch_live_flash
-    plug :fetch_current_user
+    plug :guardian_fetch_current_user
   end
 
   scope "/", BirdSongWeb do
@@ -94,14 +102,14 @@ defmodule BirdSongWeb.Router do
   end
 
   scope "/api/v1", BirdSongWeb.Api.V1, as: :api_v1 do
-    pipe_through [:api]
+    pipe_through [:api, :api_auth]
 
     post "/users/log_in", UserSessionController, :create
     delete "/users/log_out", UserSessionController, :delete
   end
 
   scope "/api/v1", BirdSongWeb.Api.V1, as: :api_v1 do
-    pipe_through [:api, :api_require_authenticated_user]
+    pipe_through [:api, :api_auth, :api_ensure_auth]
     get "/regions", RegionController, :index
     get "/regions/:region_code/birds", RegionBirdsController, :index
     post "/quizzes", QuizController, :create

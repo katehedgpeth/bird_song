@@ -79,6 +79,8 @@ config :bird_song, BirdSong.Services,
 
 config :bird_song, BirdSong.Data.Recorder, stream_timeout_ms: :infinity
 
+config :bird_song, BirdSong.Accounts.Guardian, issuer: "bird_song"
+
 # Configure esbuild (the version is required)
 config :esbuild,
   version: "0.14.29",
