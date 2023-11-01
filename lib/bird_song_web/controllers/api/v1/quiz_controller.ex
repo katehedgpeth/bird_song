@@ -5,12 +5,13 @@ defmodule BirdSongWeb.Api.V1.QuizController do
 
   alias BirdSong.{
     Bird,
-    Quiz
+    Quiz,
+    Accounts.User
   }
 
   action_fallback(BirdSongWeb.FallbackController)
 
-  def create(conn, %{} = params) do
+  def create(%Conn{assigns: %{current_user: %User{}}} = conn, %{} = params) do
     Ecto.Multi.new()
     |> Ecto.Multi.all(:birds, birds_query(params))
     |> Ecto.Multi.insert(:quiz, &quiz_changeset(&1, conn, params))
