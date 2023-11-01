@@ -10,4 +10,11 @@ defmodule BirdSong.Accounts.GuardianErrorHandler do
     |> put_status(:unauthorized)
     |> Phoenix.Controller.json(%{message: "Login required."})
   end
+
+  def auth_error(conn, {:no_resource_found, :no_resource_found}, _opts) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> put_status(:unauthorized)
+    |> Phoenix.Controller.json(%{message: "Unknown user"})
+  end
 end

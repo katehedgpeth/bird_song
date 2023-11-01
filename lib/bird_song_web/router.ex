@@ -19,18 +19,20 @@ defmodule BirdSongWeb.Router do
     plug :fetch_current_user
   end
 
-  pipeline :api_auth do
-    plug BirdSong.Accounts.Pipeline
-  end
-
-  pipeline :api_ensure_auth do
-    plug Guardian.Plug.EnsureAuthenticated
-  end
-
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
     plug :fetch_live_flash
+    plug BirdSong.Accounts.Pipeline
+  end
+
+  pipeline :api_auth do
+    plug Guardian.Plug.LoadResource, allow_blank: true
+  end
+
+  pipeline :api_require_user do
+    plug Guardian.Plug.EnsureAuthenticated
+    plug Guardian.Plug.LoadResource, allow_blank: false
     plug :guardian_fetch_current_user
   end
 
@@ -105,11 +107,11 @@ defmodule BirdSongWeb.Router do
     pipe_through [:api, :api_auth]
 
     post "/users/log_in", UserSessionController, :create
-    delete "/users/log_out", UserSessionController, :delete
   end
 
   scope "/api/v1", BirdSongWeb.Api.V1, as: :api_v1 do
-    pipe_through [:api, :api_auth, :api_ensure_auth]
+    pipe_through [:api, :api_require_user]
+    delete "/users/log_out", UserSessionController, :delete
     get "/regions", RegionController, :index
     get "/regions/:region_code/birds", RegionBirdsController, :index
     post "/quizzes", QuizController, :create
