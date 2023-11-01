@@ -14,6 +14,7 @@ defmodule BirdSong.Bird do
   @derive {Inspect, only: [:common_name, :id, :sci_name]}
   @derive {Jason.Encoder,
            only: [
+             :id,
              :species_code,
              :common_name,
              :sci_name,
