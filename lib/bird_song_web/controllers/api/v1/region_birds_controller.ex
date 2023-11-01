@@ -3,7 +3,7 @@ defmodule BirdSongWeb.Api.V1.RegionBirdsController do
 
   alias Plug.Conn
 
-  alias BirdSong.{Services, Region}
+  alias BirdSong.{Bird, Services, Region}
   alias BirdSong.Services.Ebird.RegionSpeciesCodes
 
   plug :assign_worker
@@ -12,7 +12,7 @@ defmodule BirdSongWeb.Api.V1.RegionBirdsController do
   def index(conn, %{"region_code" => region_code}) do
     case RegionSpeciesCodes.get_codes(region_code, conn.assigns.worker) do
       {:ok, %RegionSpeciesCodes.Response{codes: codes}} ->
-        json(conn, %{species_codes: codes, region: conn.assigns.region})
+        json(conn, %{birds: Bird.get_many_by_species_code(codes)})
 
       {:error, _} ->
         conn
@@ -49,7 +49,7 @@ defmodule BirdSongWeb.Api.V1.RegionBirdsController do
     end
   end
 
-  def assign_worker(conn, %{}) do
+  def assign_worker(conn, []) do
     Services.all()
     |> do_assign_worker(conn)
   end

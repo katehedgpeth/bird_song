@@ -48,29 +48,30 @@ defmodule BirdSongWeb.Api.V1.RegionBirdsControllerTest do
     end
 
     test "returns list of birds when region exists", %{conn: conn, path: path} = tags do
+      BirdSong.StaticData.seed_taxonomy("test/mock_data")
       MockEbirdServer.setup(tags)
       conn = get(conn, path)
 
       response = json_response(conn, :ok)
-      assert Map.keys(response) == ["region", "species_codes"]
-      assert is_list(response["species_codes"])
-      assert length(response["species_codes"]) > 0
+      assert Map.keys(response) == ["birds"]
+      assert is_list(response["birds"])
+      assert length(response["birds"]) > 0
 
-      assert Map.keys(response["region"]) == [
-               "code",
-               "full_name",
-               "max_lat",
-               "max_lon",
-               "min_lat",
-               "min_lon",
-               "short_name"
+      [bird | _] = response["birds"]
+
+      assert Map.keys(bird) == [
+               "banding_codes",
+               "category",
+               "common_name",
+               "common_name_codes",
+               "family",
+               "id",
+               "order",
+               "sci_name",
+               "sci_name_codes",
+               "species_code",
+               "taxon_order"
              ]
-
-      assert response["region"]["short_name"] == "Forsyth"
-
-      for code <- Map.fetch!(response, "species_codes") do
-        assert is_binary(code)
-      end
     end
   end
 end
