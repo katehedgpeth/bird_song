@@ -1,4 +1,5 @@
 defmodule BirdSong.Services.MacaulayLibrary.Recording do
+  @derive Jason.Encoder
   defstruct [
     :asset_id,
     :location,

@@ -81,6 +81,11 @@ defmodule BirdSong.Bird do
     family_name
   end
 
+  @spec get!(integer()) :: Bird.t()
+  def get!(id) do
+    BirdSong.Repo.get!(__MODULE__, id)
+  end
+
   @spec get_by_sci_name(String.t()) :: {:ok, Bird.t()} | {:error, {:not_found, String.t()}}
   def get_by_sci_name("" <> sci_name) do
     case BirdSong.Repo.get_by(__MODULE__, sci_name: sci_name) do

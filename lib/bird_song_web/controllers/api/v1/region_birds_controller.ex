@@ -6,11 +6,12 @@ defmodule BirdSongWeb.Api.V1.RegionBirdsController do
   alias BirdSong.{Bird, Services, Region}
   alias BirdSong.Services.Ebird.RegionSpeciesCodes
 
-  plug :assign_worker
   plug :assign_region
 
   def index(conn, %{"region_code" => region_code}) do
-    case RegionSpeciesCodes.get_codes(region_code, conn.assigns.worker) do
+    %Services{ebird: %{RegionSpeciesCodes: worker}} = conn.assigns.services
+
+    case RegionSpeciesCodes.get_codes(region_code, worker) do
       {:ok, %RegionSpeciesCodes.Response{codes: codes}} ->
         json(conn, %{birds: Bird.get_many_by_species_code(codes)})
 
@@ -31,39 +32,6 @@ defmodule BirdSongWeb.Api.V1.RegionBirdsController do
 
       %Region{} = region ->
         assign(conn, :region, region)
-    end
-  end
-
-  def assign_worker(%Conn{params: %{"services" => name}} = conn, []) do
-    case get_services_name(name) do
-      {:ok, instance_name} ->
-        instance_name
-        |> Services.all()
-        |> do_assign_worker(conn)
-
-      :error ->
-        conn
-        |> put_status(:bad_request)
-        |> json(%{})
-        |> halt()
-    end
-  end
-
-  def assign_worker(conn, []) do
-    Services.all()
-    |> do_assign_worker(conn)
-  end
-
-  defp do_assign_worker(%Services{ebird: %{RegionSpeciesCodes: worker}}, conn) do
-    assign(conn, :worker, worker)
-  end
-
-  defp get_services_name(name) do
-    try do
-      {:ok, String.to_existing_atom(name)}
-    rescue
-      ArgumentError ->
-        :error
     end
   end
 end

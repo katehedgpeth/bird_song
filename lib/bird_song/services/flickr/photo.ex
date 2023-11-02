@@ -1,4 +1,6 @@
 defmodule BirdSong.Services.Flickr.Photo do
+  @derive Jason.Encoder
+
   defstruct [:id, :owner_id, :url, :title]
 
   def parse(%{
