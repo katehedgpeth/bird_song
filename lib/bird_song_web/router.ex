@@ -41,12 +41,6 @@ defmodule BirdSongWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :index
-
-    live_session :quiz do
-      pipe_through :require_authenticated_user
-      live "/quiz/new", QuizLive.New
-      live "/quiz", QuizLive
-    end
   end
 
   # Other scopes may use custom stacks.

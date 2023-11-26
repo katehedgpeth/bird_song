@@ -10,7 +10,6 @@ defmodule BirdSong.Application do
               BirdSong.Repo,
               [
                 BirdSong.Services,
-                BirdSongWeb.QuizLive.EtsTables,
                 # Start the Telemetry supervisor
                 BirdSongWeb.Telemetry,
                 # Start the PubSub system
