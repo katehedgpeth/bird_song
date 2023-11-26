@@ -116,8 +116,12 @@ defmodule BirdSongWeb.Router do
     get "/regions", RegionController, :index
     get "/regions/:region_code/birds", RegionBirdsController, :index
     post "/quizzes", QuizController, :create
-    post "/quizzes/:quiz_id/bird", QuizBirdController, :create
-    post "/quizzes/:quiz_id/answers", QuizAnswersController, :create
+    get "/quizzes/:quiz_id/bird/:bird_id", QuizBirdController, :show
+
+    post "/quizzes/:quiz_id/bird/:bird_id/answer",
+         QuizAnswersController,
+         :create
+
     get "/users/:user_id/quizzes/:quiz_id", UserQuizController, :show
   end
 end

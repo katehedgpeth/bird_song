@@ -2,17 +2,19 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersController do
   use BirdSongWeb, :controller
 
   alias BirdSong.{
-    Bird,
-    Quiz.Answer,
-    UserQuiz
+    Quiz.Answer
   }
 
-  def create(conn, params) do
+  plug BirdSongWeb.Plugs.AssignQuiz
+  plug BirdSongWeb.Plugs.AssignQuizBird, assign_to: :bird
+  plug BirdSongWeb.Plugs.AssignQuizBird, assign_to: :submitted_bird
+
+  def create(conn, %{}) do
     Ecto.Multi.new()
     |> Ecto.Multi.put(:user, conn.assigns.current_user)
-    |> Ecto.Multi.run(:quiz, &get_quiz(&1, &2, Map.fetch!(params, "quiz_id")))
-    |> Ecto.Multi.run(:correct_bird, &get_bird(&1, &2, params["correct_bird"]))
-    |> Ecto.Multi.run(:submitted_bird, &get_bird(&1, &2, params["submitted_bird"]))
+    |> Ecto.Multi.put(:quiz, conn.assigns.quiz)
+    |> Ecto.Multi.put(:correct_bird, conn.assigns.bird)
+    |> Ecto.Multi.put(:submitted_bird, conn.assigns.submitted_bird)
     |> Ecto.Multi.insert(:answer, &Answer.changeset/1)
     |> BirdSong.Repo.transaction()
     |> case do
@@ -28,22 +30,6 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersController do
         conn
         |> put_status(:bad_request)
         |> json(Map.put(%{error: true}, item, :not_found))
-    end
-  end
-
-  defp get_quiz(repo, %{user: user}, quiz_id) do
-    with {:ok, quiz} <- UserQuiz.get_quiz(user, quiz_id, repo) do
-      {:ok, repo.preload(quiz, birds: [:family, :order])}
-    end
-  end
-
-  defp get_bird(repo, %{}, id) do
-    Bird
-    |> repo.get(id)
-    |> repo.preload([:family, :order])
-    |> case do
-      nil -> {:error, :not_found}
-      item -> {:ok, item}
     end
   end
 end

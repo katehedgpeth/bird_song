@@ -12,12 +12,15 @@ defmodule BirdSongWeb.Api.V1.QuizBirdController do
     Services
   }
 
-  plug :assign_quiz
-  plug :assign_bird
-  plug :assign_resource, resource: :image, worker: :PhotoSearch
-  plug :assign_resource, resource: :recording, worker: :Recordings
+  plug BirdSongWeb.Plugs.AssignQuiz
+  plug BirdSongWeb.Plugs.AssignQuizBird, assign_to: :bird
 
-  def create(conn, %{}) do
+  def show(conn, %{"bird_id" => "random"}) do
+    conn =
+      conn
+      |> assign_resource(resource: :image, worker: :PhotoSearch)
+      |> assign_resource(resource: :recording, worker: :Recordings)
+
     _ = Map.fetch!(conn.assigns, :quiz)
     _ = Map.fetch!(conn.assigns, :bird)
     _ = Map.fetch!(conn.assigns, :recording)
@@ -31,39 +34,6 @@ defmodule BirdSongWeb.Api.V1.QuizBirdController do
     } = conn.assigns
 
     json(conn, %{quiz: quiz, bird: bird, image: image, recording: recording})
-  end
-
-  defp assign_quiz(
-         %{params: %{"quiz_id" => quiz_id}, assigns: %{current_user: %{id: user_id}}} = conn,
-         []
-       ) do
-    Quiz
-    |> BirdSong.Repo.get(quiz_id)
-    |> BirdSong.Repo.preload(birds: [:family, :order])
-    |> case do
-      %Quiz{user_id: ^user_id} = quiz ->
-        assign(conn, :quiz, quiz)
-
-      %Quiz{} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{message: "Quiz not owned by user"})
-        |> halt()
-
-      nil ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{message: "Quiz not found"})
-        |> halt()
-    end
-  end
-
-  defp assign_bird(%{assigns: %{quiz: %Quiz{} = quiz}} = conn, []) do
-    assign(
-      conn,
-      :bird,
-      Enum.random(quiz.birds)
-    )
   end
 
   defp assign_resource(

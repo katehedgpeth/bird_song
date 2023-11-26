@@ -1,18 +1,15 @@
 defmodule BirdSong.Services.XenoCanto.Recording do
   alias BirdSong.Bird
 
-  defstruct [
-    # the generic name of the species
-    :gen,
+  @struct_keys [
+    # an array with the identified background species in the recording
+    :also,
 
-    # the specific name (epithet) of the species
-    :sp,
+    # the country where the recording was made
+    :cnt,
 
-    # the subspecies name (subspecific epithet)
-    :ssp,
-
-    # the group to which the species belongs (birds, grasshoppers)
-    :group,
+    # the date that the recording was made
+    :date,
 
     # the English name of the species
     :en,
@@ -20,154 +17,134 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     # the URL to the audio file
     :file,
 
-    # an array with the identified background species in the recording
-    :also,
+    # the generic name of the species
+    :gen,
+
+    # the name of the locality
+    :loc,
+
+    # the latitude of the recording in decimal coordinates
+    :lat,
+
+    # the longitude of the recording in decimal coordinates
+    :lng,
+
+    # an object with the urls to the three versions of oscillograms
+    :osci,
+
+    # the name of the recordist
+    :rec,
+
+    # the sex of the animal
+    :sex,
 
     # an object with the urls to the four versions of sonograms
     :sono,
 
-    # an object with the urls to the three versions of oscillograms
-    :osci,
+    # the specific name (epithet) of the species
+    :sp,
+
+    # the subspecies name (subspecific epithet)
+    :ssp,
+
+    # the life stage of the animal (adult, juvenile, etc.)
+    :stage,
 
     # the sound type of the recording (combining both predefined terms such as 'call' or 'song' and additional free text options)
     :type
   ]
 
-  @unused_keys [
-    # additional remarks by the recordist
-    # :rmk,
-    "rmk",
+  defstruct @struct_keys
 
-    # sample rate
-    # :smp
-    "smp",
-
-    # the catalogue number of the recording on xeno-canto
-    # :id,
-    "id",
-
-    # the name of the recordist
-    # :rec,
-    "rec",
-
-    # the country where the recording was made
-    # :cnt,
-    "cnt",
-
-    # the name of the locality
-    # :loc,
-    "loc",
-
-    # the latitude of the recording in decimal coordinates
-    # :lat,
-    "lat",
-
-    # the longitude of the recording in decimal coordinates
-    # :lng,
-    "lng",
-
-    # the sex of the animal
-    # :sex,
-    "sex",
-
-    # the life stage of the animal (adult, juvenile, etc.)
-    # :stage,
-    "stage",
-
-    # the recording method (field recording, in the hand, etc.)
-    # :method,
-    "method",
-
-    # the URL specifying the details of this recording
-    # :url,
-    "url",
-
-    # the time of day that the recording was made
-    "time",
-
-    # the date that the recording was made
-    "date",
-
-    # the date that the recording was uploaded to xeno-canto
-    "uploaded",
-
-    # registration number of specimen (when collected)
-    "regnr",
-
-    # despite the field name (which was kept to ensure backwards compatibility), this field indicates whether the recorded animal was seen
-    "bird-seen",
+  @unused_atoms [
+    # ??? - not in documentation
+    :alt,
 
     # was the recorded animal seen?
-    "animal-seen",
-
-    # was playback used to lure the animal?
-    "playback-used",
+    :animal_seen,
 
     # automatic (non-supervised) recording?
-    "auto",
+    :auto,
+
+    # despite the field name (which was kept to ensure backwards compatibility),
+    # this field indicates whether the recorded animal was seen
+    :bird_seen,
 
     # recording device used
-    "dvc",
-
-    # microphone used
-    "mic",
-
-    # temperature during recording (applicable to specific groups only)
-    "temp",
-
-    # ??? - not in documentation
-    "alt",
+    :dvc,
 
     # the original file name of the audio file
-    # :file_name,
-    "file-name",
+    :file_name,
 
-    # the URL describing the license of this recording
-    # :lic,
-    "lic",
+    # the group to which the species belongs (birds, grasshoppers)
+    :group,
 
-    # the current quality rating for the recording
-    # :q,
-    "q",
+    # the catalogue number of the recording on xeno-canto
+    :id,
+
+    # the recording method (field recording, in the hand, etc.)
+    :method,
+
+    # microphone used
+    :mic,
 
     # the length of the recording in minutes
-    # :length,
-    "length",
+    :length,
+
+    # the URL describing the license of this recording
+    :lic,
+
+    # was playback used to lure the animal?
+    :playback_used,
+
+    # the current quality rating for the recording
+    :q,
+
+    # registration number of specimen (when collected)
+    :regnr,
+
+    # additional remarks by the recordist
+    :rmk,
+
+    # sample rate
+    :smp,
+
+    # temperature during recording (applicable to specific groups only)
+    :temp,
 
     # the time of day that the recording was made
-    # :time,
-    "time",
-
-    # the date that the recording was made
-    # :date,
-    "date",
+    :time,
 
     # the date that the recording was uploaded to xeno-canto
-    # :uploaded,
-    "uploaded"
+    :uploaded,
+
+    # the URL specifying the details of this recording
+    :url
   ]
 
-  @used_keys [
-    "id",
-    "gen",
-    "sp",
-    "ssp",
-    "group",
-    "en",
-    "rec",
-    "cnt",
-    "type",
-    "file",
-    "also",
-    "rmk",
-    "temp",
-    "regnr",
-    "auto",
-    "dvc",
-    "sono",
-    "osci",
-    "type"
-  ]
+  @unused_keys @unused_atoms
+               |> Enum.map(&Atom.to_string/1)
+               |> Enum.map(&String.replace(&1, "_", "-"))
+
+  @used_keys @struct_keys
+             |> Enum.map(&Atom.to_string/1)
+             |> Enum.map(&String.replace(&1, "_", "-"))
+
+  @after_compile __MODULE__
+
+  def __after_compile__(_env, _) do
+    used = MapSet.new(@used_keys)
+    unused = @unused_keys |> Enum.map(&atom_key/1) |> MapSet.new()
+    intersection = MapSet.intersection(used, unused)
+
+    if MapSet.size(intersection) !== 0 do
+      raise RuntimeError.exception("""
+            Expected used and unused keys to be unique sets, but they share these keys:
+
+            #{inspect(intersection)}
+            """)
+    end
+  end
 
   def parse(data) do
     data
@@ -191,8 +168,17 @@ defmodule BirdSong.Services.XenoCanto.Recording do
   end
 
   defp parse_key({key, val}, acc) when key in @used_keys do
-    atom_key = key |> String.replace("-", "_") |> String.to_atom()
-    Map.put(acc, atom_key, val)
+    Map.put(acc, atom_key(key), val)
+  end
+
+  defp parse_key({key, _val}, _acc) do
+    raise RuntimeError.exception("Unknown Recording key: #{key}")
+  end
+
+  defp atom_key(key) when is_binary(key) do
+    key
+    |> String.replace("-", "_")
+    |> String.to_existing_atom()
   end
 
   defp use_common_name("" <> sci_name) do

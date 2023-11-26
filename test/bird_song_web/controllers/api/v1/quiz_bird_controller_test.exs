@@ -17,7 +17,7 @@ defmodule BirdSongWeb.Api.V1.QuizBirdControllerTest do
 
     @tag login?: false
     test "returns 401 if user is not logged in", %{conn: conn, path: path} do
-      conn = post(conn, path)
+      conn = get(conn, path)
 
       assert json_response(conn, :unauthorized) == %{
                "message" => "Login required."
@@ -25,7 +25,7 @@ defmodule BirdSongWeb.Api.V1.QuizBirdControllerTest do
     end
 
     test "returns a random bird with an image and a recording", %{conn: conn, path: path} do
-      conn = post(conn, path)
+      conn = get(conn, path)
       response = json_response(conn, :ok)
       assert Map.keys(response) == ["bird", "image", "quiz", "recording"]
     end
@@ -44,6 +44,6 @@ defmodule BirdSongWeb.Api.V1.QuizBirdControllerTest do
   end
 
   defp assign_path(%{conn: conn, quiz: %Quiz{id: quiz_id}}) do
-    {:ok, path: Routes.api_v1_quiz_bird_path(conn, :create, quiz_id)}
+    {:ok, path: Routes.api_v1_quiz_bird_path(conn, :show, quiz_id, "random")}
   end
 end

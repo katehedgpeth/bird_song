@@ -16,13 +16,12 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersControllerTest do
     @describetag login?: false
 
     test "POST /quizzes/:quiz_id/answers", %{conn: conn, quiz: quiz, birds: birds} do
-      conn =
-        post(
-          conn,
-          create_path(conn, quiz.id, correct_bird_ids(birds))
-        )
-
-      assert json_response(conn, :unauthorized) == %{
+      assert send_request(%{
+               conn: conn,
+               quiz_id: quiz.id,
+               bird_ids: correct_bird_ids(birds),
+               expected: :unauthorized
+             }) == %{
                "message" => "Login required."
              }
     end
@@ -35,9 +34,12 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersControllerTest do
       quiz: quiz
     } do
       response =
-        conn
-        |> post(create_path(conn, quiz.id, correct_bird_ids(birds)))
-        |> json_response(:ok)
+        send_request(%{
+          conn: conn,
+          quiz_id: quiz.id,
+          bird_ids: correct_bird_ids(birds),
+          expected: :ok
+        })
 
       assert Map.keys(response) == ["answer"]
 
@@ -55,20 +57,16 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersControllerTest do
       conn: conn,
       quiz: quiz
     } do
-      path =
-        create_path(
-          conn,
-          quiz.id,
-          %{
-            correct: bird_id(birds, 0),
-            submitted: bird_id(birds, 1)
-          }
-        )
-
       response =
-        conn
-        |> post(path)
-        |> json_response(:ok)
+        send_request(%{
+          conn: conn,
+          quiz_id: quiz.id,
+          bird_ids: %{
+            bird_id: bird_id(birds, 0),
+            submitted_bird_id: bird_id(birds, 1)
+          },
+          expected: :ok
+        })
 
       assert response["answer"]["correct?"] == false
     end
@@ -78,43 +76,53 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersControllerTest do
       quiz: quiz,
       birds: birds
     } do
-      path = create_path(conn, quiz.id, %{correct: 1, submitted: bird_id(birds, 0)})
+      bird_ids = %{
+        bird_id: 1,
+        submitted_bird_id: bird_id(birds, 0)
+      }
 
       response =
-        conn
-        |> post(path)
-        |> json_response(:bad_request)
+        send_request(%{
+          conn: conn,
+          quiz_id: quiz.id,
+          bird_ids: bird_ids,
+          expected: :bad_request
+        })
 
-      assert response == %{"correct_bird" => "not_found", "error" => true}
+      assert response["message"] =~ "does not include a bird with id"
     end
 
-    test "returns %{submitted_bird: 'not_found'} if submitted bird doesn't exist", %{
+    test "returns error if submitted bird doesn't exist", %{
       conn: conn,
       quiz: quiz,
       birds: birds
     } do
-      path = create_path(conn, quiz.id, %{correct: bird_id(birds, 0), submitted: 1})
+      bird_ids = %{
+        bird_id: bird_id(birds, 0),
+        submitted_bird_id: 1
+      }
 
       response =
-        conn
-        |> post(path)
-        |> json_response(:bad_request)
+        send_request(%{
+          conn: conn,
+          quiz_id: quiz.id,
+          bird_ids: bird_ids,
+          expected: :bad_request
+        })
 
-      assert response == %{"submitted_bird" => "not_found", "error" => true}
+      assert response["message"] =~ "does not include a bird with id"
     end
 
     test "returns %{quiz: 'not_found'} if quiz doesn't exist", %{
       conn: conn,
       birds: birds
     } do
-      path = create_path(conn, 1, correct_bird_ids(birds))
-
-      response =
-        conn
-        |> post(path)
-        |> json_response(:bad_request)
-
-      assert response == %{"quiz" => "not_found", "error" => true}
+      assert send_request(%{
+               conn: conn,
+               quiz_id: 1,
+               bird_ids: correct_bird_ids(birds),
+               expected: :not_found
+             }) == %{"message" => "Quiz not found"}
     end
   end
 
@@ -138,9 +146,24 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersControllerTest do
 
   defp correct_bird_ids(birds) do
     %{
-      correct: bird_id(birds, 0),
-      submitted: bird_id(birds, 0)
+      bird_id: bird_id(birds, 0),
+      submitted_bird_id: bird_id(birds, 0)
     }
+  end
+
+  defp send_request(%{
+         conn: conn,
+         expected: expected,
+         quiz_id: quiz_id,
+         bird_ids: bird_ids
+       }) do
+    conn
+    |> post(create_path(conn, quiz_id, bird_ids), post_body(bird_ids))
+    |> json_response(expected)
+  end
+
+  defp post_body(%{submitted_bird_id: id}) do
+    %{submitted_bird_id: id}
   end
 
   defp create_path(
@@ -148,9 +171,13 @@ defmodule BirdSongWeb.Api.V1.QuizAnswersControllerTest do
          quiz_id,
          ids
        ) do
-    Routes.api_v1_quiz_answers_path(conn, :create, quiz_id,
-      correct_bird: ids[:correct],
-      submitted_bird: ids[:submitted]
+    Routes.api_v1_quiz_answers_path(
+      conn,
+      :create,
+      quiz_id,
+      ids[:bird_id]
+      # correct_bird: ids[:correct],
+      # submitted_bird: ids[:submitted]
     )
   end
 end
