@@ -19,7 +19,7 @@ defmodule BirdSong.Services do
     DataFile,
     Ebird,
     Flickr,
-    MacaulayLibrary
+    @recordings
   ]
 
   defstruct ebird: Ebird,

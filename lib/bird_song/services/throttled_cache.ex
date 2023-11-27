@@ -22,6 +22,7 @@ defmodule BirdSong.Services.ThrottledCache do
   @callback ets_key(request_data()) :: String.t()
   @callback headers(request_data()) :: HTTPoison.headers()
   @callback params(request_data()) :: HTTPoison.params()
+  @callback request_options(request_data()) :: HTTPoison.options()
   @callback message_details(request_data()) :: Map.t()
   @callback response_module() :: module()
   @callback read_from_disk(request_data(), Worker.t()) ::
@@ -115,8 +116,9 @@ defmodule BirdSong.Services.ThrottledCache do
         endpoint: 1,
         ets_key: 1,
         headers: 1,
-        message_details: 1,
         params: 1,
+        request_options: 1,
+        message_details: 1,
         parse_from_disk: 2,
         read_from_disk: 2,
         successful_response?: 1,
@@ -195,7 +197,8 @@ defmodule BirdSong.Services.ThrottledCache do
           headers: headers(request_data),
           method: :get,
           params: params(request_data),
-          url: Path.join("/", endpoint(request_data))
+          url: Path.join("/", endpoint(request_data)),
+          options: request_options(request_data)
         }
       end
 
@@ -207,6 +210,9 @@ defmodule BirdSong.Services.ThrottledCache do
 
       @impl TC
       def params(%Bird{}), do: []
+
+      @impl TC
+      def request_options(_), do: []
 
       @impl TC
       def read_from_disk(data, %Worker{instance_name: server}),

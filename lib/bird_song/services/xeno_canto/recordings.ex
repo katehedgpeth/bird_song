@@ -17,8 +17,13 @@ defmodule BirdSong.Services.XenoCanto.Recordings do
   end
 
   @impl ThrottledCache
-  def params(%Bird{sci_name: sci_name}) do
-    %{query: format_query(sci_name)}
+  def headers(_) do
+    [{:"Content-Type", "application/x-www-form-urlencoded"}]
+  end
+
+  @impl ThrottledCache
+  def params(%Bird{} = bird) do
+    %{query: format_query(bird)}
   end
 
   @impl ThrottledCache
@@ -33,5 +38,8 @@ defmodule BirdSong.Services.XenoCanto.Recordings do
   ##
   #########################################################
 
-  defp format_query(query), do: String.replace(query, " ", "+")
+  defp format_query(%Bird{sci_name: sci_name}) do
+    [gen, ssp | _] = String.split(sci_name, " ")
+    ~s(gen:"#{gen}" ssp:"#{ssp}")
+  end
 end

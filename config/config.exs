@@ -54,7 +54,7 @@ config :bird_song, BirdSong.Accounts.Mailer, adapter: Swoosh.Adapters.Local
 
 config :bird_song, BirdSong.Services.ThrottledCache,
   backlog_timeout_ms: :infinity,
-  throttle_ms: 2 * one_second,
+  throttle_ms: 1 * one_second,
   admin_email: env.bird_song_admin_email
 
 config :bird_song, BirdSong.Services.Ebird,
@@ -74,7 +74,7 @@ config :bird_song, BirdSong.Services.Flickr,
 
 config :bird_song, BirdSong.Services,
   images: BirdSong.Services.Flickr,
-  recordings: BirdSong.Services.MacaulayLibrary.Recordings,
+  recordings: BirdSong.Services.XenoCanto,
   observations: BirdSong.Services.Ebird.Observations
 
 config :bird_song, BirdSong.Data.Recorder, stream_timeout_ms: :infinity

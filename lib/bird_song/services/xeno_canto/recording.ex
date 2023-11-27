@@ -54,6 +54,8 @@ defmodule BirdSong.Services.XenoCanto.Recording do
     :type
   ]
 
+  @derive Jason.Encoder
+
   defstruct @struct_keys
 
   @unused_atoms [
