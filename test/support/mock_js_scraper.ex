@@ -6,7 +6,8 @@ defmodule BirdSong.MockJsScraper do
 
   @type response_opt :: {:file, String.t()} | Playwright.response()
 
-  def run(server, _) do
+  @spec run(pid(), any(), integer()) :: Scraper.response()
+  def run(server, _, _) do
     GenServer.call(server, :response)
   end
 

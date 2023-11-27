@@ -14,7 +14,7 @@ defmodule BirdSong.AccountsFixtures do
     })
   end
 
-  def user_fixture(attrs \\ %{}, repo \\ BirdSong.Repo) do
+  def user_fixture(attrs \\ %{}, _repo \\ BirdSong.Repo) do
     {:ok, user} =
       attrs
       |> valid_user_attributes()

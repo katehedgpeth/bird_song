@@ -7,5 +7,10 @@ defmodule BirdSong.Data.Scraper do
           | __MODULE__.UnknownMessageError
   @type response :: {:ok, [Map.t()]} | {:error, error()}
 
-  @callback run(BirdSong.Services.Worker.t(), any(), integer()) :: response()
+  @callback run(
+              BirdSong.Services.Supervisor.service_instance_name(),
+              any(),
+              integer()
+            ) ::
+              response()
 end

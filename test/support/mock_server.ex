@@ -71,7 +71,7 @@ defmodule BirdSong.MockServer do
         )
 
       %{} ->
-        Logger.warn("""
+        Logger.warning("""
         EBIRD TOKEN NOT FOUND IN HEADERS
         \t\texpected: [{"x-ebirdapitoken", #{inspect(@ebird_token)}}]
         \t\tgot: #{inspect(headers)}

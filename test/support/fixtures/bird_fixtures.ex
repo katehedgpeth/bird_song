@@ -11,7 +11,6 @@ defmodule BirdSong.BirdFixtures do
     Bird
   }
 
-  @mock_taxonomy "test/mock_data/taxonomy.json"
   @default_count 5
 
   @doc """

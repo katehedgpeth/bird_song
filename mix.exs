@@ -5,7 +5,7 @@ defmodule BirdSong.MixProject do
     [
       app: :bird_song,
       version: "0.1.0",
-      elixir: "~> 1.12",
+      elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
@@ -20,13 +20,16 @@ defmodule BirdSong.MixProject do
   def application do
     [
       mod: {BirdSong.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools] ++ extra_applications(Mix.env())
     ]
   end
 
   # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp extra_applications(:dev), do: [:wx, :observer]
+  defp extra_applications(_), do: []
 
   # Specifies your project dependencies.
   #
