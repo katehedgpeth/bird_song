@@ -2,6 +2,7 @@ defmodule BirdSong.Services do
   use Supervisor
 
   alias __MODULE__.{
+    InjectableChildSpecs,
     DataFile,
     Ebird,
     Flickr,
@@ -9,6 +10,8 @@ defmodule BirdSong.Services do
     Service,
     Worker
   }
+
+  @env Mix.env()
 
   @recordings :bird_song
               |> Application.compile_env!(__MODULE__)
@@ -50,6 +53,39 @@ defmodule BirdSong.Services do
 
   defguard is_service_key(atom) when atom in [:ebird, :images, :recordings]
 
+  #########################################################
+  #########################################################
+  ##
+  ##  SUPERVISOR CALLBACKS
+  ##
+  #########################################################
+
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts, name: instance_name(opts))
+  end
+
+  @impl Supervisor
+  def init(opts) do
+    opts
+    |> child_specs()
+    |> Supervisor.init(strategy: :one_for_one)
+  end
+
+  @spec child_specs(keyword()) :: nil | list()
+  def child_specs!() do
+    [DataFile | api_services] = @services
+
+    api_services
+    |> Enum.reduce([], &[{&1, [service_name: &1]} | &2])
+    |> Keyword.put(DataFile, name: DataFile)
+  end
+
+  def child_specs([]), do: child_specs!()
+
+  def child_specs(opts) when is_list(opts) and @env === :test do
+    InjectableChildSpecs.child_specs(opts)
+  end
+
   @spec all() :: {:error, :not_alive} | t()
   def all() do
     all(__MODULE__)
@@ -81,6 +117,10 @@ defmodule BirdSong.Services do
     end
   end
 
+  def child_modules() do
+    @services
+  end
+
   def module_to_struct_key(DataFile), do: :data_file
   def module_to_struct_key(Ebird), do: :ebird
   def module_to_struct_key(Flickr), do: :images
@@ -91,62 +131,10 @@ defmodule BirdSong.Services do
   def service_atom(Flickr), do: :Flickr
   def service_atom(XenoCanto), do: :XenoCanto
 
-  def service_instance_name(opts, service) when is_list(opts) do
-    opts
-    |> injected_instance_name()
-    |> service_instance_name(service)
-  end
-
   def service_instance_name(parent, module)
-      when module in @services or module === XenoCanto do
+      when is_atom(parent) and
+             (module in @services or module === XenoCanto) do
     Module.concat(parent, service_atom(module))
-  end
-
-  defp injected_instance_name(opts) do
-    Keyword.get(opts, :name, __MODULE__)
-  end
-
-  def start_link(opts) do
-    Supervisor.start_link(__MODULE__, opts, name: injected_instance_name(opts))
-  end
-
-  @impl Supervisor
-  def init(opts) when is_list(opts) do
-    opts
-    |> Keyword.pop(:env, Mix.env())
-    |> child_specs()
-    |> Supervisor.init(strategy: :one_for_one)
-  end
-
-  def child_specs({env, opts}) when env in [:dev, :prod] do
-    # Services do not take options outside of tests.
-    # We allow a different env to be injected in order to test
-    # that things work as expected outside of the test environment.
-    if length(opts) > 0 and Mix.env() !== :test do
-      raise ArgumentError.exception("Do not pass options to Services outside of tests")
-    end
-
-    Enum.map(
-      @services,
-      &{
-        &1,
-        [
-          {
-            case &1 do
-              DataFile -> :name
-              _ -> :service_name
-            end,
-            service_instance_name(opts, &1)
-          }
-        ]
-      }
-    )
-  end
-
-  def child_specs({:test, opts}) when is_list(opts) do
-    [DataFile | Keyword.get(opts, :service_modules, @services)]
-    |> Enum.uniq()
-    |> Enum.map(&child_spec(&1, opts, :test))
   end
 
   #########################################################
@@ -174,44 +162,11 @@ defmodule BirdSong.Services do
     }
   end
 
-  defp child_spec(DataFile, opts, :test) do
-    {DataFile,
-     Keyword.merge(
-       [
-         parent_folder: Keyword.get(opts, :parent_data_folder, "data"),
-         overwrite?: Keyword.get(opts, :overwrite_data?, false),
-         name: service_instance_name(opts, DataFile)
-       ],
-       Keyword.get(opts, DataFile, [])
-     )}
+  defp instance_name([]) do
+    __MODULE__
   end
 
-  defp child_spec(module, opts, :test) do
-    {module,
-     opts
-     |> put_test_overrides(module, Keyword.get(opts, module, []))
-     |> Keyword.drop([:name, :base_urls])}
-  end
-
-  defp put_test_overrides(opts, module, custom_service_opts)
-       when is_atom(module) and
-              is_list(opts) and
-              is_list(custom_service_opts) do
-    opts
-    |> Keyword.take([:allow_external_calls?, :throttle_ms])
-    |> put_test_url(module, opts)
-    |> Keyword.merge(custom_service_opts)
-    |> Keyword.put(:service_name, service_instance_name(opts, module))
-  end
-
-  @spec put_test_url(Keyword.t(), module(), Keyword.t()) :: Keyword.t()
-  defp put_test_url(service_opts, module, opts) do
-    opts
-    |> Keyword.get(:base_urls, [])
-    |> Keyword.get(module)
-    |> case do
-      nil -> service_opts
-      "" <> _ = base_url -> Keyword.put(service_opts, :base_url, base_url)
-    end
+  defp instance_name(opts) when @env === :test do
+    Keyword.get(opts, :name, __MODULE__)
   end
 end
