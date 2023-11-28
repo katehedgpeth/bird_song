@@ -277,11 +277,9 @@ defmodule BirdSong.Services.Supervisor do
 
       @spec base_url(this_instance_name()) :: String.t()
       def base_url(instance_name) do
-        when_service_instance_name instance_name, __MODULE__ do
-          instance_name
-          |> child_name(:RequestThrottler)
-          |> GenServer.call(:base_url)
-        end
+        instance_name
+        |> child_name(:RequestThrottler)
+        |> GenServer.call(:base_url)
       end
 
       # @impl Sup
@@ -295,9 +293,7 @@ defmodule BirdSong.Services.Supervisor do
       end
 
       def child_name(service, child) when is_child_name(child) do
-        when_service_instance_name service, __MODULE__ do
-          concat_name(service, child)
-        end
+        concat_name(service, child)
       end
 
       # @impl Sup
@@ -315,11 +311,9 @@ defmodule BirdSong.Services.Supervisor do
       # @impl Sup
       @spec get_instance_child(this_instance_name(), module()) :: Worker.t()
       def get_instance_child(service_instance \\ __MODULE__, child) do
-        when_service_instance_name service_instance, __MODULE__ do
-          service_instance
-          |> map_of_child_pids()
-          |> get_instance_child(service_instance, child)
-        end
+        service_instance
+        |> map_of_child_pids()
+        |> get_instance_child(service_instance, child)
       end
 
       # @impl Sup
@@ -330,18 +324,16 @@ defmodule BirdSong.Services.Supervisor do
 
       # @impl Sup
       def services(instance_name) do
-        when_service_instance_name instance_name, __MODULE__ do
-          @caches
-          |> Enum.map(
-            &{&1,
-             instance_name
-             |> map_of_child_pids()
-             |> get_instance_child(instance_name, &1)}
-          )
-          |> Keyword.new()
-          |> Keyword.put(:name, instance_name)
-          |> __struct__()
-        end
+        @caches
+        |> Enum.map(
+          &{&1,
+           instance_name
+           |> map_of_child_pids()
+           |> get_instance_child(instance_name, &1)}
+        )
+        |> Keyword.new()
+        |> Keyword.put(:name, instance_name)
+        |> __struct__()
       end
 
       def whereis_supervisor!(service_instance_name) do
@@ -524,42 +516,14 @@ defmodule BirdSong.Services.Supervisor do
     end
   end
 
-  defmacro when_service_instance_name(given, expected, do: a_s_t) do
-    quote do
-      given = unquote(given)
-      expected = unquote(expected)
-
-      cond do
-        given === expected or
-            given
-            |> Atom.to_string()
-            |> String.contains?("test ") ->
-          unquote(a_s_t)
-
-        true ->
-          raise ArgumentError.exception(
-                  message: """
-
-                  Expected service_name to be either #{inspect(unquote(expected))} or a test name, but got:
-
-                  #{inspect(unquote(given))}
-
-                  """
-                )
-      end
-    end
-  end
-
   def instance_name(opts, module) when is_list(opts) do
     opts
     |> Keyword.fetch!(:service_name)
     |> instance_name(module)
   end
 
-  def instance_name(name, module) when is_atom(name) do
-    when_service_instance_name name, module do
-      Module.concat(name, :Supervisor)
-    end
+  def instance_name(name, _module) when is_atom(name) do
+    Module.concat(name, :Supervisor)
   end
 
   def start_link(opts, module) do
