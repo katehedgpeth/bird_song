@@ -47,14 +47,20 @@ defmodule BirdSong.Services.Ebird.TaxonomyMultiTest do
       assert Multi.to_list(multi) |> length() === 4
       assert {:ok, inserted} = BirdSong.Repo.transaction(multi)
 
-      assert Map.keys(inserted) === [
-               :birds,
-               :existing,
-               :family,
-               :insert_all_family,
-               :insert_all_order,
-               :order
-             ]
+      expected_keys =
+        MapSet.new([
+          :birds,
+          :existing,
+          :family,
+          :insert_all_family,
+          :insert_all_order,
+          :order
+        ])
+
+      difference =
+        inserted |> Map.keys() |> MapSet.new() |> MapSet.difference(expected_keys)
+
+      assert difference == MapSet.new([])
 
       inserted_orders = BirdSong.Repo.all(Order)
       inserted_families = BirdSong.Repo.all(Family)

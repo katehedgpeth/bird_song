@@ -61,11 +61,6 @@ config :bird_song, BirdSong.Services.Ebird,
   token: env.ebird_api_token,
   taxonomy_file: Path.relative_to_cwd("data/taxonomy.json")
 
-config :bird_song, BirdSong.Services.MacaulayLibrary,
-  base_url: "https://search.macaulaylibrary.org"
-
-config :bird_song, BirdSong.Services.MacaulayLibrary.Playwright, default_timeout: 3_000
-
 config :bird_song, BirdSong.Services.XenoCanto, write_to_disk?: false
 
 config :bird_song, BirdSong.Services.Flickr,
@@ -76,8 +71,6 @@ config :bird_song, BirdSong.Services,
   images: BirdSong.Services.Flickr,
   recordings: BirdSong.Services.XenoCanto,
   observations: BirdSong.Services.Ebird.Observations
-
-config :bird_song, BirdSong.Data.Recorder, stream_timeout_ms: :infinity
 
 config :bird_song, BirdSong.Accounts.Guardian, issuer: "bird_song"
 

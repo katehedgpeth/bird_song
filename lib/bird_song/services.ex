@@ -5,7 +5,6 @@ defmodule BirdSong.Services do
     DataFile,
     Ebird,
     Flickr,
-    MacaulayLibrary,
     XenoCanto,
     Service,
     Worker
@@ -39,12 +38,11 @@ defmodule BirdSong.Services do
   @type base_urls_map() :: %{
           required(Ebird) => String.t(),
           required(Flickr) => String.t(),
-          required(MacaulayLibrary) => String.t(),
           required(XenoCanto) => String.t()
         }
   @type base_urls_opt() :: {:base_urls, base_urls_map()}
 
-  @type service_struct() :: Ebird.t() | Flickr.t() | MacaulayLibrary.t() | DataFile.t()
+  @type service_struct() :: Ebird.t() | Flickr.t() | DataFile.t()
 
   @type service_key() :: :ebird | :images | :recordings | :data_file
 
@@ -86,13 +84,11 @@ defmodule BirdSong.Services do
   def module_to_struct_key(DataFile), do: :data_file
   def module_to_struct_key(Ebird), do: :ebird
   def module_to_struct_key(Flickr), do: :images
-  def module_to_struct_key(MacaulayLibrary), do: :recordings
   def module_to_struct_key(XenoCanto), do: :recordings
 
   def service_atom(DataFile), do: :DataFile
   def service_atom(Ebird), do: :Ebird
   def service_atom(Flickr), do: :Flickr
-  def service_atom(MacaulayLibrary), do: :MacaulayLibrary
   def service_atom(XenoCanto), do: :XenoCanto
 
   def service_instance_name(opts, service) when is_list(opts) do

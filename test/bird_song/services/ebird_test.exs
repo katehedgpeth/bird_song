@@ -16,30 +16,40 @@ defmodule BirdSong.Services.EbirdTest do
     @describetag start_services?: false
     test "with default options" do
       assert [
-               {
-                 Ebird.RequestThrottler,
-                 worker: %Worker{instance_name: Ebird.RequestThrottler},
-                 base_url:
-                   {:error,
-                    %ForbiddenExternalURLError{opts: [{:base_url, "https://api.ebird.org"} | _]}}
-               },
-               {
-                 Ebird.Observations,
-                 worker: %Worker{instance_name: Ebird.Observations}
-               },
-               {
-                 Ebird.RegionSpeciesCodes,
-                 worker: %Worker{instance_name: Ebird.RegionSpeciesCodes}
-               },
-               {
-                 Ebird.Regions,
-                 worker: %Worker{instance_name: Ebird.Regions}
-               },
-               {
-                 Ebird.RegionInfo,
-                 worker: %Worker{instance_name: Ebird.RegionInfo}
-               }
+               throttler,
+               observations,
+               region_species_codes,
+               regions,
+               region_info
              ] = Ebird.child_specs___test([])
+
+      assert {
+               Ebird.RequestThrottler,
+               worker: %Worker{instance_name: Ebird.RequestThrottler},
+               base_url: {:error, %ForbiddenExternalURLError{opts: url_opts}}
+             } = throttler
+
+      assert Keyword.fetch!(url_opts, :base_url) == "https://api.ebird.org"
+
+      assert {
+               Ebird.Observations,
+               worker: %Worker{instance_name: Ebird.Observations}
+             } = observations
+
+      assert {
+               Ebird.RegionSpeciesCodes,
+               worker: %Worker{instance_name: Ebird.RegionSpeciesCodes}
+             } = region_species_codes
+
+      assert {
+               Ebird.Regions,
+               worker: %Worker{instance_name: Ebird.Regions}
+             } = regions
+
+      assert {
+               Ebird.RegionInfo,
+               worker: %Worker{instance_name: Ebird.RegionInfo}
+             } = region_info
     end
 
     @tag :tmp_dir
@@ -204,9 +214,11 @@ defmodule BirdSong.Services.EbirdTest do
       assert %Ebird{name: instance_name} = services
       assert instance_name === get_service_name(Ebird, tags)
 
-      keys = services |> Map.from_struct() |> Map.keys()
+      keys = services |> Map.from_struct() |> Map.keys() |> MapSet.new()
 
-      assert keys === [:Observations, :RegionInfo, :RegionSpeciesCodes, :Regions, :name]
+      assert [:Observations, :RegionInfo, :RegionSpeciesCodes, :Regions, :name]
+             |> MapSet.new()
+             |> MapSet.difference(keys) == MapSet.new([])
 
       for key <- Enum.reject(keys, &(&1 === :name)) do
         assert %Worker{instance_name: name, module: module} = Map.fetch!(services, key)

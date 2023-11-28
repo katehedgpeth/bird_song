@@ -33,7 +33,6 @@ defmodule BirdSong.Services.ThrottledCache.State do
           ets_opts: [:ets.table_type()],
           listeners: [pid()],
           requests_ets: :ets.table(),
-          # scraper: atom() | {atom(), pid()},
           supervisors: Supervisors.t(),
           write_responses_to_disk?: boolean(),
           worker: Worker.t()
@@ -44,14 +43,10 @@ defmodule BirdSong.Services.ThrottledCache.State do
     :ets_table,
     :ets_name,
     :requests_ets,
-    # :scraper,
-    # :throttler,
     :worker,
     ets_opts: [],
-    # backlog: [],
     listeners: [],
     supervisors: %__MODULE__.Supervisors{},
-    # throttled?: false,
     write_responses_to_disk?: false
   ]
 
@@ -275,10 +270,9 @@ defmodule BirdSong.Services.ThrottledCache.State do
 
   @spec maybe_write_to_disk(
           state :: State.t(),
-          response ::
-            MacaulayLibrary.RequestThrottler.raw_response() | RequestThrottler.Response.t(),
+          response :: RequestThrottler.Response.t(),
           request :: any()
-        ) :: RequestThrottler.Response.t() | MacaulayLibrary.RequestThrottler.raw_response()
+        ) :: RequestThrottler.Response.t()
   def maybe_write_to_disk(%__MODULE__{} = state, response, request) do
     if write_to_disk?(state, response) do
       write_to_disk(state, response, request)

@@ -57,9 +57,12 @@ defmodule BirdSong.Services.Ebird.RequestThrottlerTest do
                base_url: base_url
              } = Worker.call(throttler, :state)
 
-      assert {:error,
-              %ForbiddenExternalURLError{opts: [{:base_url, "https://google.com"} | _]} =
-                expected_error} = base_url
+      assert {
+               :error,
+               %ForbiddenExternalURLError{} = expected_error
+             } = base_url
+
+      assert Keyword.fetch!(expected_error.opts, :base_url) == "https://google.com"
 
       RequestThrottler.add_to_queue(request, throttler)
 

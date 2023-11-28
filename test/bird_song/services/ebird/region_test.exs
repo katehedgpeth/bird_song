@@ -194,7 +194,7 @@ defmodule BirdSong.Services.Ebird.RegionTest do
         |> Enum.reduce(acc, &[&1 | &2])
 
       {:error, :enoent} ->
-        Logger.warn(
+        Logger.warning(
           "skipping #{region.code} because file #{region_file_name(region)}.json does not exist"
         )
 

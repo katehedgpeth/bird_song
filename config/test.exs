@@ -32,8 +32,6 @@ config :bird_song, BirdSong.Services.ThrottledCache,
   backlog_timeout_ms: 5 * one_second,
   throttle_ms: 2
 
-config :bird_song, BirdSong.Services.MacaulayLibrary.Playwright, default_timeout: one_second
-
 config :bird_song, BirdSong.Services, stream_timeout_ms: one_second
 
 config :bird_song, BirdSong.Accounts.Guardian,

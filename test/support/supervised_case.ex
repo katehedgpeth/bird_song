@@ -27,20 +27,18 @@ defmodule BirdSong.SupervisedCase do
   alias BirdSong.Services.{
     Ebird,
     Flickr,
-    MacaulayLibrary,
     Worker,
     XenoCanto
   }
 
   @default_throttle_ms 100
 
-  @services [Ebird, Flickr, MacaulayLibrary]
+  @services [Ebird, Flickr, XenoCanto]
 
   @type bypass_info() :: [bypass: Bypass.t(), mock_url: String.t()]
   @type bypasses() :: %{
           required(Ebird) => bypass_info(),
           required(Flickr) => bypass_info(),
-          required(MacaulayLibrary) => bypass_info(),
           required(XenoCanto) => bypass_info()
         }
 

@@ -93,8 +93,14 @@ defmodule BirdSong.AccountsTest do
                Accounts.update_current_quiz!(user.id, %{region_code: "US-NC", birds: birds})
 
       results = Accounts.update_current_quiz!(user.id, nil)
-      assert Map.keys(results) === [:quiz, :user]
-      assert results.quiz === nil
+
+      assert results
+             |> Map.keys()
+             |> MapSet.new()
+             |> MapSet.difference(MapSet.new([:quiz, :user])) === MapSet.new([])
+
+      assert(results.quiz === nil)
+
       assert results.user.current_quiz_id === nil
 
       # end

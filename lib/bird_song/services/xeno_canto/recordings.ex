@@ -1,7 +1,7 @@
 defmodule BirdSong.Services.XenoCanto.Recordings do
   use BirdSong.Services.ThrottledCache,
-    ets_opts: [:bag],
-    ets_name: :xeno_canto
+    ets_opts: [],
+    ets_name: :xeno_canto_recordings
 
   alias __MODULE__.Response
 

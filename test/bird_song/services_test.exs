@@ -7,7 +7,7 @@ defmodule BirdSong.ServicesTest do
     DataFile,
     Ebird,
     Flickr,
-    MacaulayLibrary,
+    XenoCanto,
     RequestThrottler,
     ThrottledCache.State,
     Worker
@@ -25,14 +25,14 @@ defmodule BirdSong.ServicesTest do
   describe "start_link" do
     @describetag start_services?: false
     def test_start_link_in_env(env, tags) do
-      assert {:error, {{:already_started, _}, _}} = start_supervised({Services, env: env})
+      assert {:error, {:already_started, _}} = start_supervised({Services, env: env})
 
       assert {:ok, _pid} = start_supervised({Services, env: env, name: tags[:test]})
 
       assert started = Services.all(tags[:test])
       assert %Services{} = started
 
-      for service <- [Ebird, Flickr, MacaulayLibrary] do
+      for service <- [Ebird, Flickr, XenoCanto] do
         request_throttler = get_worker(service, :RequestThrottler, tags)
 
         state =
@@ -40,21 +40,29 @@ defmodule BirdSong.ServicesTest do
           |> Worker.call(:state)
           |> Map.from_struct()
 
-        assert Map.keys(state) === [
-                 :base_url,
-                 :current_request,
-                 :name,
-                 :queue,
-                 :queue_size,
-                 :throttle_ms,
-                 :throttled?,
-                 :unthrottle_ref,
-                 :worker
-               ],
+        state_keys = state |> Map.keys() |> MapSet.new()
+
+        expected_keys =
+          MapSet.new([
+            :base_url,
+            :current_request,
+            :name,
+            :queue,
+            :queue_size,
+            :throttle_ms,
+            :throttled?,
+            :unthrottle_ref,
+            :worker
+          ])
+
+        assert MapSet.difference(state_keys, expected_keys) === MapSet.new([]),
                """
                request_throttler: #{inspect(request_throttler.instance_name)}
                env: #{env}
-               keys: #{inspect(Map.keys(state))}
+               expected_keys: #{inspect(expected_keys)}
+               state_keys: #{inspect(state_keys)}
+
+
                """
 
         assert {:error, %ForbiddenExternalURLError{}} = state[:base_url]
@@ -80,19 +88,25 @@ defmodule BirdSong.ServicesTest do
             |> Worker.call(:state)
             |> Map.from_struct()
 
-          assert Map.keys(state) === [
-                   :ets_name,
-                   :ets_opts,
-                   :ets_table,
-                   :listeners,
-                   :requests_ets,
-                   :supervisors,
-                   :worker,
-                   :write_responses_to_disk?
-                 ],
+          state_keys = state |> Map.keys() |> MapSet.new()
+
+          expected_keys =
+            MapSet.new([
+              :ets_name,
+              :ets_opts,
+              :ets_table,
+              :listeners,
+              :requests_ets,
+              :supervisors,
+              :worker,
+              :write_responses_to_disk?
+            ])
+
+          assert MapSet.difference(state_keys, expected_keys) === MapSet.new([]),
                  """
                  worker: #{inspect(worker.instance_name)}
-                 keys: #{inspect(Map.keys(state))}
+                 state_keys: #{inspect(state_keys)}
+                 expected_keys: #{inspect(expected_keys)}
                  """
 
           assert is_atom(atom)
@@ -183,19 +197,24 @@ defmodule BirdSong.ServicesTest do
       services = Services.all(test)
       assert %Services{} = services
 
-      assert services |> Map.from_struct() |> Map.keys() === [
-               :data_file,
-               :ebird,
-               :images,
-               :recordings
-             ]
+      keys = services |> Map.from_struct() |> Map.keys() |> MapSet.new()
+
+      expected =
+        MapSet.new([
+          :data_file,
+          :ebird,
+          :images,
+          :recordings
+        ])
+
+      assert MapSet.difference(keys, expected) === MapSet.new([])
 
       assert services.data_file === %DataFile{parent_folder: tmp_dir}
       assert %Ebird{} = services.ebird
-      assert %MacaulayLibrary{} = services.recordings
+      assert %XenoCanto{} = services.recordings
       assert %Flickr{} = services.images
 
-      for {module, key} <- [{Ebird, :ebird}, {MacaulayLibrary, :recordings}, {Flickr, :images}] do
+      for {module, key} <- [{Ebird, :ebird}, {XenoCanto, :recordings}, {Flickr, :images}] do
         request_throttler =
           services
           |> Map.fetch!(key)

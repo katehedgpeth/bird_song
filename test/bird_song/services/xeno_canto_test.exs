@@ -1,10 +1,3 @@
-defmodule BirdSong.Services.XenoCanto do
-  use BirdSong.Services.Supervisor,
-    base_url: "https://xeno-canto.org",
-    caches: [:Recordings],
-    use_data_folder?: true
-end
-
 defmodule BirdSong.Services.XenoCantoTest do
   use BirdSong.DataCase
   use BirdSong.MockDataAttributes
