@@ -73,8 +73,7 @@ defmodule BirdSong.Services.EbirdTest do
                Ebird.child_specs___test(
                  service_name: test,
                  base_url: base_url,
-                 throttle_ms: 5_000,
-                 data_folder_path: tmp_dir
+                 throttle_ms: 5_000
                )
 
       assert throttler === {
